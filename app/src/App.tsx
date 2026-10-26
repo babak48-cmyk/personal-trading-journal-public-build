@@ -255,7 +255,7 @@ export function App(){
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
-      setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
+      setNotebookPage('PLAN');setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
     }
     setActive(s);
     if(s.status==='DRAFT'){
@@ -497,7 +497,7 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setEvidenceCandidate(c); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
+    setNotebookPage('EVIDENCE');setEvidenceCandidate(c); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
@@ -579,7 +579,7 @@ export function App(){
     setEmotionAffected(r?.emotion_affected??null); setPsychState(r?.psychology_state||''); setPsychIntensity(r?.psychology_intensity??null);
     setPsychStage((r?.psychology_stage as any)||''); setReviewMistakes(r?.mistake_type_ids||[]); setReviewNote(r?.note||'');
   }
-  async function openTradeDetail(t:TradeMetrics){try{setActiveTrade(await localApi.getTradeDetail(t.trade_id));applyReview(await localApi.getTradeReview(t.trade_id));applyRuleCheck(await localApi.getTradeRuleCheck(t.trade_id));}catch(e){setMessage(String(e));}}
+  async function openTradeDetail(t:TradeMetrics){setNotebookPage('EXECUTION');try{setActiveTrade(await localApi.getTradeDetail(t.trade_id));applyReview(await localApi.getTradeReview(t.trade_id));applyRuleCheck(await localApi.getTradeRuleCheck(t.trade_id));}catch(e){setMessage(String(e));}}
   function toggleReviewMistake(id:string){setReviewMistakes(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
 
   function applyRuleCheck(r:TradeRuleCheck|null){
