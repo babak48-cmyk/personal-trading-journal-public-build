@@ -43,6 +43,16 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: Rust source checks
+      - name: Resolve QW-1A Rust dependency lockfile (isolated runner only)
+        working-directory: app/src-tauri
+        run: cargo check
+      - name: Verify Rust source with locked dependencies
         working-directory: app/src-tauri
         run: cargo check --locked
+      - name: Save generated Cargo.lock for canonical review
+        uses: actions/upload-artifact@v4
+        with:
+          name: QW1A-generated-Cargo-lock-review
+          path: app/src-tauri/Cargo.lock
+          if-no-files-found: error
+          retention-days: 7
