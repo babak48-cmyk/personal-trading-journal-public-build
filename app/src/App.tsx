@@ -118,7 +118,8 @@ export function App(){
   const [quickMode,setQuickMode]=useState(true);
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
   const [quickZoneId,setQuickZoneId]=useState('');
-  const [notebookPage,setNotebookPage]=useState<'PLAN'|'DECISION'|'EVIDENCE'|'EXECUTION'|'REVIEW'>('PLAN');
+  const [notebookPage,setNotebookPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'>('PLAN');
+  const [notebookMaxPage,setNotebookMaxPage]=useState(0);
   const [decisionType,setDecisionType]=useState<'TRADE'|'NO_TRADE'|'MISSED'>('TRADE');
   const [decisionDirection,setDecisionDirection]=useState<'LONG'|'SHORT'>('LONG');
   const [decisionReason,setDecisionReason]=useState('');
@@ -255,7 +256,7 @@ export function App(){
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
-      setNotebookPage('PLAN');setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
+      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
     }
     setActive(s);
     if(s.status==='DRAFT'){
@@ -497,7 +498,7 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setNotebookPage('EVIDENCE');setEvidenceCandidate(c); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
+    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
@@ -514,7 +515,7 @@ export function App(){
 
 
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
-    setNotebookPage('DECISION');setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
+    setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
     if(c.directional_intent==='LONG'||c.directional_intent==='SHORT') setDecisionDirection(c.directional_intent);
     try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
   }
@@ -579,7 +580,7 @@ export function App(){
     setEmotionAffected(r?.emotion_affected??null); setPsychState(r?.psychology_state||''); setPsychIntensity(r?.psychology_intensity??null);
     setPsychStage((r?.psychology_stage as any)||''); setReviewMistakes(r?.mistake_type_ids||[]); setReviewNote(r?.note||'');
   }
-  async function openTradeDetail(t:TradeMetrics){setNotebookPage('EXECUTION');try{setActiveTrade(await localApi.getTradeDetail(t.trade_id));applyReview(await localApi.getTradeReview(t.trade_id));applyRuleCheck(await localApi.getTradeRuleCheck(t.trade_id));}catch(e){setMessage(String(e));}}
+  async function openTradeDetail(t:TradeMetrics){setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));try{setActiveTrade(await localApi.getTradeDetail(t.trade_id));applyReview(await localApi.getTradeReview(t.trade_id));applyRuleCheck(await localApi.getTradeRuleCheck(t.trade_id));}catch(e){setMessage(String(e));}}
   function toggleReviewMistake(id:string){setReviewMistakes(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
 
   function applyRuleCheck(r:TradeRuleCheck|null){
@@ -728,9 +729,9 @@ export function App(){
           {quickMode&&<nav className="panel" aria-label="Quick notebook pages" style={{padding:12,marginBottom:12}}>
             <strong>Journal pages</strong><p className="subtle">One page at a time. Previously entered values stay in place.</p>
             <div className="rowActions" style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {(['PLAN','DECISION','EVIDENCE','EXECUTION','REVIEW'] as const).map((page,i)=><button key={page} type="button" className={notebookPage===page?'primary':''} onClick={()=>{setNotebookPage(page);window.scrollTo({top:0,behavior:'smooth'});}}>{i+1}. {page==='PLAN'?'Zones':page==='DECISION'?'Decision':page==='EVIDENCE'?'Evidence':page==='EXECUTION'?'Trade':'Review'}</button>)}
+              {(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).map((page,i)=><button key={page} type="button" disabled={i>notebookMaxPage} className={notebookPage===page?'primary':''} onClick={()=>{setNotebookPage(page);window.scrollTo({top:0,behavior:'smooth'});}}>{i+1}. {page==='PLAN'?'Zones':page==='DECISION'?'Decision':page==='EVIDENCE'?'Evidence':page==='EXECUTION'?'Trade':'Review'}</button>)}
             </div>
-            <div className="rowActions"><button type="button" disabled={notebookPage==='PLAN'} onClick={()=>{const pages=['PLAN','DECISION','EVIDENCE','EXECUTION','REVIEW'] as const;setNotebookPage(pages[Math.max(0,pages.indexOf(notebookPage)-1)]);window.scrollTo(0,0);}}>← Previous</button><button type="button" disabled={notebookPage==='REVIEW'} onClick={()=>{const pages=['PLAN','DECISION','EVIDENCE','EXECUTION','REVIEW'] as const;setNotebookPage(pages[Math.min(4,pages.indexOf(notebookPage)+1)]);window.scrollTo(0,0);}}>Next page →</button></div>
+            <div className="rowActions"><button type="button" disabled={notebookPage==='PLAN'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;setNotebookPage(pages[Math.max(0,pages.indexOf(notebookPage)-1)]);window.scrollTo(0,0);}}>← Previous</button><button type="button" disabled={notebookPage==='REVIEW'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;const nextIndex=Math.min(4,pages.indexOf(notebookPage)+1);setNotebookPage(pages[nextIndex]);setNotebookMaxPage(v=>Math.max(v,nextIndex));window.scrollTo(0,0);}}>Next page →</button></div>
           </nav>}
           <div style={{display:!quickMode||notebookPage==='PLAN'?'block':'none'}}>
           <div id="journal-current-plan" className="panel"><div className="panelTitle"><div><h2>Current plan</h2><p className="subtle">Revision {plan.revision_number} · updated {timeLabel(plan.created_at)}</p></div><div className="headerActions"><button onClick={()=>setShowLiveCandidate(v=>!v)}>+ Add live zone</button><button className="primary" onClick={()=>setShowPlanUpdate(v=>!v)}>Revise plan</button></div></div>
