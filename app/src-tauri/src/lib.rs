@@ -13,8 +13,47 @@ mod runtime;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use tauri::Manager;
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            use tauri_plugin_global_shortcut::{
+                Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
+            };
+
+            // QW-1A: OS-owned shortcut, with no JS permissions or database access.
+            let shortcut = Shortcut::new(
+                Some(Modifiers::CONTROL | Modifiers::ALT),
+                Code::KeyJ,
+            );
+
+            app.handle().plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(move |handle, triggered, event| {
+                        if triggered != &shortcut || event.state() != ShortcutState::Pressed {
+                            return;
+                        }
+                        if let Some(window) = handle.get_webview_window("main") {
+                            if window.is_focused().unwrap_or(false) {
+                                // Minimize, do not destroy React state or hide the taskbar fallback.
+                                let _ = window.minimize();
+                            } else {
+                                let _ = window.unminimize();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(),
+            )?;
+            // Registration can fail if NinjaTrader/Windows owns this combination.
+            // A failure leaves the ordinary taskbar workflow available.
+            if let Err(error) = app.global_shortcut().register(shortcut) {
+                eprintln!("QW-1A Ctrl+Alt+J shortcut unavailable: {error}");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::database_health,
             commands::list_custom_field_definitions,
