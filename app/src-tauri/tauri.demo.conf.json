@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Personal Trading Journal DEMO",
+  "identifier": "com.personaltradingjournal.desktop.demo",
+  "app": {
+    "windows": [
+      {
+        "title": "Personal Trading Journal — ISOLATED DEMO",
+        "width": 1180,
+        "height": 780,
+        "minWidth": 920,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ]
+  }
+}
