@@ -251,6 +251,10 @@ export function App(){
   async function loadActive(s:SessionSummary){
     setShowDraftSetup(false);setValidationErrors([]);
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
+    if(active?.session_id!==s.session_id){
+      if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
+      setDecisionCandidate(null);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
+    }
     setActive(s);
     if(s.status==='DRAFT'){
       setPlan(null);setTimeline([]);setConsistency(null);setSessionTrades([]);
