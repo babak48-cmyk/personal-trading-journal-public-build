@@ -33,6 +33,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app/src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Prepare Tauri frontendDist for cargo check
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
       - name: Rust source checks
         working-directory: app/src-tauri
         run: cargo check --locked
