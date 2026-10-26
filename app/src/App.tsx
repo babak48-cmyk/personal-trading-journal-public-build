@@ -117,6 +117,7 @@ export function App(){
   const [candidateEvidence,setCandidateEvidence]=useState<Record<string,EvidenceObservation[]>>({});
   const [quickMode,setQuickMode]=useState(true);
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
+  const [quickZoneId,setQuickZoneId]=useState('');
   const [decisionType,setDecisionType]=useState<'TRADE'|'NO_TRADE'|'MISSED'>('TRADE');
   const [decisionDirection,setDecisionDirection]=useState<'LONG'|'SHORT'>('LONG');
   const [decisionReason,setDecisionReason]=useState('');
@@ -253,7 +254,7 @@ export function App(){
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
-      setDecisionCandidate(null);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
+      setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
     }
     setActive(s);
     if(s.status==='DRAFT'){
@@ -671,7 +672,27 @@ export function App(){
               :<FieldRequirementManager onClose={()=>setShowSettings(false)} onInstruments={()=>setSettingsSection('INSTRUMENTS')} onSources={()=>setSettingsSection('SOURCES')} onAppearance={()=>setSettingsSection('APPEARANCE')} overrides={requirementOverrides} visibility={fieldVisibility} placements={fieldPlacements} order={fieldOrder} fieldText={fieldText} onFieldTextChanged={async()=>setFieldText(await localApi.getFieldTextPreferences())} onOrderChanged={async()=>setFieldOrder(await localApi.getFieldOrderPreferences())} onPlacementChanged={async()=>setFieldPlacements(await localApi.getFieldPlacementPreferences())} onVisibilityChanged={async()=>setFieldVisibility(await localApi.getFieldVisibilityPreferences())} onChanged={refreshRequirements}/>)} 
         {active&&!showSettings&&!showAnalysis&&<SessionCustomSelections sessionId={active.session_id} quickMode={quickMode}/>}
         {active&&!showSettings&&!showAnalysis&&<SessionTypedCustomFields sessionId={active.session_id} quickMode={quickMode}/>}
-        {active&&!showSettings&&!showAnalysis&&!showSafety&&<div className="rowActions" aria-label="Quick zone navigation"><button type="button" onClick={()=>{if(active.status==='DRAFT'){setDraftStep(2);} else {document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'});} }} disabled={active.status!=='DRAFT'&&!plan} title={active.status==='DRAFT'?'Go to Zones in the current draft':'Jump to the current plan Zones without resetting forms'}>Quick: Zones</button>{active.status!=='DRAFT'&&plan&&<><label htmlFor="quick-zone-choice">Zone</label><select id="quick-zone-choice" aria-label="Choose active session zone" value={decisionCandidate?.candidate_id??''} onChange={e=>{const zone=plan.candidates.find(c=>c.candidate_id===e.target.value);if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm("Unsaved decision details will be lost. Switch Zone?"))return;if(zone)openDecision(zone,'TRADE');else setDecisionCandidate(null);}}><option value="">Select Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} ({c.directional_intent})</option>)}</select>{decisionCandidate&&<><button type="button" onClick={()=>{setDecisionType('TRADE');document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'});}}>Trade</button><button type="button" onClick={()=>{setDecisionType('NO_TRADE');document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'});}}>No-trade</button><button type="button" onClick={()=>{setDecisionType('MISSED');document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'});}}>Missed</button></>}</>}<small className="subtle">Same session · no new record until saved</small></div>}
+        {active&&!showSettings&&!showAnalysis&&!showSafety&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
+          <div className="panelTitle"><div><h2>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p></div></div>
+          <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
+            <button type="button" onClick={()=>{if(active.status==='DRAFT')setDraftStep(2);else document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'});}} disabled={active.status!=='DRAFT'&&!plan}>View Zones</button>
+            {active.status!=='DRAFT'&&plan&&<>
+              <label htmlFor="quick-zone-choice">Zone</label>
+              <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>{
+                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Change Zone?'))return;
+                setQuickZoneId(e.target.value);setDecisionCandidate(null);
+              }}><option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}</select>
+              {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId} onClick={()=>{
+                const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
+                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&decisionCandidate.candidate_id!==zone.candidate_id&&!window.confirm('Discard unsaved decision details?'))return;
+                if(decisionCandidate?.candidate_id===zone.candidate_id){setDecisionType(type);}else{void openDecision(zone,type);}
+                window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
+              }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
+            </>}
+            {pendingTradeDecision&&<button type="button" className="primary" onClick={()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})}>Continue trade entry</button>}
+          </div>
+          <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
+        </section>}
         {active&&<div className="sessionContextBar"><span><b>Session</b>{active.session_date}</span><span><b>Instrument</b>{active.instrument_symbol}</span><span><b>Environment</b>{active.environment.replaceAll('_',' ')}</span><small>{active.status==='DRAFT'?'Draft: session setup can still be edited before plan confirmation.':'Confirmed session: identity is preserved in history; plan changes use revisions.'}</small></div>}
         {showAnalysis ? <AnalyticsPanel filter={journalFilter} patchFilter={patchJournalFilter} apply={()=>refreshAnalytics()} rows={journalRows} summary={analytics} mistakes={mistakeSummary} sources={sources} evidenceTypes={evidenceTypes} openTrade={async(id)=>{try{const d=await localApi.getTradeDetail(id);setActiveTrade(d);setShowAnalysis(false);const sess=sessions.find(x=>x.session_id===d.metrics.session_id);if(sess)await loadActive(sess);}catch(e){setMessage(String(e));}}}/> : showSafety ? (runtimeReadiness ? <SafetyPanel readiness={runtimeReadiness} selfTest={betaSelfTest} selfTestBusy={betaSelfTestBusy} onSelfTest={runBetaSelfTest} onRefresh={refreshSafety} onBackup={createBackupWithFeedback} backupBusy={backupBusy}/> : <div className="panel"><h2>Local Safety Check</h2><p>Loading safety status…</p></div>) : <>
         {backupResult&&<div role="status" aria-live="polite" className={backupResult.startsWith('Backup failed')?'warningBox':'okBox'} style={{position:'fixed',right:24,top:72,zIndex:1000,maxWidth:480,boxShadow:'0 8px 28px #0008'}}><strong>{backupResult.startsWith('Backup failed')?'Backup failed':'Backup created successfully'}</strong><p style={{overflowWrap:'anywhere'}}>{backupResult}</p><button onClick={()=>setBackupResult('')}>Dismiss</button></div>}
