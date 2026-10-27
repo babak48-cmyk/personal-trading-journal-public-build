@@ -302,7 +302,7 @@ export function App(){
           if(d.version!==1||!Array.isArray(d.candidates)) throw new Error('Unsupported or corrupt draft');
           setBias(d.bias);setMainScenario(d.mainScenario??'');setAltScenario(d.altScenario??'');
           setPreSessionState(d.preSessionState??'');setPreSessionStateIntensity(d.preSessionStateIntensity??null);
-          setCandidates(d.candidates);setDraftStep(Number.isInteger(d.step)&&d.step>=1&&d.step<=3?d.step:1);
+          setCandidates(d.candidates);setDraftZonePage(0);setDraftPlanPage(0);setDraftStep(Number.isInteger(d.step)&&d.step>=1&&d.step<=3?d.step:1);
         } else setDraftStep(1);
       } catch(e) { setMessage('Could not restore draft fields: '+String(e)); }
       return;
@@ -479,12 +479,17 @@ export function App(){
     if(missing.length){
       // Render the missing fields before scrolling to them; hidden steps cannot be focused.
       const first=missing[0];
-      setDraftStep(first.id.startsWith('candidate-')?2:1);
+      if(first.id.startsWith('candidate-')){
+        const zoneIndex=Number(first.id.match(/^candidate-(\d+)/)?.[1]??0);
+        setDraftStep(2);setDraftZonePage(Number.isFinite(zoneIndex)?zoneIndex:0);
+      }else{
+        setDraftStep(1);setDraftPlanPage(first.id==='plan.mainScenario'||first.id==='plan.alternativeScenario'?1:0);
+      }
       blockMissing(missing);
       return;
     }
     const badZone=candidates.findIndex(c=>c.price_mode==='RANGE'&&c.price_from!=null&&c.price_to!=null&&c.price_from>c.price_to);
-    if(badZone>=0){const c=candidates[badZone];setDraftStep(2);setValidationErrors([`candidate-${badZone}.priceFrom`,`candidate-${badZone}.priceTo`]);setMessage(`Zone ${badZone+1} (${c.label||'Unnamed'}): From ${c.price_from} exceeds To ${c.price_to}. Correct the highlighted range before confirming.`);window.setTimeout(()=>{const node=document.querySelector<HTMLElement>(`[data-validation-id="candidate-${badZone}.priceFrom"]`);node?.scrollIntoView({behavior:'smooth',block:'center'});node?.querySelector<HTMLElement>('input')?.focus({preventScroll:true});},120);return;}
+    if(badZone>=0){const c=candidates[badZone];setDraftStep(2);setDraftZonePage(badZone);setValidationErrors([`candidate-${badZone}.priceFrom`,`candidate-${badZone}.priceTo`]);setMessage(`Zone ${badZone+1} (${c.label||'Unnamed'}): From ${c.price_from} exceeds To ${c.price_to}. Correct the highlighted range before confirming.`);window.setTimeout(()=>{const node=document.querySelector<HTMLElement>(`[data-validation-id="candidate-${badZone}.priceFrom"]`);node?.scrollIntoView({behavior:'smooth',block:'center'});node?.querySelector<HTMLElement>('input')?.focus({preventScroll:true});},120);return;}
     setValidationErrors([]);
     try{
       await localApi.confirmInitialPlan({session_id:active.session_id,initial_bias:bias,main_scenario:mainScenario||null,alternative_scenario:altScenario||null,expected_context:[],things_not_to_do:[],pre_session_state:preSessionState||null,pre_session_state_intensity:preSessionStateIntensity,candidates:candidates.map(cleanCandidate)});
