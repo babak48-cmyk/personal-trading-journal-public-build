@@ -156,6 +156,7 @@ export const localApi = {
   listPlanTimeline: (sessionId:string) => invoke<TimelineEvent[]>('list_plan_timeline',{sessionId}),
   addLiveCandidate: (input:AddLiveCandidateInput) => invoke<AddLiveCandidateResult>('add_live_candidate',{input}),
   addEvidenceObservation: (input:EvidenceObservationInput) => invoke<string>('add_evidence_observation',{input}),
+  addEvidenceObservationsAtomic: (inputs:EvidenceObservationInput[]) => invoke<string[]>('add_evidence_observations_atomic',{inputs}),
   listCandidateEvidence: (candidateId:string) => invoke<EvidenceObservation[]>('list_candidate_evidence',{candidateId}),
   checkPlanConsistency: (sessionId:string) => invoke<PlanConsistency>('check_plan_consistency',{sessionId}),
   createCandidateDecision: (input:CandidateDecisionInput) => invoke<CandidateDecision>('create_candidate_decision',{input}),
