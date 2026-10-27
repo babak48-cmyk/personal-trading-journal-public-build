@@ -1,5 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
   type CandidateDraftInput,
@@ -144,6 +144,10 @@ export function App(){
   const [evidenceDirection,setEvidenceDirection]=useState<'BUY'|'SELL'|'NEUTRAL'>('NEUTRAL');
   const [evidencePrice,setEvidencePrice]=useState<number|null>(null);
   const [evidenceNote,setEvidenceNote]=useState('');
+  const evidenceSavingRef=useRef(false);
+  const [evidenceSaving,setEvidenceSaving]=useState(false);
+  const [evidenceSaved,setEvidenceSaved]=useState(false);
+  const [evidenceFeedback,setEvidenceFeedback]=useState('');
   const [candidateEvidence,setCandidateEvidence]=useState<Record<string,EvidenceObservation[]>>({});
   const [quickMode,setQuickMode]=useState(true);
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
@@ -533,19 +537,27 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
+    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
     }catch{}
   }
   async function saveEvidence(){
-    if(!active||!evidenceCandidate||!evidenceTypeId)return;
+    if(!active||!evidenceCandidate||!evidenceTypeId||evidenceSavingRef.current||evidenceSaved)return;
+    evidenceSavingRef.current=true;setEvidenceSaving(true);setEvidenceFeedback('');
     try{
       await localApi.addEvidenceObservation({session_id:active.session_id,candidate_id:evidenceCandidate.candidate_id,evidence_type_id:evidenceTypeId,role:evidenceRole,direction:evidenceDirection,price:evidencePrice,note:evidenceNote||null});
-      const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id); setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
-      setEvidenceNote('');setEvidencePrice(null);setMessage('Evidence captured with timestamp.');setTimeline(await localApi.listPlanTimeline(active.session_id));
-    }catch(e){setMessage(String(e));}
+      setEvidenceSaved(true);
+      setEvidenceFeedback('Saved successfully. To record another observation, choose Record another.');
+      setEvidenceNote('');setEvidencePrice(null);
+      try{
+        const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
+        setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
+        setTimeline(await localApi.listPlanTimeline(active.session_id));
+      }catch(e){setMessage('Evidence saved, but history refresh failed: '+String(e));}
+    }catch(e){setEvidenceFeedback('Not saved: '+String(e));}
+    finally{evidenceSavingRef.current=false;setEvidenceSaving(false);}
   }
 
 
@@ -800,8 +812,8 @@ export function App(){
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EVIDENCE'?'block':'none'}}>
-          {quickMode&&<div className="panel"><h2>Evidence for this Zone</h2><p className="subtle">Only record observations that actually happened. Skip if none.</p>{plan.candidates.length>0&&<button type="button" onClick={()=>{const c=plan.candidates.find(x=>x.candidate_id===quickZoneId)??plan.candidates[0];void openEvidence(c);}}>Record evidence</button>}</div>}
-          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button onClick={()=>setEvidenceCandidate(null)}>Close</button></div><div className="evidencePicker">{groupedEvidence.map(([group,items])=><div className="sourceGroup" key={group}><strong>{group.replaceAll('_',' ')}</strong><div className="chips">{items.map(e=><button key={e.evidence_type_id} className={evidenceTypeId===e.evidence_type_id?'chip selected':'chip'} onClick={()=>setEvidenceTypeId(e.evidence_type_id)}>{e.label}</button>)}</div></div>)}</div><div className="formGrid"><label>Role<select value={evidenceRole} onChange={e=>setEvidenceRole(e.target.value as any)}><option value="SETUP_SUPPORT">Supporting evidence</option><option value="ENTRY_CONFIRMATION">Entry confirmation</option><option value="CONTRADICTING_EVIDENCE">Contradicting evidence</option><option value="INVALIDATION">Invalidation</option><option value="GENERAL_OBSERVATION">General observation</option></select></label><label>Direction<select value={evidenceDirection} onChange={e=>setEvidenceDirection(e.target.value as any)}><option>NEUTRAL</option><option>BUY</option><option>SELL</option></select></label>{isFieldPresented('evidence.price',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>Price (optional)<input type="number" step={tickStep} value={evidencePrice??''} onChange={e=>setEvidencePrice(e.target.value?Number(e.target.value):null)}/></label>}{isFieldPresented('evidence.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>{fieldText['evidence.note']?.label?.trim()||'Note'}{fieldText['evidence.note']?.help&&<small title={fieldText['evidence.note'].help}>ⓘ</small>}<textarea value={evidenceNote} onChange={e=>setEvidenceNote(e.target.value)} placeholder="Optional"/></label>}</div><button className="primary" disabled={!evidenceTypeId} onClick={saveEvidence}>Capture evidence now</button><div className="evidenceHistory"><h3>Recent evidence</h3>{(candidateEvidence[evidenceCandidate.candidate_id]??[]).slice(0,8).map(ev=><div className="evidenceRow" key={ev.evidence_id}><time>{timeLabel(ev.occurred_at)}</time><div><b>{ev.evidence_label}</b><small>{ev.role} · {ev.direction||'—'}{ev.price!=null?` · ${ev.price}`:''}</small>{ev.note&&<span>{ev.note}</span>}</div></div>)}</div></div>}
+          {quickMode&&!evidenceCandidate&&<div className="panel"><h2>Evidence for this Zone</h2><p className="subtle">Only record observations that actually happened. Skip if none.</p>{plan.candidates.length>0&&<button type="button" onClick={()=>{const c=plan.candidates.find(x=>x.candidate_id===quickZoneId)??plan.candidates[0];void openEvidence(c);}}>Record evidence</button>}</div>}
+          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button onClick={()=>setEvidenceCandidate(null)}>Close</button></div><div className="evidencePicker">{groupedEvidence.map(([group,items])=><div className="sourceGroup" key={group}><strong>{group.replaceAll('_',' ')}</strong><div className="chips">{items.map(e=><button key={e.evidence_type_id} className={evidenceTypeId===e.evidence_type_id?'chip selected':'chip'} onClick={()=>setEvidenceTypeId(e.evidence_type_id)}>{e.label}</button>)}</div></div>)}</div><div className="formGrid"><label>Role<select value={evidenceRole} onChange={e=>setEvidenceRole(e.target.value as any)}><option value="SETUP_SUPPORT">Supporting evidence</option><option value="ENTRY_CONFIRMATION">Entry confirmation</option><option value="CONTRADICTING_EVIDENCE">Contradicting evidence</option><option value="INVALIDATION">Invalidation</option><option value="GENERAL_OBSERVATION">General observation</option></select></label><label>Direction<select value={evidenceDirection} onChange={e=>setEvidenceDirection(e.target.value as any)}><option>NEUTRAL</option><option>BUY</option><option>SELL</option></select></label>{isFieldPresented('evidence.price',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>Price (optional)<input type="number" step={tickStep} value={evidencePrice??''} onChange={e=>setEvidencePrice(e.target.value?Number(e.target.value):null)}/></label>}{isFieldPresented('evidence.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>{fieldText['evidence.note']?.label?.trim()||'Note'}{fieldText['evidence.note']?.help&&<small title={fieldText['evidence.note'].help}>ⓘ</small>}<textarea value={evidenceNote} onChange={e=>setEvidenceNote(e.target.value)} placeholder="Optional"/></label>}</div><div className="rowActions">{evidenceSaved?<button className="primary" type="button" onClick={()=>{setEvidenceSaved(false);setEvidenceFeedback("");setEvidenceTypeId("");}}>Record another observation</button>:<button className="primary" type="button" disabled={!evidenceTypeId||evidenceSaving} onClick={saveEvidence}>{evidenceSaving?"Saving…":"Capture evidence now"}</button>}</div>{evidenceFeedback&&<p role="status" aria-live="polite" className={evidenceSaved?"okBox":"warningBox"}>{evidenceFeedback}</p><div className="evidenceHistory"><h3>Recent evidence</h3>{(candidateEvidence[evidenceCandidate.candidate_id]??[]).slice(0,8).map(ev=><div className="evidenceRow" key={ev.evidence_id}><time>{timeLabel(ev.occurred_at)}</time><div><b>{ev.evidence_label}</b><small>{ev.role} · {ev.direction||'—'}{ev.price!=null?` · ${ev.price}`:''}</small>{ev.note&&<span>{ev.note}</span>}</div></div>)}</div></div>}
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
