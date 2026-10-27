@@ -139,7 +139,9 @@ export function App(){
   const [liveCandidateEvidence,setLiveCandidateEvidence]=useState('');
 
   const [evidenceCandidate,setEvidenceCandidate]=useState<CurrentCandidate|null>(null);
-  const [evidenceTypeId,setEvidenceTypeId]=useState('');
+  const [selectedEvidenceIds,setSelectedEvidenceIds]=useState<string[]>([]);
+  const [evidenceStances,setEvidenceStances]=useState<Record<string,'GENERAL_OBSERVATION'|'SETUP_SUPPORT'|'CONTRADICTING_EVIDENCE'>>({});
+  const [savedEvidenceIds,setSavedEvidenceIds]=useState<string[]>([]);
   const [evidenceRole,setEvidenceRole]=useState<'SETUP_SUPPORT'|'ENTRY_CONFIRMATION'|'CONTRADICTING_EVIDENCE'|'INVALIDATION'|'GENERAL_OBSERVATION'>('SETUP_SUPPORT');
   const [evidenceDirection,setEvidenceDirection]=useState<'BUY'|'SELL'|'NEUTRAL'>('NEUTRAL');
   const [evidencePrice,setEvidencePrice]=useState<number|null>(null);
@@ -226,7 +228,7 @@ export function App(){
     localApi.getFieldTextPreferences().then(setFieldText).catch(()=>{});
     localApi.getAppearancePreferences().then(v=>setAppearance(normalizeAppearance(v))).catch(()=>{});
     localApi.listLevelSources().then(setSources).catch(()=>{});
-    localApi.listEvidenceTypes().then(v=>{setEvidenceTypes(v); if(v[0])setEvidenceTypeId(v[0].evidence_type_id);}).catch(()=>{});
+    localApi.listEvidenceTypes().then(setEvidenceTypes).catch(()=>{});
     localApi.listMistakeTypes().then(setMistakeTypes).catch(()=>{});
     localApi.listRules().then(setRules).catch(()=>{});
     localApi.runtimeReadiness().then(setRuntimeReadiness).catch(()=>{});
@@ -537,27 +539,37 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
+    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); setEvidenceRole('SETUP_SUPPORT');
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
     }catch{}
   }
   async function saveEvidence(){
-    if(!active||!evidenceCandidate||!evidenceTypeId||evidenceSavingRef.current||evidenceSaved)return;
+    if(!active||!evidenceCandidate||!selectedEvidenceIds.length||evidenceSavingRef.current||evidenceSaved)return;
     evidenceSavingRef.current=true;setEvidenceSaving(true);setEvidenceFeedback('');
-    try{
-      await localApi.addEvidenceObservation({session_id:active.session_id,candidate_id:evidenceCandidate.candidate_id,evidence_type_id:evidenceTypeId,role:evidenceRole,direction:evidenceDirection,price:evidencePrice,note:evidenceNote||null});
-      setEvidenceSaved(true);
-      setEvidenceFeedback('Saved successfully. To record another observation, choose Record another.');
-      setEvidenceNote('');setEvidencePrice(null);
+    const completed=[...savedEvidenceIds];
+    let failed='';
+    for(const id of selectedEvidenceIds){
+      if(completed.includes(id))continue;
       try{
-        const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
-        setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
-        setTimeline(await localApi.listPlanTimeline(active.session_id));
-      }catch(e){setMessage('Evidence saved, but history refresh failed: '+String(e));}
-    }catch(e){setEvidenceFeedback('Not saved: '+String(e));}
-    finally{evidenceSavingRef.current=false;setEvidenceSaving(false);}
+        await localApi.addEvidenceObservation({session_id:active.session_id,candidate_id:evidenceCandidate.candidate_id,evidence_type_id:id,role:evidenceStances[id]??'GENERAL_OBSERVATION',direction:evidenceDirection,price:evidencePrice,note:evidenceNote||null});
+        completed.push(id);setSavedEvidenceIds([...completed]);
+      }catch(e){failed=String(e);break;}
+    }
+    try{
+      const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
+      setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
+      setTimeline(await localApi.listPlanTimeline(active.session_id));
+    }catch(e){setMessage('History refresh failed: '+String(e));}
+    if(failed){
+      setEvidenceFeedback(completed.length+' of '+selectedEvidenceIds.length+' saved. Remaining items were not saved: '+failed+'. Retry will skip previously saved items.');
+    }else{
+      setEvidenceSaved(true);
+      setEvidenceFeedback(completed.length+' observations saved. Choose Record another to enter fresh observations.');
+      setEvidenceNote('');setEvidencePrice(null);
+    }
+    evidenceSavingRef.current=false;setEvidenceSaving(false);
   }
 
 
@@ -813,7 +825,7 @@ export function App(){
           </div>
           <div style={{display:!quickMode||notebookPage==='EVIDENCE'?'block':'none'}}>
           {quickMode&&!evidenceCandidate&&<div className="panel"><h2>Evidence for this Zone</h2><p className="subtle">Only record observations that actually happened. Skip if none.</p>{plan.candidates.length>0&&<button type="button" onClick={()=>{const c=plan.candidates.find(x=>x.candidate_id===quickZoneId)??plan.candidates[0];void openEvidence(c);}}>Record evidence</button>}</div>}
-          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button onClick={()=>setEvidenceCandidate(null)}>Close</button></div><div className="evidencePicker">{groupedEvidence.map(([group,items])=><div className="sourceGroup" key={group}><strong>{group.replaceAll('_',' ')}</strong><div className="chips">{items.map(e=><button key={e.evidence_type_id} className={evidenceTypeId===e.evidence_type_id?'chip selected':'chip'} onClick={()=>setEvidenceTypeId(e.evidence_type_id)}>{e.label}</button>)}</div></div>)}</div><div className="formGrid"><label>Role<select value={evidenceRole} onChange={e=>setEvidenceRole(e.target.value as any)}><option value="SETUP_SUPPORT">Supporting evidence</option><option value="ENTRY_CONFIRMATION">Entry confirmation</option><option value="CONTRADICTING_EVIDENCE">Contradicting evidence</option><option value="INVALIDATION">Invalidation</option><option value="GENERAL_OBSERVATION">General observation</option></select></label><label>Direction<select value={evidenceDirection} onChange={e=>setEvidenceDirection(e.target.value as any)}><option>NEUTRAL</option><option>BUY</option><option>SELL</option></select></label>{isFieldPresented('evidence.price',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>Price (optional)<input type="number" step={tickStep} value={evidencePrice??''} onChange={e=>setEvidencePrice(e.target.value?Number(e.target.value):null)}/></label>}{isFieldPresented('evidence.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>{fieldText['evidence.note']?.label?.trim()||'Note'}{fieldText['evidence.note']?.help&&<small title={fieldText['evidence.note'].help}>ⓘ</small>}<textarea value={evidenceNote} onChange={e=>setEvidenceNote(e.target.value)} placeholder="Optional"/></label>}</div><div className="rowActions">{evidenceSaved?<button className="primary" type="button" onClick={()=>{setEvidenceSaved(false);setEvidenceFeedback("");setEvidenceTypeId("");}}>Record another observation</button>:<button className="primary" type="button" disabled={!evidenceTypeId||evidenceSaving} onClick={saveEvidence}>{evidenceSaving?"Saving…":"Capture evidence now"}</button>}</div>{evidenceFeedback&&<p role="status" aria-live="polite" className={evidenceSaved?"okBox":"warningBox"}>{evidenceFeedback}</p>}<div className="evidenceHistory"><h3>Recent evidence</h3>{(candidateEvidence[evidenceCandidate.candidate_id]??[]).slice(0,8).map(ev=><div className="evidenceRow" key={ev.evidence_id}><time>{timeLabel(ev.occurred_at)}</time><div><b>{ev.evidence_label}</b><small>{ev.role} · {ev.direction||'—'}{ev.price!=null?` · ${ev.price}`:''}</small>{ev.note&&<span>{ev.note}</span>}</div></div>)}</div></div>}
+          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button onClick={()=>setEvidenceCandidate(null)}>Close</button></div><div className="evidencePicker"><p className="subtle">Select all observations actually seen. Mark each as supporting or contradicting only if you decide; unclassified is the default.</p>{groupedEvidence.map(([group,items])=><div className="sourceGroup" key={group}><strong>{group.replaceAll('_',' ')}</strong><div className="chips">{items.map(e=><button type="button" key={e.evidence_type_id} disabled={evidenceSaving||evidenceSaved||savedEvidenceIds.length>0} aria-pressed={selectedEvidenceIds.includes(e.evidence_type_id)} className={selectedEvidenceIds.includes(e.evidence_type_id)?'chip selected':'chip'} onClick={()=>setSelectedEvidenceIds(v=>v.includes(e.evidence_type_id)?v.filter(x=>x!==e.evidence_type_id):[...v,e.evidence_type_id])}>{e.label}</button>)}</div></div>)}</div>{selectedEvidenceIds.length>0&&<div className="panel"><strong>Selected ({selectedEvidenceIds.length})</strong>{selectedEvidenceIds.map(id=><div className="rowActions" key={id}><span>{evidenceTypes.find(t=>t.evidence_type_id===id)?.label??id}</span><select aria-label={'Classification for '+id} disabled={evidenceSaving||evidenceSaved||savedEvidenceIds.includes(id)} value={evidenceStances[id]??'GENERAL_OBSERVATION'} onChange={e=>setEvidenceStances(v=>({...v,[id]:e.target.value as 'GENERAL_OBSERVATION'|'SETUP_SUPPORT'|'CONTRADICTING_EVIDENCE'}))}><option value="GENERAL_OBSERVATION">Unclassified</option><option value="SETUP_SUPPORT">Supporting</option><option value="CONTRADICTING_EVIDENCE">Contradicting</option></select></div>)}</div><div className="formGrid">{!quickMode&&<label>Detailed evidence role<select value={evidenceRole} onChange={e=>setEvidenceRole(e.target.value as any)}><option value="SETUP_SUPPORT">Supporting evidence</option><option value="ENTRY_CONFIRMATION">Entry confirmation</option><option value="CONTRADICTING_EVIDENCE">Contradicting evidence</option><option value="INVALIDATION">Invalidation</option><option value="GENERAL_OBSERVATION">General observation</option></select></label>}<label>Direction<select value={evidenceDirection} onChange={e=>setEvidenceDirection(e.target.value as any)}><option>NEUTRAL</option><option>BUY</option><option>SELL</option></select></label>{isFieldPresented('evidence.price',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>Price (optional)<input type="number" step={tickStep} value={evidencePrice??''} onChange={e=>setEvidencePrice(e.target.value?Number(e.target.value):null)}/></label>}{isFieldPresented('evidence.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>{fieldText['evidence.note']?.label?.trim()||'Note'}{fieldText['evidence.note']?.help&&<small title={fieldText['evidence.note'].help}>ⓘ</small>}<textarea value={evidenceNote} onChange={e=>setEvidenceNote(e.target.value)} placeholder="Optional"/></label>}</div><div className="rowActions">{evidenceSaved?<button className="primary" type="button" onClick={()=>{setEvidenceSaved(false);setEvidenceFeedback("");setSelectedEvidenceIds([]);setSavedEvidenceIds([]);setEvidenceStances({});}}>Record another observation</button>:<button className="primary" type="button" disabled={!selectedEvidenceIds.length||evidenceSaving} onClick={saveEvidence}>{evidenceSaving?"Saving…":'Capture '+selectedEvidenceIds.length+' observation(s)'}</button>}</div>{evidenceFeedback&&<p role="status" aria-live="polite" className={evidenceSaved?"okBox":"warningBox"}>{evidenceFeedback}</p>}<div className="evidenceHistory"><h3>Recent evidence</h3>{(candidateEvidence[evidenceCandidate.candidate_id]??[]).slice(0,8).map(ev=><div className="evidenceRow" key={ev.evidence_id}><time>{timeLabel(ev.occurred_at)}</time><div><b>{ev.evidence_label}</b><small>{ev.role} · {ev.direction||'—'}{ev.price!=null?` · ${ev.price}`:''}</small>{ev.note&&<span>{ev.note}</span>}</div></div>)}</div></div>}
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
