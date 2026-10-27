@@ -766,6 +766,20 @@ pub fn add_evidence_observation(conn:&Connection,input:EvidenceObservationInput)
     Ok(id)
 }
 
+pub fn add_evidence_observations_atomic(conn:&mut Connection,inputs:Vec<EvidenceObservationInput>)->Result<Vec<String>,AppError>{
+    if inputs.is_empty() || inputs.len()>32 {return Err(AppError::Validation("evidence batch must contain 1 to 32 observations".into()));}
+    let first_session=&inputs[0].session_id;
+    let first_candidate=&inputs[0].candidate_id;
+    if inputs.iter().any(|x| &x.session_id!=first_session || &x.candidate_id!=first_candidate){
+        return Err(AppError::Validation("all observations must belong to the same session and Zone".into()));
+    }
+    let tx=conn.transaction()?;
+    let mut ids=Vec::with_capacity(inputs.len());
+    for input in inputs { ids.push(add_evidence_observation(&tx,input)?); }
+    tx.commit()?;
+    Ok(ids)
+}
+
 pub fn list_candidate_evidence(conn:&Connection,candidate_id:&str)->Result<Vec<EvidenceObservationDto>,AppError>{
     let mut stmt=conn.prepare("SELECT eo.evidence_id,COALESCE(eo.occurred_at,''),eo.candidate_id,eo.evidence_type_id,et.label,eo.role,eo.direction,eo.price,eo.numeric_value,eo.strength,eo.note FROM evidence_observations eo JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id WHERE eo.candidate_id=?1 ORDER BY eo.occurred_at DESC,eo.rowid DESC")?;
     let rows=stmt.query_map([candidate_id],|r|Ok(EvidenceObservationDto{evidence_id:r.get(0)?,occurred_at:r.get(1)?,candidate_id:r.get(2)?,evidence_type_id:r.get(3)?,evidence_label:r.get(4)?,role:r.get(5)?,direction:r.get(6)?,price:r.get(7)?,numeric_value:r.get(8)?,strength:r.get(9)?,note:r.get(10)?}))?;
