@@ -75,6 +75,8 @@ function FeatureRoadmapPanel({onClose}:{onClose:()=>void}){
 
 export function App(){
   const [sessions,setSessions]=useState<SessionSummary[]>([]);
+  const [lastOpenedSessionId,setLastOpenedSessionId]=useState(()=>{try{return window.localStorage.getItem('ptj.lastOpenedSessionId')??'';}catch{return '';}});
+  function rememberOpenedSession(id:string){setLastOpenedSessionId(id);try{window.localStorage.setItem('ptj.lastOpenedSessionId',id);}catch{}}
   const [instruments,setInstruments]=useState<Instrument[]>([]);
   const [sources,setSources]=useState<LevelSourceType[]>([]);
   const [evidenceTypes,setEvidenceTypes]=useState<EvidenceType[]>([]);
@@ -293,7 +295,7 @@ export function App(){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
       setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
     }
-    setActive(s);
+    setActive(s);rememberOpenedSession(s.session_id);
     if(s.status==='DRAFT'){
       setPlan(null);setTimeline([]);setConsistency(null);setSessionTrades([]);
       resetSessionInputState();setDraftDirty(false);
@@ -331,7 +333,7 @@ export function App(){
     await refresh();
   }
   async function start(){
-    try{const s=await localApi.createDraftSession({session_date:date,instrument_symbol:instrument,environment}); setActive(s); setPlan(null); setDraftDirty(false); setDraftStep(1); setMessage('Draft session created. Build the initial plan, then confirm it.'); await refresh();}
+    try{const s=await localApi.createDraftSession({session_date:date,instrument_symbol:instrument,environment}); setActive(s); rememberOpenedSession(s.session_id); setPlan(null); setDraftDirty(false); setDraftStep(1); setMessage('Draft session created. Build the initial plan, then confirm it.'); await refresh();}
     catch(e){setMessage(String(e));}
   }
 
@@ -718,7 +720,7 @@ export function App(){
         <button className={showSettings?'activeMode':''} onClick={()=>{setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}>Settings</button>
         <button onClick={createBackupWithFeedback} disabled={backupBusy}>{backupBusy?'Creating backup…':'Create backup'}</button>
         <button className={showRoadmap?'activeMode':''} onClick={()=>{setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}>Feature Roadmap</button>
-        <div className="recent"><strong>Recent</strong>{sessions.map(s=><button className="sessionLink" key={s.session_id} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status}</small></button>)}</div>
+        <div className="recent"><strong>Recent</strong>{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div>
       </aside>
 
       <section className="workspace">
