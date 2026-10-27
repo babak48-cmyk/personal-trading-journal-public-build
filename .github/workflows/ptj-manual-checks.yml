@@ -49,6 +49,9 @@ jobs:
       - name: Verify Rust source with locked dependencies
         working-directory: app/src-tauri
         run: cargo check --locked
+      - name: Test Evidence batch atomicity and rollback
+        working-directory: app/src-tauri
+        run: cargo test --locked --lib evidence_atomic_batch_tests
       - name: Save generated Cargo.lock for canonical review
         uses: actions/upload-artifact@v4
         with:
