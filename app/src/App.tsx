@@ -549,28 +549,24 @@ export function App(){
   async function saveEvidence(){
     if(!active||!evidenceCandidate||!selectedEvidenceIds.length||evidenceSavingRef.current||evidenceSaved)return;
     evidenceSavingRef.current=true;setEvidenceSaving(true);setEvidenceFeedback('');
-    const completed=[...savedEvidenceIds];
-    let failed='';
-    for(const id of selectedEvidenceIds){
-      if(completed.includes(id))continue;
-      try{
-        await localApi.addEvidenceObservation({session_id:active.session_id,candidate_id:evidenceCandidate.candidate_id,evidence_type_id:id,role:evidenceStances[id]??'GENERAL_OBSERVATION',direction:evidenceDirection,price:evidencePrice,note:evidenceNote||null});
-        completed.push(id);setSavedEvidenceIds([...completed]);
-      }catch(e){failed=String(e);break;}
-    }
-    try{
-      const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
-      setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
-      setTimeline(await localApi.listPlanTimeline(active.session_id));
-    }catch(e){setMessage('History refresh failed: '+String(e));}
-    if(failed){
-      setEvidenceFeedback(completed.length+' of '+selectedEvidenceIds.length+' saved. Remaining items were not saved: '+failed+'. Retry will skip previously saved items.');
-    }else{
+    try {
+      const inputs=selectedEvidenceIds.map(id=>({
+        session_id:active.session_id,candidate_id:evidenceCandidate.candidate_id,
+        evidence_type_id:id,role:evidenceStances[id]??'GENERAL_OBSERVATION',
+        direction:evidenceDirection,price:evidencePrice,note:evidenceNote||null
+      }));
+      await localApi.addEvidenceObservationsAtomic(inputs);
       setEvidenceSaved(true);
-      setEvidenceFeedback(completed.length+' observations saved. Choose Record another to enter fresh observations.');
+      setSavedEvidenceIds([...selectedEvidenceIds]);
+      setEvidenceFeedback(inputs.length+' observations saved together. Choose Record another for fresh observations.');
       setEvidenceNote('');setEvidencePrice(null);
-    }
-    evidenceSavingRef.current=false;setEvidenceSaving(false);
+      try{
+        const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
+        setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
+        setTimeline(await localApi.listPlanTimeline(active.session_id));
+      }catch(e){setMessage('Evidence saved, but history refresh failed: '+String(e));}
+    }catch(e){setEvidenceFeedback('Nothing saved in this batch: '+String(e));}
+    finally{evidenceSavingRef.current=false;setEvidenceSaving(false);}
   }
 
 
