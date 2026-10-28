@@ -592,8 +592,17 @@ export function App(){
     decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
     try{
       const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:mismatchReason||null});
-      const rows=await localApi.listCandidateDecisions(decisionCandidate.candidate_id);setCandidateDecisions(v=>({...v,[decisionCandidate.candidate_id]:rows}));
-      setTimeline(await localApi.listPlanTimeline(active.session_id));
+      // Once the backend acknowledges a decision, do not report a later history-refresh
+      // failure as a failed save: retrying could create a duplicate decision.
+      try {
+        const rows=await localApi.listCandidateDecisions(decisionCandidate.candidate_id);
+        setCandidateDecisions(v=>({...v,[decisionCandidate.candidate_id]:rows}));
+      } catch (refreshError) {
+        setCandidateDecisions(v=>({...v,[decisionCandidate.candidate_id]:[saved,...(v[decisionCandidate.candidate_id]??[]).filter(d=>d.decision_id!==saved.decision_id)]}));
+        setMessage('Decision saved, but decision history could not refresh: '+String(refreshError));
+      }
+      try { setTimeline(await localApi.listPlanTimeline(active.session_id)); }
+      catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
       if(isTrade){ setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
