@@ -157,6 +157,7 @@ export function App(){
   const decisionSavingRef=useRef(false);
   const [decisionSaving,setDecisionSaving]=useState(false);
   const [decisionSaveFeedback,setDecisionSaveFeedback]=useState('');
+  const [lastDecisionNotice,setLastDecisionNotice]=useState('');
   const [quickZoneId,setQuickZoneId]=useState('');
   const [notebookPage,setNotebookPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'>('PLAN');
   const [notebookMaxPage,setNotebookMaxPage]=useState(0);
@@ -575,7 +576,7 @@ export function App(){
 
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
     if(decisionSavingRef.current)return;
-    setDecisionSaveFeedback('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
+    setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
     if(c.directional_intent==='LONG'||c.directional_intent==='SHORT') setDecisionDirection(c.directional_intent);
     try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
   }
@@ -588,13 +589,13 @@ export function App(){
     if(blockMissing(decisionMissing))return;
     const opposite=isTrade && ['LONG','SHORT'].includes(decisionCandidate.directional_intent) && decisionDirection!==decisionCandidate.directional_intent;
     if(opposite&&!mismatchReason.trim()){setMessage('A trade opposite to the planned direction needs a short reason.');return;}
-    decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');
+    decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
     try{
       const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:mismatchReason||null});
       const rows=await localApi.listCandidateDecisions(decisionCandidate.candidate_id);setCandidateDecisions(v=>({...v,[decisionCandidate.candidate_id]:rows}));
       setTimeline(await localApi.listPlanTimeline(active.session_id));
       if(isTrade){ setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
-      else setMessage(`${decisionType} decision saved. You can record another decision later if this level is revisited.`);
+      else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
     }catch(e){setDecisionSaveFeedback('Decision not saved: '+String(e));}
     finally{decisionSavingRef.current=false;setDecisionSaving(false);}
@@ -815,6 +816,7 @@ export function App(){
           </div>
           <div style={{display:!quickMode||notebookPage==='DECISION'?'block':'none'}}>
           {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision"><div className="panelTitle"><div><h2>Decision · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button onClick={()=>setDecisionCandidate(null)}>Close</button></div>
+            {lastDecisionNotice&&<p role="status" className="okBox">{lastDecisionNotice}</p>}
             <div className="fieldHelpLine"><b>Decision</b><FieldHelp id="decision.type" value={decisionType}/></div><div className="decisionChoice"><button className={decisionType==='TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>setDecisionType('TRADE')}>TRADE</button><button className={decisionType==='NO_TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>setDecisionType('NO_TRADE')}>NO-TRADE</button><button className={decisionType==='MISSED'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>setDecisionType('MISSED')}>MISSED</button></div>
             {decisionType==='TRADE'&&<div className="formGrid"><label>Direction<select value={decisionDirection} onChange={e=>setDecisionDirection(e.target.value as 'LONG'|'SHORT')}><option>LONG</option><option>SHORT</option></select></label>{['LONG','SHORT'].includes(decisionCandidate.directional_intent)&&decisionDirection!==decisionCandidate.directional_intent&&<label className="warningField">Why are you going opposite to the plan?<select value={mismatchReason} onChange={e=>setMismatchReason(e.target.value)}><option value="">Select</option><option value="NEW_EVIDENCE">New evidence</option><option value="SCENARIO_INVALIDATED">Original scenario invalidated</option><option value="PLANNED_COUNTERTREND">Planned counter-trend setup</option><option value="PLAN_NOT_UPDATED">Plan not updated yet</option><option value="UNPLANNED_IMPULSE">Unplanned / impulsive</option><option value="OTHER">Other</option></select></label>}</div>}
             {decisionType==='NO_TRADE'&&<div data-validation-id="decision.reason" className={`quickReasons ${invalidClass('decision.reason')}`}><span>Why no trade? <FieldHelp id="decision.reason"/></span>{['MISSING_CONFIRMATION','CONTRADICTING_EVIDENCE','INVALIDATION','RISK_UNACCEPTABLE','CONTEXT_WRONG','RULE_PREVENTED','OTHER'].map(x=><button key={x} className={decisionReason===x?'chip selected':'chip'} onClick={()=>{setDecisionReason(x);clearValidation('decision.reason')}}>{x.replaceAll('_',' ')}</button>)}</div>}
