@@ -169,6 +169,8 @@ export function App(){
   const [mismatchReason,setMismatchReason]=useState('');
   const [candidateDecisions,setCandidateDecisions]=useState<Record<string,CandidateDecision[]>>({});
   const [pendingTradeDecision,setPendingTradeDecision]=useState<CandidateDecision|null>(null);
+  const tradeOpeningRef=useRef(false);
+  const [tradeOpening,setTradeOpening]=useState(false);
   const [entryPrice,setEntryPrice]=useState<number|null>(null);
   const [stopPrice,setStopPrice]=useState<number|null>(null);
   const [tradeQty,setTradeQty]=useState<number>(1);
@@ -612,7 +614,7 @@ export function App(){
 
 
   async function createExecutedTrade(){
-    if(!pendingTradeDecision)return;
+    if(!pendingTradeDecision||tradeOpeningRef.current)return;
     const missing:ValidationIssue[]=[];
     if(entryPrice==null)missing.push({id:'trade.entryPrice',label:'Entry price'});
     if(stopPrice==null)missing.push({id:'trade.stopPrice',label:'Stop price'});
@@ -620,11 +622,15 @@ export function App(){
     if(isUserRequired('trade.plannedTarget',requirementOverrides)&&plannedTarget==null)missing.push({id:'trade.plannedTarget',label:'Planned target'});
     if(blockMissing(missing))return;
     if(entryPrice==null||stopPrice==null)return;
+    tradeOpeningRef.current=true;setTradeOpening(true);
     try{
       const detail=await localApi.createTradeWithEntry({decision_id:pendingTradeDecision.decision_id,entry_price:entryPrice,stop_price:stopPrice,quantity:tradeQty,order_type:'MARKET',planned_target_price:plannedTarget});
-      setActiveTrade(detail); setPendingTradeDecision(null); setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');
-      if(active)setSessionTrades(await localApi.listSessionTrades(active.session_id));
-    }catch(e){setMessage(String(e));}
+      setActiveTrade(detail);setPendingTradeDecision(null);
+      setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');
+      if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
+      catch(e){setMessage('Trade created, but trade list refresh failed: '+String(e));}
+    }catch(e){setMessage('Trade creation was not confirmed. Check existing session trades before retrying: '+String(e));}
+    finally{tradeOpeningRef.current=false;setTradeOpening(false);}
   }
   async function addFill(){
     if(fillSaving||!activeTrade||fillPrice==null||fillQty<=0)return;
