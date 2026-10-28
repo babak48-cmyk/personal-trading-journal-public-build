@@ -154,6 +154,9 @@ export function App(){
   const [candidateEvidence,setCandidateEvidence]=useState<Record<string,EvidenceObservation[]>>({});
   const [quickMode,setQuickMode]=useState(true);
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
+  const decisionSavingRef=useRef(false);
+  const [decisionSaving,setDecisionSaving]=useState(false);
+  const [decisionSaveFeedback,setDecisionSaveFeedback]=useState('');
   const [quickZoneId,setQuickZoneId]=useState('');
   const [notebookPage,setNotebookPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'>('PLAN');
   const [notebookMaxPage,setNotebookMaxPage]=useState(0);
@@ -571,12 +574,13 @@ export function App(){
 
 
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
-    setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
+    if(decisionSavingRef.current)return;
+    setDecisionSaveFeedback('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
     if(c.directional_intent==='LONG'||c.directional_intent==='SHORT') setDecisionDirection(c.directional_intent);
     try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
   }
   async function saveDecision(){
-    if(!active||!decisionCandidate)return;
+    if(!active||!decisionCandidate||decisionSavingRef.current)return;
     const isTrade=decisionType==='TRADE';
     const decisionMissing:ValidationIssue[]=[];
     if(!isTrade&&!decisionReason.trim()&&!decisionNote.trim())decisionMissing.push({id:'decision.reason',label:'Decision reason'});
@@ -584,6 +588,7 @@ export function App(){
     if(blockMissing(decisionMissing))return;
     const opposite=isTrade && ['LONG','SHORT'].includes(decisionCandidate.directional_intent) && decisionDirection!==decisionCandidate.directional_intent;
     if(opposite&&!mismatchReason.trim()){setMessage('A trade opposite to the planned direction needs a short reason.');return;}
+    decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');
     try{
       const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:mismatchReason||null});
       const rows=await localApi.listCandidateDecisions(decisionCandidate.candidate_id);setCandidateDecisions(v=>({...v,[decisionCandidate.candidate_id]:rows}));
@@ -591,7 +596,8 @@ export function App(){
       if(isTrade){ setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
       else setMessage(`${decisionType} decision saved. You can record another decision later if this level is revisited.`);
       setDecisionCandidate(null);
-    }catch(e){setMessage(String(e));}
+    }catch(e){setDecisionSaveFeedback('Decision not saved: '+String(e));}
+    finally{decisionSavingRef.current=false;setDecisionSaving(false);}
   }
 
 
@@ -815,7 +821,7 @@ export function App(){
             {decisionType==='MISSED'&&<div data-validation-id="decision.reason" className={`quickReasons ${invalidClass('decision.reason')}`}><span>Why missed? <FieldHelp id="decision.reason"/></span>{['HESITATION','DID_NOT_NOTICE','TOO_LATE','OPERATIONAL_ISSUE','DISTRACTED','RISK_LIMIT_REACHED','PLATFORM_ISSUE','OTHER'].map(x=><button key={x} className={decisionReason===x?'chip selected':'chip'} onClick={()=>{setDecisionReason(x);clearValidation('decision.reason')}}>{x.replaceAll('_',' ')}</button>)}</div>}
             {!quickMode&&<div className="formGrid"><label data-validation-id="decision.quality" className={invalidClass('decision.quality')}>Decision quality <FieldHelp id="decision.quality" value={decisionQuality}/><select value={decisionQuality} onChange={e=>{setDecisionQuality(e.target.value as any);clearValidation('decision.quality')}}><option value="">Complete later</option>{['A','B','C','INVALID','UNCLEAR'].map(x=><option key={x}>{x}</option>)}</select></label>{isFieldPresented('decision.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>{fieldText['decision.note']?.label?.trim()||'Optional note'}{fieldText['decision.note']?.help&&<small title={fieldText['decision.note'].help}>ⓘ</small>}<textarea value={decisionNote} onChange={e=>setDecisionNote(e.target.value)} placeholder="Only if it adds useful context"/></label>}</div>}
             <div className="decisionSnapshot"><span><b>Planned intent</b>{decisionCandidate.directional_intent}</span><span><b>Status</b>{decisionCandidate.current_status}</span><span><b>Sources</b>{decisionCandidate.sources.slice(0,3).join(' · ')||'—'}</span></div>
-            <div className="rowActions"><button onClick={()=>setDecisionCandidate(null)}>Cancel</button><button className="primary" onClick={saveDecision}>Save decision</button></div>
+            <div className="rowActions"><button disabled={decisionSaving} onClick={()=>setDecisionCandidate(null)}>Cancel</button><button className="primary" disabled={decisionSaving} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}
             {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary>{candidateDecisions[decisionCandidate.candidate_id].slice(0,6).map(d=><div className="decisionHistory" key={d.decision_id}><time>{timeLabel(d.occurred_at)}</time><b>{d.decision_type}{d.intended_direction?` · ${d.intended_direction}`:''}</b><small>{d.reason_code||d.plan_alignment||'—'}</small></div>)}</details>}
           </div>}
 
