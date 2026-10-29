@@ -327,13 +327,18 @@ export function App(){
       const p=await localApi.getCurrentPlan(s.session_id); setPlan(p);
       setTimeline(await localApi.listPlanTimeline(s.session_id));
       setConsistency(await localApi.checkPlanConsistency(s.session_id));
-      setSessionTrades(await localApi.listSessionTrades(s.session_id));
+      const restoredTrades=await localApi.listSessionTrades(s.session_id);
+      setSessionTrades(restoredTrades);
+      // Quick page access is a view state, not evidence that earlier steps were incomplete.
+      // Allow return to recorded trades and review after a full application restart.
+      if(restoredTrades.length>0)setNotebookMaxPage(v=>Math.max(v,4));
       // Restore persisted Decision history independently of the plan/trade load.
       // Do not infer whether an earlier TRADE decision has an execution:
       // that requires an explicit decision_id-to-trade association.
       try{
         const histories=await Promise.all(p.candidates.map(async c=>[c.candidate_id,await localApi.listCandidateDecisions(c.candidate_id)] as const));
         setCandidateDecisions(Object.fromEntries(histories));
+        if(histories.some(([,rows])=>rows.length>0))setNotebookMaxPage(v=>Math.max(v,2));
       }catch(e){setCandidateDecisions({});setMessage('Session loaded, but Decision history could not refresh: '+String(e));}
     }catch(e){
       setPlan(null);setTimeline([]);setConsistency(null);setSessionTrades([]);
