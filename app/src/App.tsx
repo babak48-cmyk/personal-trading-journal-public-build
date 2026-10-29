@@ -1231,10 +1231,11 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     catch(e){setMsg(String(e));}
   }
   async function toggleVisible(id:string){
-    if(!isActiveVisibilityControl(id))return;
+    // Mandatory fields must never disappear from Quick, regardless of UI entry point.
+    if(!isActiveVisibilityControl(id)||isUserRequired(id,draft))return;
     const next={...visibility,[id]:!isFieldShown(id,visibility,draft)};
     try{await localApi.saveFieldVisibilityPreferences(next);await onVisibilityChanged();setMsg('Visibility preference saved. Existing values retained.');}
-    catch(e){setMsg(String(e));}
+    catch(e){setMsg('Visibility update was not confirmed; reload settings before retrying: '+String(e));}
   }
   async function saveTextSettings(){
     try{
