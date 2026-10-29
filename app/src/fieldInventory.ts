@@ -198,6 +198,8 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'review.decisionQuality',
   'review.executionQuality',
   'review.managementQuality',
+  'psychology.intensity',
+  'review.mistakes',
   'review.exitReason',
   'review.exitNote',
   'rule.note',
