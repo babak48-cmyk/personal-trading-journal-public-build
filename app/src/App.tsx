@@ -1204,13 +1204,17 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   useEffect(()=>setTextDraft(fieldText),[fieldText]);
   useEffect(()=>setDraft(overrides),[overrides]);
 
-  async function save(next:RequirementOverrides){
+  async function save(next:RequirementOverrides):Promise<boolean>{
     try{
-      setDraft(next);
       await localApi.saveFieldRequirementOverrides(next);
       await onChanged();
+      setDraft(next);
       setMsg('Field requirements saved.');
-    }catch(e){setMsg(String(e));}
+      return true;
+    }catch(e){
+      setMsg('Field requirement change was not confirmed. Reload settings before retrying: '+String(e));
+      return false;
+    }
   }
   async function toggle(id:string){
     const def=FIELD_DEFINITION_BY_ID[id];
@@ -1219,7 +1223,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     if(!next[id])delete next[id];
     await save(next);
   }
-  async function reset(){await save({});setMsg('Field requirements reset to lightweight defaults.');}
+  async function reset(){if(await save({}))setMsg('Field requirements reset to lightweight defaults.');}
   async function togglePlacement(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft))return;
     const next:Record<string,FieldPlacement>={...placements,[id]:placements[id]==='DETAILED_ONLY'?'QUICK_AND_DETAILED':'DETAILED_ONLY'};
