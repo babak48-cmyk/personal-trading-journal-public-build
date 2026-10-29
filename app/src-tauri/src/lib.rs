@@ -108,6 +108,7 @@ pub fn run() {
             commands::list_plan_timeline,
             commands::add_live_candidate,
             commands::add_evidence_observation,
+            commands::add_evidence_observations_atomic,
             commands::list_candidate_evidence,
             commands::check_plan_consistency,
             commands::create_candidate_decision,

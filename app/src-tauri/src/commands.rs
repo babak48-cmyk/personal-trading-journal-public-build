@@ -460,6 +460,13 @@ pub fn add_evidence_observation(app: AppHandle, input: EvidenceObservationInput)
 }
 
 #[tauri::command]
+pub fn add_evidence_observations_atomic(app: AppHandle, inputs: Vec<EvidenceObservationInput>) -> Result<Vec<String>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    repository::add_evidence_observations_atomic(&mut conn,inputs)
+}
+
+#[tauri::command]
 pub fn list_candidate_evidence(app: AppHandle, candidate_id: String) -> Result<Vec<EvidenceObservationDto>, AppError> {
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;

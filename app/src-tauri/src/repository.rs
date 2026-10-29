@@ -766,6 +766,20 @@ pub fn add_evidence_observation(conn:&Connection,input:EvidenceObservationInput)
     Ok(id)
 }
 
+pub fn add_evidence_observations_atomic(conn:&mut Connection,inputs:Vec<EvidenceObservationInput>)->Result<Vec<String>,AppError>{
+    if inputs.is_empty() || inputs.len()>32 {return Err(AppError::Validation("evidence batch must contain 1 to 32 observations".into()));}
+    let first_session=&inputs[0].session_id;
+    let first_candidate=&inputs[0].candidate_id;
+    if inputs.iter().any(|x| &x.session_id!=first_session || &x.candidate_id!=first_candidate){
+        return Err(AppError::Validation("all observations must belong to the same session and Zone".into()));
+    }
+    let tx=conn.transaction()?;
+    let mut ids=Vec::with_capacity(inputs.len());
+    for input in inputs { ids.push(add_evidence_observation(&tx,input)?); }
+    tx.commit()?;
+    Ok(ids)
+}
+
 pub fn list_candidate_evidence(conn:&Connection,candidate_id:&str)->Result<Vec<EvidenceObservationDto>,AppError>{
     let mut stmt=conn.prepare("SELECT eo.evidence_id,COALESCE(eo.occurred_at,''),eo.candidate_id,eo.evidence_type_id,et.label,eo.role,eo.direction,eo.price,eo.numeric_value,eo.strength,eo.note FROM evidence_observations eo JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id WHERE eo.candidate_id=?1 ORDER BY eo.occurred_at DESC,eo.rowid DESC")?;
     let rows=stmt.query_map([candidate_id],|r|Ok(EvidenceObservationDto{evidence_id:r.get(0)?,occurred_at:r.get(1)?,candidate_id:r.get(2)?,evidence_type_id:r.get(3)?,evidence_label:r.get(4)?,role:r.get(5)?,direction:r.get(6)?,price:r.get(7)?,numeric_value:r.get(8)?,strength:r.get(9)?,note:r.get(10)?}))?;
@@ -1677,3 +1691,52 @@ pub fn list_mistake_summary(conn:&Connection,filter:JournalFilterInput)->Result<
 }
 
 
+
+#[cfg(test)]
+mod evidence_atomic_batch_tests {
+    use super::*;
+
+    fn memory_db()->Connection {
+        let conn=Connection::open_in_memory().expect("memory database");
+        conn.execute_batch("
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,status TEXT NOT NULL);
+            CREATE TABLE evidence_types(evidence_type_id TEXT PRIMARY KEY,active INTEGER NOT NULL);
+            CREATE TABLE evidence_observations(
+                evidence_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,candidate_id TEXT,
+                evidence_type_id TEXT NOT NULL,role TEXT NOT NULL,occurred_at TEXT NOT NULL,
+                direction TEXT,price REAL,numeric_value REAL,strength REAL,
+                present INTEGER NOT NULL,note TEXT,provenance TEXT NOT NULL
+            );
+            INSERT INTO sessions(session_id,status) VALUES('s1','ACTIVE');
+            INSERT INTO evidence_types(evidence_type_id,active) VALUES('valid',1);
+        ").expect("test schema");
+        conn
+    }
+
+    fn observation(evidence_type_id:&str)->EvidenceObservationInput {
+        EvidenceObservationInput {
+            session_id:"s1".into(),candidate_id:None,
+            evidence_type_id:evidence_type_id.into(),role:"GENERAL_OBSERVATION".into(),
+            direction:None,price:None,numeric_value:None,strength:None,note:None
+        }
+    }
+
+    #[test]
+    fn atomic_evidence_batch_commits_all_valid_rows() {
+        let mut db=memory_db();
+        let ids=add_evidence_observations_atomic(&mut db,vec![observation("valid"),observation("valid")]).expect("atomic commit");
+        assert_eq!(ids.len(),2);
+        assert_ne!(ids[0],ids[1]);
+        let count:i64=db.query_row("SELECT COUNT(*) FROM evidence_observations",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,2);
+    }
+
+    #[test]
+    fn atomic_evidence_batch_rolls_back_all_rows_if_later_item_fails() {
+        let mut db=memory_db();
+        let result=add_evidence_observations_atomic(&mut db,vec![observation("valid"),observation("inactive-or-unknown")]);
+        assert!(result.is_err());
+        let count:i64=db.query_row("SELECT COUNT(*) FROM evidence_observations",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,0,"first insert must roll back with failed second observation");
+    }
+}
