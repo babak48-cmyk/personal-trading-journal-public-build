@@ -328,6 +328,13 @@ export function App(){
       setTimeline(await localApi.listPlanTimeline(s.session_id));
       setConsistency(await localApi.checkPlanConsistency(s.session_id));
       setSessionTrades(await localApi.listSessionTrades(s.session_id));
+      // Restore persisted Decision history independently of the plan/trade load.
+      // Do not infer whether an earlier TRADE decision has an execution:
+      // that requires an explicit decision_id-to-trade association.
+      try{
+        const histories=await Promise.all(p.candidates.map(async c=>[c.candidate_id,await localApi.listCandidateDecisions(c.candidate_id)] as const));
+        setCandidateDecisions(Object.fromEntries(histories));
+      }catch(e){setCandidateDecisions({});setMessage('Session loaded, but Decision history could not refresh: '+String(e));}
     }catch(e){
       setPlan(null);setTimeline([]);setConsistency(null);setSessionTrades([]);
       setMessage(`Could not load the confirmed plan for this ${s.status.toLowerCase()} session: ${String(e)}`);
