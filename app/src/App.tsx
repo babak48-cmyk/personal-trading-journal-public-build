@@ -627,7 +627,7 @@ export function App(){
     tradeOpeningRef.current=true;setTradeOpening(true);
     try{
       const detail=await localApi.createTradeWithEntry({decision_id:pendingTradeDecision.decision_id,entry_price:entryPrice,stop_price:stopPrice,quantity:tradeQty,order_type:'MARKET',planned_target_price:plannedTarget});
-      setActiveTrade(detail);setPendingTradeDecision(null);
+      setActiveTrade(detail);setPendingTradeDecision(null);setReviewQueue(null);
       setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
       catch(e){setMessage('Trade created, but trade list refresh failed: '+String(e));}
@@ -639,9 +639,13 @@ export function App(){
     setFillSaving(true);setFillFeedback('');
     try{
       const detail=await localApi.addTradeFill({trade_id:activeTrade.metrics.trade_id,action:fillAction,price:fillPrice,quantity:fillQty,order_type:'MARKET',note:fillReason||null});
-      setActiveTrade(detail);setFillPrice(null);setFillQty(1);setFillReason('');const success=fillAction==='EXIT'?'Exit fill recorded.':'Additional entry fill recorded.';setMessage(success);setFillFeedback(success);
-      if(active)setSessionTrades(await localApi.listSessionTrades(active.session_id));
-    }catch(e){setMessage(String(e));setFillFeedback(`Fill not saved: ${String(e)}`);}finally{setFillSaving(false);}
+      setActiveTrade(detail);setReviewQueue(null);setFillPrice(null);setFillQty(1);setFillReason('');
+      const success=fillAction==='EXIT'?'Exit fill recorded.':'Additional entry fill recorded.';
+      setMessage(success);setFillFeedback(success);
+      if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
+      catch(e){setMessage('Fill recorded, but trade list refresh failed: '+String(e));}
+    }catch(e){setMessage('Fill confirmation failed; check existing executions before retrying: '+String(e));setFillFeedback('Fill confirmation uncertain. Check execution timeline before retrying.');}
+    finally{setFillSaving(false);}
   }
   async function moveStop(){
     if(!activeTrade||newStop==null)return;
