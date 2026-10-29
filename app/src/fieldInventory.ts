@@ -188,7 +188,6 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'plan.preSessionStateIntensity',
   'plan.preSessionState',
   'candidate.label',
-  'candidate.trendRelationship',
   'candidate.sources',
   'candidate.requiredConditions',
   'candidate.invalidationConditions',
