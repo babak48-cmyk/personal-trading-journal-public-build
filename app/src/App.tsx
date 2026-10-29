@@ -183,6 +183,7 @@ export function App(){
   const [fillPrice,setFillPrice]=useState<number|null>(null);
   const [fillQty,setFillQty]=useState<number>(1);
   const [fillReason,setFillReason]=useState('');
+  const fillSavingRef=useRef(false);
   const [fillSaving,setFillSaving]=useState(false);
   const [fillFeedback,setFillFeedback]=useState('');
   const [newStop,setNewStop]=useState<number|null>(null);
@@ -635,8 +636,8 @@ export function App(){
     finally{tradeOpeningRef.current=false;setTradeOpening(false);}
   }
   async function addFill(){
-    if(fillSaving||!activeTrade||fillPrice==null||fillQty<=0)return;
-    setFillSaving(true);setFillFeedback('');
+    if(fillSavingRef.current||!activeTrade||fillPrice==null||fillQty<=0)return;
+    fillSavingRef.current=true;setFillSaving(true);setFillFeedback('');
     try{
       const detail=await localApi.addTradeFill({trade_id:activeTrade.metrics.trade_id,action:fillAction,price:fillPrice,quantity:fillQty,order_type:'MARKET',note:fillReason||null});
       setActiveTrade(detail);setReviewQueue(null);setFillPrice(null);setFillQty(1);setFillReason('');
@@ -645,7 +646,7 @@ export function App(){
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
       catch(e){setMessage('Fill recorded, but trade list refresh failed: '+String(e));}
     }catch(e){setMessage('Fill confirmation failed; check existing executions before retrying: '+String(e));setFillFeedback('Fill confirmation uncertain. Check execution timeline before retrying.');}
-    finally{setFillSaving(false);}
+    finally{fillSavingRef.current=false;setFillSaving(false);}
   }
   async function moveStop(){
     if(!activeTrade||newStop==null)return;
