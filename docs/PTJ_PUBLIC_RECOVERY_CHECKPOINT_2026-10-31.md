@@ -40,3 +40,9 @@ Status: PARTIAL / NOT CI-TESTED / NOT WINDOWS-TESTED / NOT ACCEPTED.
 - Run #24 `41188881395`: Rust job SUCCESS, frontend 95/98 passed, 3 failed in `fieldInventory.test.ts`; npm test failure skipped frontend build and DEMO config step. This is a code/test contract mismatch, not a GitHub Billing denial.
 - Follow-up assertion-only correction commit `83e66473740df2abe3b6d05826b25de842baca9a`: preserves `candidate.sources` required-in-Quick semantics, unmapped session reflections not formally user-required, and `evidence.direction` VISIBILITY_ONLY audit status. Needs independent fresh CI run; no success claimed.
 - User must dispatch `ptj-manual-checks.yml` on the exact recovery branch again; do not build installer until frontend and Rust gates pass and DEMO path isolation is verified.
+
+## DEMO build gate (2026-10-31)
+- User screenshot of manual checks #25 `41189336644` shows frontend SUCCESS and Rust SUCCESS; direct GitHub API job read returned 404, so this is screenshot-confirmed, not independent log verification.
+- `tauri.demo.conf.json` uses `com.personaltradingjournal.desktop.demo` vs canonical `com.personaltradingjournal.desktop`; `paths.rs` resolves app-local-data directory then `data/journal.db`. Source-only check, not installed Windows proof.
+- Existing Public DEMO workflow preserved, but restricted installer artifact upload to `*DEMO*.exe` and added a fail-closed filename check plus SHA256 logging. Commit `40381d00b9b12635aff4e42da187aafb42f879cb`.
+- DEMO build is not yet run. Installer is UNTESTED; do not install against canonical live user data. Verify installed DEMO path isolation before acceptance.
