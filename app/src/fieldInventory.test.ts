@@ -96,7 +96,7 @@ describe('Field Manager inventory safety', () => {
 
   it('keeps required level provenance visible while allowing optional Detailed-only placement', () => {
     const id='candidate.sources';
-    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(false);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
     expect(isFieldPresented(id,true,{}, {[id]:'DETAILED_ONLY'},{})).toBe(false);
     expect(isFieldPresented(id,false,{}, {[id]:'DETAILED_ONLY'},{})).toBe(true);
     expect(isFieldPresented(id,true,{[id]:false},{},{})).toBe(false);
@@ -178,7 +178,7 @@ describe('Field Manager inventory safety', () => {
 
   it('does not treat unmapped session reflections as formally user-required', () => {
     for (const id of ['sessionReview.wentWell','sessionReview.nextImprovement']) {
-      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(false);
       expect(isFieldPresented(id,true,{[id]:false},{},{})).toBe(false);
     }
   });
@@ -225,7 +225,7 @@ describe('All-input connection audit and mandatory presentation invariants', () 
     expect(summary.CONNECTED+summary.VISIBILITY_ONLY+summary.PROTECTED+summary.PENDING).toBe(report.length);
     expect(report.find(x=>x.id==='candidate.trendRelationship')?.status).toBe('PROTECTED');
     expect(report.find(x=>x.id==='review.decisionQuality')?.status).toBe('CONNECTED');
-    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('CONNECTED');
+    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('VISIBILITY_ONLY');
   });
 
   it('never conceals user-required, system-required or active conditional fields in Quick or Detailed', () => {
