@@ -1740,3 +1740,44 @@ mod evidence_atomic_batch_tests {
         assert_eq!(count,0,"first insert must roll back with failed second observation");
     }
 }
+
+#[cfg(test)]
+mod review_pending_validation_tests {
+    use super::*;
+
+    fn review(finalize: bool) -> SaveTradeReviewInput {
+        SaveTradeReviewInput {
+            trade_id: "test-trade".into(),
+            decision_quality: None,
+            execution_quality: None,
+            management_quality: None,
+            exit_reason_code: None,
+            exit_reason_note: None,
+            emotion_affected: Some(true),
+            psychology_state: None,
+            psychology_intensity: None,
+            psychology_stage: None,
+            mistake_type_ids: vec![],
+            note: None,
+            finalize: Some(finalize),
+        }
+    }
+
+    #[test]
+    fn review_pending_allows_partial_psychology_details() {
+        assert!(validate_review_input(&review(false)).is_ok());
+    }
+
+    #[test]
+    fn completed_review_rejects_missing_psychology_details() {
+        assert!(validate_review_input(&review(true)).is_err());
+    }
+
+    #[test]
+    fn completed_review_accepts_required_psychology_details() {
+        let mut input = review(true);
+        input.psychology_state = Some("hesitation".into());
+        input.psychology_stage = Some("ENTRY".into());
+        assert!(validate_review_input(&input).is_ok());
+    }
+}
