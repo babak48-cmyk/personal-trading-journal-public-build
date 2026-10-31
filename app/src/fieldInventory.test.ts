@@ -7,6 +7,9 @@ import {
   activeVisibilityInventoryIssues,
   isFieldPresented,
   orderFieldIdsWithinSection,
+  fieldConnectionReport,
+  fieldConnectionSummary,
+  requiredPresentationIssues,
 } from './fieldInventory';
 
 describe('Field Manager inventory safety', () => {
@@ -210,5 +213,33 @@ describe('Field Manager inventory safety', () => {
 
   it('keeps protected instrument identity controls visible', () => {
     expect(resolveFieldVisibility('session.instrument', false, {})).toBe(true);
+  });
+});
+
+describe('All-input connection audit and mandatory presentation invariants', () => {
+  it('classifies every inventory control exactly once without claiming pending fields are wired', () => {
+    const report=fieldConnectionReport();
+    const summary=fieldConnectionSummary();
+    expect(report).toHaveLength(FIELD_CONTROL_INVENTORY.length);
+    expect(new Set(report.map(x=>x.id)).size).toBe(report.length);
+    expect(summary.CONNECTED+summary.PROTECTED+summary.PENDING).toBe(report.length);
+    expect(report.find(x=>x.id==='candidate.trendRelationship')?.status).toBe('PROTECTED');
+    expect(report.find(x=>x.id==='review.decisionQuality')?.status).toBe('CONNECTED');
+    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('CONNECTED');
+  });
+
+  it('never conceals user-required, system-required or active conditional fields in Quick or Detailed', () => {
+    const overrides={'plan.mainScenario':true,'candidate.sources':true};
+    const hidden=Object.fromEntries(FIELD_CONTROL_INVENTORY.map(x=>[x.id,false]));
+    const detailed=Object.fromEntries(FIELD_CONTROL_INVENTORY.map(x=>[x.id,'DETAILED_ONLY' as const]));
+    const conditional=new Set(['psychology.state','psychology.stage','decision.reason','candidate.price']);
+    expect(requiredPresentationIssues(overrides,hidden,detailed,conditional)).toEqual([]);
+  });
+
+  it('keeps optional field preferences effective without altering underlying data', () => {
+    expect(isFieldPresented('review.note',true,{'review.note':false},
+      {'review.note':'DETAILED_ONLY'},{})).toBe(false);
+    expect(isFieldPresented('review.note',false,{'review.note':true},
+      {'review.note':'DETAILED_ONLY'},{})).toBe(true);
   });
 });
