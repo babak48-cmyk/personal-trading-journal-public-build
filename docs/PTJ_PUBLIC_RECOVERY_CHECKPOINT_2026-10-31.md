@@ -46,3 +46,10 @@ Status: PARTIAL / NOT CI-TESTED / NOT WINDOWS-TESTED / NOT ACCEPTED.
 - `tauri.demo.conf.json` uses `com.personaltradingjournal.desktop.demo` vs canonical `com.personaltradingjournal.desktop`; `paths.rs` resolves app-local-data directory then `data/journal.db`. Source-only check, not installed Windows proof.
 - Existing Public DEMO workflow preserved, but restricted installer artifact upload to `*DEMO*.exe` and added a fail-closed filename check plus SHA256 logging. Commit `40381d00b9b12635aff4e42da187aafb42f879cb`.
 - DEMO build is not yet run. Installer is UNTESTED; do not install against canonical live user data. Verify installed DEMO path isolation before acceptance.
+
+## Verified GitHub Actions Windows DEMO build — 2026-10-31
+- GitHub Actions run `41190007062` (`PTJ isolated DEMO installer (manual only)`, #18) independently fetched: `completed/success` on branch `feature/phase1-field-manager-demo-2026-10-31`, exact build SHA `3f1d52e56c96556a3b4eff687bdcc750e7275261`.
+- Independently fetched job details: `npm ci`, `npm test`, `verify-demo-config.mjs`, isolated DEMO NSIS build, filename fail-closed check, and artifact upload all SUCCESS.
+- Independently fetched artifact: ID `13038208171`, name `PTJ-ISOLATED-DEMO-UNTESTED`, compressed size 3,341,338 bytes, not expired at inspection. The artifact name is deliberate: `WINDOWS BUILD PASS` but `INSTALLED WINDOWS DEMO UNTESTED`.
+- Installer actual filename, binary hash and installed profile separation were not independently verified here. Do not treat public CI as product acceptance. Before installing, safeguard actual production data and verify native DEMO isolation.
+- No merge to main; private read-only; prior public stable branch preserved.
