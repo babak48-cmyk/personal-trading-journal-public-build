@@ -28,9 +28,18 @@ jobs:
       - run: node scripts/verify-demo-config.mjs
       - name: Build DEMO only (never install into live data)
         run: npm run tauri build -- --config src-tauri/tauri.demo.conf.json --bundles nsis
+      - name: Verify isolated DEMO installer output
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*.exe' -ErrorAction SilentlyContinue)
+          if ($files.Count -lt 1) { throw 'No Windows installer was built.' }
+          foreach ($file in $files) {
+            if ($file.Name -notmatch 'DEMO') { throw "Non-DEMO installer detected: $($file.Name)" }
+            Get-FileHash -Path $file.FullName -Algorithm SHA256 | Format-List
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: PTJ-ISOLATED-DEMO-UNTESTED
-          path: app/src-tauri/target/release/bundle/nsis/*.exe
+          path: app/src-tauri/target/release/bundle/nsis/*DEMO*.exe
           if-no-files-found: error
           retention-days: 7
