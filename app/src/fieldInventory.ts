@@ -46,7 +46,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('plan.preSessionState','Pre-session state','premarket-plan','journal-field',true,'plan.preSessionState'),
   entry('plan.preSessionStateIntensity','Pre-session intensity','premarket-plan','journal-field',true),
   entry('candidate.status','Zone lifecycle status','zone','conditional-journal-field',false,undefined,'Timestamped candidate status events; protected lifecycle codes'),
-  entry('candidate.label','Zone name','zone','journal-field',true),
+  entry('candidate.label','Zone name','zone','journal-field',true,'candidate.label'),
   entry('candidate.intent','Directional intent','zone','journal-field',false,'candidate.intent','Candidate intent integrity'),
   entry('candidate.trendRelationship','Trend relationship','zone','journal-field',true,'candidate.trendRelationship'),
   entry('candidate.priceMode','Price mode','zone','conditional-journal-field',false,'candidate.priceMode','Controls price geometry requirements'),
@@ -86,13 +86,13 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('psychology.state','Emotional state','post-trade-review','conditional-journal-field',true,'psychology.state'),
   entry('psychology.stage','Affected stage','post-trade-review','conditional-journal-field',true,'psychology.stage'),
   entry('psychology.intensity','Emotion intensity','post-trade-review','journal-field',true),
-  entry('review.exitReason','Exit reason','post-trade-review','journal-field',true),
-  entry('review.exitNote','Exit reason detail','post-trade-review','journal-field',true),
+  entry('review.exitReason','Exit reason','post-trade-review','journal-field',true,'review.exitReason'),
+  entry('review.exitNote','Exit reason detail','post-trade-review','journal-field',true,'review.exitNote'),
   entry('review.mistakes','Recorded mistakes','post-trade-review','journal-field',true),
   entry('rule.violationReported','Rule violation reported','post-trade-review','conditional-journal-field',false,undefined,'Affects rule adherence classification'),
   entry('rule.violatedIds','Violated rules','post-trade-review','conditional-journal-field',false,undefined,'Mandatory when rule violation is reported'),
   entry('rule.note','Rule violation note','post-trade-review','journal-field',true),
-  entry('review.note','Review note','post-trade-review','journal-field',true),
+  entry('review.note','Review note','post-trade-review','journal-field',true,'review.note'),
   entry('sessionReview.overall','Overall session assessment','session-review','journal-field',true),
   entry('sessionReview.wentWell','What went well','session-review','journal-field',true),
   entry('sessionReview.wentPoorly','What went poorly','session-review','journal-field',true),
@@ -160,7 +160,7 @@ export function resolveFieldVisibility(
   if(!item.candidateForCustomization)return true;
   const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
   if(def?.systemLocked || def?.defaultRequirement==='SYSTEM_REQUIRED')return true;
-  if(requirementOverrides[id]===true || isUserRequired(item.formalFieldId??id,requirementOverrides))return true;
+  if(isUserRequired(item.formalFieldId??id,requirementOverrides))return true;
   if(conditionalRequired)return true;
   return requestedVisible;
 }
@@ -191,6 +191,7 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'candidate.sources',
   'candidate.requiredConditions',
   'candidate.invalidationConditions',
+  'evidence.direction',
   'evidence.price',
   'evidence.note',
   'decision.note',
@@ -259,7 +260,7 @@ export function isFieldInMode(
 ):boolean {
   if(!quickMode)return true;
   if(!isActiveVisibilityControl(id))return true;
-  if(requirementOverrides[id]===true||isUserRequired(id,requirementOverrides)||conditionalRequired)return true;
+  if(isUserRequired(id,requirementOverrides)||conditionalRequired)return true;
   const item=FIELD_CONTROL_INVENTORY.find(x=>x.id===id);
   const def=item?.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
   if(item?.protectedReason||def?.systemLocked||def?.defaultRequirement==='SYSTEM_REQUIRED')return true;
@@ -276,4 +277,62 @@ export function isFieldPresented(
 ):boolean {
   return isFieldShown(id,visibility,requirementOverrides,conditionalRequired)
     && isFieldInMode(id,quickMode,placements,requirementOverrides,conditionalRequired);
+}
+
+/**
+ * Auditable coverage report for the All-Inputs Field Manager.
+ * "Protected" is intentional; "pending" means inventoried but not yet wired.
+ * This report is descriptive only and never grants permission to hide a field.
+ */
+export type FieldConnectionStatus = 'CONNECTED' | 'VISIBILITY_ONLY' | 'PROTECTED' | 'PENDING';
+export type FieldConnectionReport = Readonly<{
+  id:string;
+  stage:InventoryStage;
+  status:FieldConnectionStatus;
+  reason:string;
+}>;
+export function fieldConnectionReport():FieldConnectionReport[] {
+  return FIELD_CONTROL_INVENTORY.map(item=>{
+    const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
+    if(!item.candidateForCustomization || item.protectedReason || def?.systemLocked){
+      return {id:item.id,stage:item.stage,status:'PROTECTED' as const,
+        reason:item.protectedReason??(def?.systemLocked?'Canonical system-locked field':'Not eligible for customization')};
+    }
+    if(isActiveVisibilityControl(item.id)){
+      if(!def)return {id:item.id,stage:item.stage,status:'VISIBILITY_ONLY' as const,
+        reason:'Visibility and placement connected; formal requirement definition missing'};
+      return {id:item.id,stage:item.stage,status:'CONNECTED' as const,
+        reason:'Visibility and Quick/Detailed placement connected'};
+    }
+    return {id:item.id,stage:item.stage,status:'PENDING' as const,
+      reason:'Inventoried; no active form binding verified'};
+  });
+}
+export function fieldConnectionSummary():Record<FieldConnectionStatus,number> {
+  const result:Record<FieldConnectionStatus,number>={CONNECTED:0,VISIBILITY_ONLY:0,PROTECTED:0,PENDING:0};
+  for(const item of fieldConnectionReport())result[item.status]++;
+  return result;
+}
+
+/**
+ * Required-field visibility invariant for both form modes.
+ * This deliberately checks only connected/eligible controls; the audit report
+ * identifies unconnected inputs rather than falsely claiming they are managed.
+ */
+export function requiredPresentationIssues(
+  requirementOverrides:RequirementOverrides,
+  visibility:Readonly<Record<string,boolean>>,
+  placements:Readonly<Record<string,FieldPlacement>>,
+  conditionalRequiredIds:ReadonlySet<string>=new Set(),
+):string[] {
+  return FIELD_CONTROL_INVENTORY.filter(item=>{
+    const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
+    const required=def?.defaultRequirement==='SYSTEM_REQUIRED'
+      || (item.formalFieldId?isUserRequired(item.formalFieldId,requirementOverrides):false)
+      || conditionalRequiredIds.has(item.id);
+    return required && (
+      !isFieldPresented(item.id,true,visibility,placements,requirementOverrides,conditionalRequiredIds.has(item.id))
+      || !isFieldPresented(item.id,false,visibility,placements,requirementOverrides,conditionalRequiredIds.has(item.id))
+    );
+  }).map(item=>item.id);
 }
