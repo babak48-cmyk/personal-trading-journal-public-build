@@ -8,7 +8,7 @@ const demo = JSON.parse(readFileSync(resolve(appRoot, 'src-tauri/tauri.demo.conf
 if (!standard.identifier || !demo.identifier || standard.identifier === demo.identifier) {
   throw new Error('DEMO must have a unique Tauri identifier; refusing shared profile.');
 }
-if (!demo.identifier.endsWith('.demo') || !demo.productName?.includes('DEMO')) {
+if (demo.identifier !== `${standard.identifier}.demo` || !demo.productName?.includes('DEMO')) {
   throw new Error('DEMO product identifier and label must be unambiguous.');
 }
 if (demo.version || demo.build || demo.bundle) {
@@ -17,4 +17,11 @@ if (demo.version || demo.build || demo.bundle) {
 if (demo.app?.windows?.[0]?.title?.includes('DEMO') !== true) {
   throw new Error('DEMO window title must clearly disclose separate profile.');
 }
-console.log('PASS: DEMO configuration source identity differs from normal app. Windows data-path isolation remains UNTESTED.');
+const pathSource = readFileSync(resolve(appRoot, 'src-tauri/src/paths.rs'), 'utf8');
+if (!pathSource.includes('app.path().app_local_data_dir()')) {
+  throw new Error('App data must resolve through the active Tauri application identifier.');
+}
+if (!pathSource.includes('self.data.join("journal.db")')) {
+  throw new Error('Database location must remain under the app-specific data directory.');
+}
+console.log('PASS: DEMO identity and app-specific data-path source checks. Actual Windows profile isolation remains UNTESTED.');
