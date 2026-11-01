@@ -53,3 +53,26 @@ Status: PARTIAL / NOT CI-TESTED / NOT WINDOWS-TESTED / NOT ACCEPTED.
 - Independently fetched artifact: ID `13038208171`, name `PTJ-ISOLATED-DEMO-UNTESTED`, compressed size 3,341,338 bytes, not expired at inspection. The artifact name is deliberate: `WINDOWS BUILD PASS` but `INSTALLED WINDOWS DEMO UNTESTED`.
 - Installer actual filename, binary hash and installed profile separation were not independently verified here. Do not treat public CI as product acceptance. Before installing, safeguard actual production data and verify native DEMO isolation.
 - No merge to main; private read-only; prior public stable branch preserved.
+
+
+## Installed Windows DEMO acceptance ledger — 2026-11-01 (user-reported, not independent DB verification)
+Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA `3f1d52e56c96556a3b4eff687bdcc750e7275261`, artifact `13038208171`; current branch HEAD and installed binary must not be equated. No private data modified and no merge or build authorized by this checkpoint.
+
+- D01–D04: PASS by user report for installation/profile separation/persistence safeguards; detailed original evidence remains in conversation/handoff and should not be expanded beyond its scope.
+- F01: UNKNOWN; do not mark PASS or repeat without checking previous evidence and a defined criterion.
+- F02: PASS — field labels/help observed.
+- F03: PASS — `plan.mainScenario` Optional→Required protection against hiding/Detailed-only, persistence, then restored Optional.
+- F04: PASS — protected/conditional field controls including decision reason and candidate price protections.
+- F05: PARTIAL / NOT ACCEPTED. F05-A (NO_TRADE/MISSED reason) visible required validation PASS. F05-B/C/D/E (SINGLE/RANGE blank required price) blocked invalid save but did not show appropriate inline error/focus, UX FAIL. F05-F/G valid Range save PASS, both bounds present; do NOT claim DB corruption. Separately, save-success confirmation insufficient. Open Public issues [#3](https://github.com/babak48-cmyk/personal-trading-journal-public-build/issues/3) `F05-RANGE-VALIDATION-UX-01` and [#4](https://github.com/babak48-cmyk/personal-trading-journal-public-build/issues/4) `F05-SAVE-FEEDBACK-UX-02`.
+- F06: PASS / CLOSED (user-reported Windows): `plan.alternativeScenario` Optional/Visible, draft session `2026-10-27 ES DEMO` short ID `1844ad`; `F06 test` was saved, observed after reload, Visible→Hidden→Visible and original text retained. No claim of independent SQLite inspection.
+- F07: PASS / CLOSED (user-reported Windows): same optional field moved `Quick + Detailed`→`Detailed only`; absent in Quick, appeared in Detailed with `F06 test` intact; restored `Quick + Detailed`.
+- F08: PASS / CLOSED (user-reported Windows): Zone condition order changed to `Abandon conditions` before `Entry conditions`; remained after reopening Settings; reflected in actual Zone form; original `Entry conditions`→`Abandon conditions` order restored.
+- Additional Windows UX defect: launching installed DEMO opens extra black console window, usually behind GUI; **closing console alone also closes main app**. Open Public [#5](https://github.com/babak48-cmyk/personal-trading-journal-public-build/issues/5) `WINDOWS-DEMO-CONSOLE-01`. Public `app/src-tauri/src/main.rs` lacks conditional `windows_subsystem = "windows"` attribute, likely but unverified root cause. Do not advise closing console separately while using DEMO.
+- User acceptance of full Field Manager, Quick Workflow and entire roadmap: NOT GRANTED. Partial scenario passes are not product-wide acceptance.
+
+### Testing boundary and subsequent planning
+- **F09 is not a verified final test**. Existing F01–F08 labels are conversation-level acceptance probes, NOT an approved exhaustive sequence or denominator. No complete remaining-test count verified; do not invent F09–Fn or continue indiscriminate manual testing.
+- Freeze ad hoc F-series expansion until reconcile untested functionality and accepted requirements against `MR-1.12`, Master Roadmap and Quick Workflow handoff, and then propose a *bounded, smallest useful* remaining acceptance set for user approval.
+- Fix existing reproducible issues #3, #4, #5 in an isolated Public code batch **only after user authorization**, then CI/build and focused installed Windows retest. Preserve private read-only, installed DEMO data and working beta.
+- Maintain statuses rigorously: PASS = narrow user-reported scenario; F05 PARTIAL; F01 UNKNOWN; broader Field Manager/custom fields/Quick Workflow remain PARTIAL/UNKNOWN until individually verified and accepted.
+- Only small text checkpoints/issue records in GitHub; no installers, large artifacts, databases, backups or screenshots. This addendum is evidence bookkeeping, **not code progress**, and must be independently read back.
