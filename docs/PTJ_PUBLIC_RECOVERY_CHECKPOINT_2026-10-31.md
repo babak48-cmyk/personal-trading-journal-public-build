@@ -76,3 +76,12 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Fix existing reproducible issues #3, #4, #5 in an isolated Public code batch **only after user authorization**, then CI/build and focused installed Windows retest. Preserve private read-only, installed DEMO data and working beta.
 - Maintain statuses rigorously: PASS = narrow user-reported scenario; F05 PARTIAL; F01 UNKNOWN; broader Field Manager/custom fields/Quick Workflow remain PARTIAL/UNKNOWN until individually verified and accepted.
 - Only small text checkpoints/issue records in GitHub; no installers, large artifacts, databases, backups or screenshots. This addendum is evidence bookkeeping, **not code progress**, and must be independently read back.
+
+
+## Public-only defect-fix branch progress — 2026-11-01
+- User authorized continuation of defect correction and approved future development subject to established roadmap and Public-only boundary. No private writes, original data changes, merges or installer execution authorized/performed.
+- Created isolated branch `fix/windows-demo-f05-feedback-console-2026-11-01` from checkpoint commit `b41712357c17bdfc2ad221eb4de77f7ca02054b9`.
+- Implemented small conditional Windows release-subsystem correction in `app/src-tauri/src/main.rs`: `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]`. Commit `cfb29c3be5662c9c61b2a47a722f07936ff9e2b3`; remote file blob independently read back and confirmed.
+- **State: IMPLEMENTED (source only), NOT CI-TESTED, NOT WINDOWS-TESTED, NOT ACCEPTED.** Issue #5 remains open until actual Windows installed DEMO launch and close behavior verified, including data isolation.
+- Inspected `app/src/App.tsx` in Public: `confirm()` validates missing SINGLE/RANGE prices and uses `blockMissing()`, while `saveAndAdvanceDraft()` is separate and reports a generic draft-saved message. Exact reason why inline errors were not visible in F05 Windows must be reproduced with version-specific test before safe code change. Issues #3 and #4 remain OPEN/NOT FIXED; no false claims of correction.
+- Next: scoped source-level correction for #3/#4 with targeted tests, CI on exact fix commit, then new isolated DEMO installer and minimal Windows retest only after CI. Future feature work must be drawn from approved roadmap with explicit requirement status; do not extend ad-hoc F-series. No PR/merge yet.
