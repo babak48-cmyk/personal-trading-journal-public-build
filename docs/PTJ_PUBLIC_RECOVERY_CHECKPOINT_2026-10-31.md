@@ -189,3 +189,10 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - User confirmed that after changing `Decision quality` back to Optional in Field Manager and saving, both `Decision quality` and `Decision note` were hidden in Quick decision form as intended. **QD-4 USER-REPORTED WINDOWS PASS**.
 - QD-1 / QD-2 / QD-3 / QD-4 all PASS for the specifically tested Quick Decision UI regression; CI run `41434149361` frontend/rust PASS. These changes are **WINDOWS-TESTED for bounded scenarios**, not independent SQLite audit or overall Feature 5 ACCEPTED.
 - Do not regenerate installer or repeat this batch. Preserve roadmap remaining requirements, no merged PR, no Private writes. Continue approved requirements gap analysis before next isolated batch.
+
+
+## Feature 5 Decision type/reason integrity: isolated gap — 2026-11-02
+- Following QD-1..QD-4 Windows PASS, inspected current Public `App.tsx` and found a distinct small data-quality gap: Quick Decision type buttons changed `decisionType` but kept `decisionReason`. A selected NO_TRADE reason (e.g. MISSING_CONFIRMATION) could therefore persist after switching to MISSED and be saved as if a missed-opportunity reason; inverse also possible. This is a semantic issue, not a redo of QD tests.
+- Minimal source correction `ab26a90414ce9b2a6dc98cd89a5dc7cf0192b6f8`: on an **actual change** among TRADE / NO_TRADE / MISSED, clear only prior `decisionReason` and obsolete `decision.reason` validation; retain current reason if user re-clicks same type. Do not alter timestamps, persisted existing decisions, optional notes, quality, backend or execution.
+- Remote GitHub file read-back verified. Status **SOURCE IMPLEMENTED / CI NOT YET RUN / WINDOWS NOT YET TESTED / USER NOT YET ACCEPTED**. Avoid standalone installer; batch with the next coherent low-risk Decision integrity slice after pre-install CI. Exact broader Feature 5 requirements coverage still PARTIAL/UNKNOWN; no feature closure.
+- No merge or Private change. No repeat of F-series or QD-1..QD-4.
