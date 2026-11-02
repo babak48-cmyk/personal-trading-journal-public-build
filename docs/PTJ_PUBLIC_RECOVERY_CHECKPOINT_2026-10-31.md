@@ -146,3 +146,11 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Minimal source fix commit `7159cdc80ccdf95445c96e32a6735192d1f35aa4`: render `Decision quality` block in Quick when required, preserving optional field's Detailed-only default, original validation, timestamped decision persistence and backend semantics. Remote file read-back verified.
 - Status: **IMPLEMENTED SOURCE ONLY / NOT CI-TESTED / NOT WINDOWS-TESTED / NOT ACCEPTED**. No merge, Private write, installer build or production DB edit.
 - Next: execute precise Public branch CI; then targeted Windows acceptance of USER_REQUIRED `decision.quality` in Quick (visible, missing blocks save, filled allows exactly one decision, restore settings), plus avoid redundant previously verified F-series tests.
+
+
+## Installer / CI batching policy — 2026-11-02 (user approved)
+- User explicitly requests balance: avoid generating a Windows DEMO installer for every small task, avoid collecting too many unverified changes and losing acceptance traceability, and minimize GitHub storage.
+- Small coherent implementation slices commit to Public isolated branch with lightweight checkpoints; run automated frontend/Rust CI as appropriate **before** installer. One installer per bounded group of related changes needing native Windows observation, with a test matrix listing each change and its own PASS/FAIL/UNKNOWN. Do not merge or mark accepted solely from one installer.
+- Immediate batch candidate: required-in-Quick Decision quality UI plus any *verified, low-risk closely related* Decision capture fixes, not unrelated roadmap areas. The previous F05/console regressions have already passed user Windows testing and must not be needlessly repeated.
+- GitHub repository should retain source and small text checkpoints; avoid committing installer binaries, screenshots, full logs, local database copies, or artifacts. Inspect existing artifacts/retention before repeated builds; do not delete artifacts without user permission.
+- Tooling limitation for this session: available GitHub connector can read workflow run results, but no dispatch/start-workflow action was found. No new CI execution or installer was performed. Request one manual GitHub Actions dispatch only when batch is ready.
