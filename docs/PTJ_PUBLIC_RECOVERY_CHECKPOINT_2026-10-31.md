@@ -160,3 +160,9 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Source inspected to avoid duplicate feature work. Existing TRADE/NO_TRADE/MISSED saving, history and separate execution are retained.
 - Adjacent Quick UX regression detected after required quality was exposed: grouping the optional `decision.note` field with the required quality control could leak Detailed-only note into Quick for some preferences. Commit `1a47789100c925a9ea42d35c9f8db50b5d0225d0` separates the rendering gates: required `decision.quality` may appear in Quick; `decision.note` stays Detailed-only for this existing UI. Remote source readback verified.
 - Scope is exactly the two closely related Quick Decision UI adjustments. No other features or prior tests changed. **Source-only, CI UNKNOWN, Windows UNKNOWN, user acceptance pending**. Build one DEMO only after CI and batch review, never one installer per tweak.
+
+
+## Quick Decision batch CI gate — 2026-11-02
+- User screenshot of GitHub Actions `PTJ manual checks #28` run `41434149361` shows workflow success, branch `fix/windows-demo-f05-feedback-console-2026-11-01`, displayed short SHA `068e815`, and both `frontend` and `rust` green. Connector independently read back jobs: `frontend=success`, `rust=success`.
+- Latest checkpoint commit at time of dispatch: `068e8156fe8d10cbd287f88109071a26e6ae24d4`; screenshot shows matching short SHA; source UI batch changes `7159cdc80ccdf95445c96e32a6735192d1f35aa4` and `1a47789100c925a9ea42d35c9f8db50b5d0225d0` precede it.
+- **CI-TESTED PASS for that commit, WINDOWS-UNTESTED / NOT ACCEPTED for Quick Decision quality rendering.** One bounded Windows DEMO build is next, once, with no repository binary commit; preserve prior isolated DEMO and user data.
