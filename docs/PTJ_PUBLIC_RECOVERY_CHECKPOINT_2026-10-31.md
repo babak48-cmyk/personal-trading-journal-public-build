@@ -102,3 +102,10 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Source fixes for issues #3/#4/#5 have CI gate PASS on this SHA; all remain WINDOWS-UNTESTED / NOT ACCEPTED / OPEN.
 - The next branch commit is documentation-only and is **not** the CI-tested SHA; preserve exact provenance when building or dispatching installer.
 - Isolated DEMO installer workflow is `.github/workflows/ptj-isolated-demo-installer.yml`, manual-only. Before downloading/installing verify exact workflow source SHA, DEMO identity, artifact and data-path safeguards. Do not merge to Private or Public main.
+
+
+## Isolated DEMO installer build gate — 2026-11-02
+- GitHub Actions `PTJ isolated DEMO installer (manual only)`, run [41394601616](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/41394601616), user dispatched on Public-only fix branch `fix/windows-demo-f05-feedback-console-2026-11-01`, exact source commit `22b6aacdc7c7a12bd2c4786cb6956f2b02fbf854`; GitHub page shows overall SUCCESS.
+- GitHub workflow job independently fetched: `demo-installer` completed SUCCESS, job ID `125113111204`. Artifact independently fetched: ID `13118718069`, name `PTJ-ISOLATED-DEMO-UNTESTED`, ZIP size `3340278` bytes, not expired at inspection.
+- Scope: public-build only. Workflow source mandates `npm ci`, `npm test`, DEMO config verification, Tauri NSIS build with `src-tauri/tauri.demo.conf.json`, fail-closed `*DEMO*.exe` filename check, and artifact upload. CI success is not independently inspecting binary hash, exact inner installer filename, installation path, or installed database separation.
+- Installed Windows result still UNKNOWN; issues #3, #4, #5 remain OPEN / NOT WINDOWS-TESTED / NOT ACCEPTED. User should preserve prior installed DEMO state and confirm data safety before installing; verify after new installation that independent DEMO profile is preserved, no black console appears, and the two F05 UI feedback issues are fixed. Do NOT overwrite production data or merge to Private/main.
