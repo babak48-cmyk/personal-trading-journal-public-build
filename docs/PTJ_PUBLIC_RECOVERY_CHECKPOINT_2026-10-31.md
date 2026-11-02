@@ -183,3 +183,9 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - User confirmed selecting a valid `Decision quality` and pressing Save decision once in the installed isolated DEMO saved the NO TRADE decision and generated exactly one new decision-history record in the tested Zone.
 - **QD-3 USER-REPORTED WINDOWS PASS** for successful single-record save. Together QD-1 visibility and QD-2 required-field blocking PASS. This is bounded UI/history evidence; no independent SQLite verification.
 - Pending optional/Detailed-only presentation after reverting Required setting. No repeated tests or installer. Do not mark all Quick Decision or Feature 5 ACCEPTED without explicit scope-level approval; no merge or Private modification.
+
+
+## Quick Decision installed Windows QD-4 and bounded acceptance — 2026-11-02
+- User confirmed that after changing `Decision quality` back to Optional in Field Manager and saving, both `Decision quality` and `Decision note` were hidden in Quick decision form as intended. **QD-4 USER-REPORTED WINDOWS PASS**.
+- QD-1 / QD-2 / QD-3 / QD-4 all PASS for the specifically tested Quick Decision UI regression; CI run `41434149361` frontend/rust PASS. These changes are **WINDOWS-TESTED for bounded scenarios**, not independent SQLite audit or overall Feature 5 ACCEPTED.
+- Do not regenerate installer or repeat this batch. Preserve roadmap remaining requirements, no merged PR, no Private writes. Continue approved requirements gap analysis before next isolated batch.
