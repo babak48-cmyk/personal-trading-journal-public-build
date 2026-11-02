@@ -177,3 +177,9 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 ## Quick Decision installed DEMO acceptance QD-2 — 2026-11-02
 - User reports in Windows isolated DEMO: NO TRADE reason selected, USER_REQUIRED `Decision quality` empty, Save decision prevented persistence and displayed clear required-field error. **QD-2 USER-REPORTED WINDOWS PASS** for missing required quality validation.
 - QD-1 visible in Quick also PASS. Pending QD-3 valid save exactly once; optional/Detail behavior restore separately. No repeated F-series tests; no merge/Private modification.
+
+
+## Quick Decision installed DEMO acceptance QD-3 — 2026-11-02
+- User confirmed selecting a valid `Decision quality` and pressing Save decision once in the installed isolated DEMO saved the NO TRADE decision and generated exactly one new decision-history record in the tested Zone.
+- **QD-3 USER-REPORTED WINDOWS PASS** for successful single-record save. Together QD-1 visibility and QD-2 required-field blocking PASS. This is bounded UI/history evidence; no independent SQLite verification.
+- Pending optional/Detailed-only presentation after reverting Required setting. No repeated tests or installer. Do not mark all Quick Decision or Feature 5 ACCEPTED without explicit scope-level approval; no merge or Private modification.
