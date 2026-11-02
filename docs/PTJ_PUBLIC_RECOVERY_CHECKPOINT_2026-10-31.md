@@ -109,3 +109,13 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - GitHub workflow job independently fetched: `demo-installer` completed SUCCESS, job ID `125113111204`. Artifact independently fetched: ID `13118718069`, name `PTJ-ISOLATED-DEMO-UNTESTED`, ZIP size `3340278` bytes, not expired at inspection.
 - Scope: public-build only. Workflow source mandates `npm ci`, `npm test`, DEMO config verification, Tauri NSIS build with `src-tauri/tauri.demo.conf.json`, fail-closed `*DEMO*.exe` filename check, and artifact upload. CI success is not independently inspecting binary hash, exact inner installer filename, installation path, or installed database separation.
 - Installed Windows result still UNKNOWN; issues #3, #4, #5 remain OPEN / NOT WINDOWS-TESTED / NOT ACCEPTED. User should preserve prior installed DEMO state and confirm data safety before installing; verify after new installation that independent DEMO profile is preserved, no black console appears, and the two F05 UI feedback issues are fixed. Do NOT overwrite production data or merge to Private/main.
+
+
+## Installed Windows targeted regression completion — 2026-11-02
+- User installed new isolated DEMO from run `41394601616`, build SHA `22b6aacdc7c7a12bd2c4786cb6956f2b02fbf854` and confirmed no extraneous black console; Issue #5 targeted Windows PASS.
+- F05-R1: RANGE From missing — plan confirmation prevented; red border and explicit inline field message observed in screenshot. PASS.
+- F05-R2: RANGE To missing — user reports red inline message and blocked confirmation. PASS.
+- F05-R3: SINGLE Price missing — user reports red inline message and blocked confirmation. PASS.
+- F05-R4: valid draft Zone save — user reports visible `Draft saved successfully` message. PASS.
+- Evidence recorded on Public issues #3, #4, #5 and verified by remote readback. Results are USER-REPORTED WINDOWS PASS for these bounded scenarios; no independent DB verification, no full product/roadmap acceptance, no private integration or merge.
+- PR #6 remains DRAFT / UNMERGED. Next: review scope/status and outstanding requirement traceability before any new feature batch or merge, preserving original data. Avoid unnecessary repeated manual tests.
