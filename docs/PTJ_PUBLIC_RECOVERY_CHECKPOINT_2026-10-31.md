@@ -196,3 +196,11 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Minimal source correction `ab26a90414ce9b2a6dc98cd89a5dc7cf0192b6f8`: on an **actual change** among TRADE / NO_TRADE / MISSED, clear only prior `decisionReason` and obsolete `decision.reason` validation; retain current reason if user re-clicks same type. Do not alter timestamps, persisted existing decisions, optional notes, quality, backend or execution.
 - Remote GitHub file read-back verified. Status **SOURCE IMPLEMENTED / CI NOT YET RUN / WINDOWS NOT YET TESTED / USER NOT YET ACCEPTED**. Avoid standalone installer; batch with the next coherent low-risk Decision integrity slice after pre-install CI. Exact broader Feature 5 requirements coverage still PARTIAL/UNKNOWN; no feature closure.
 - No merge or Private change. No repeat of F-series or QD-1..QD-4.
+
+
+## Decision semantic-integrity bundle #2 — 2026-11-02
+- Public branch still `fix/windows-demo-f05-feedback-console-2026-11-01`; QD-1..QD-4 previously Windows-tested PASS are not repeated.
+- Change A: `ab26a90414ce9b2a6dc98cd89a5dc7cf0192b6f8` clears stale decision reason on actual TRADE/NO_TRADE/MISSED type change, preserving same-type selection.
+- Change B: `e40a616e11a82a597f5b3d3544900b0ef360bf3f` fixes `saveDecision()` payload to persist `plan_mismatch_reason` only when a TRADE actually opposes the candidate's planned LONG/SHORT intent, otherwise `null`. Previously state from an earlier opposite-direction trade could contaminate a same-direction TRADE or NO_TRADE/MISSED. Existing opposite-direction validation remains intact. No historical records rewritten.
+- Both corrections independently fetched after commit; **SOURCE IMPLEMENTED only; CI / native Windows tests / USER acceptance PENDING**. Proposed next grouped test matrix: (1) NO_TRADE selected reason → change to MISSED → old reason absent, new reason required; (2) opposite-direction TRADE mismatch reason required and saved; (3) reverting to aligned TRADE or non-TRADE must not persist mismatch reason. Test only what can be observed in UI and flag backend-only assertions UNKNOWN pending independent evidence.
+- No installer generated for either small fix; wait for coherent batch CI then one isolated DEMO. No merge or Private repository change.
