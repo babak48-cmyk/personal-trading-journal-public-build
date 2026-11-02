@@ -94,3 +94,11 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Earlier conditional Windows GUI-subsystem fix remains committed. Issue #3/#4/#5 status **IMPLEMENTED SOURCE CHANGE / CI-UNTESTED / WINDOWS-UNTESTED / NOT ACCEPTED**. Inline error behavior, accessibility/focus and save feedback must be regression-tested in installed Windows build.
 - Draft PR [#6](https://github.com/babak48-cmyk/personal-trading-journal-public-build/pull/6) opened from isolated fix branch targeting `feature/phase1-field-manager-demo-2026-10-31`. Draft, **DO NOT MERGE** without user approval.
 - CI not run: repository's manual workflow `ptj-manual-checks.yml` requires exact branch dispatch and separate gate verification; no runtime pass claimed. Next: run frontend/Rust CI, review any failures, produce new isolated installer only after green gates and safeguard evidence, then focused user Windows retest. Future roadmap scope remains unimplemented; do not assume beta defect resolution completes roadmap.
+
+
+## CI acceptance gate — 2026-11-02 (exact source checkout)
+- GitHub Actions `PTJ manual checks #27`, run [41386898654](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/41386898654), manually dispatched for Public branch `fix/windows-demo-f05-feedback-console-2026-11-01`, exact checkout SHA `e49d787963720ecf3bb7b5f7be96bbe6596740c1`.
+- GitHub browser read and independent GitHub workflow jobs fetch: `frontend` completed/success, `rust` completed/success, overall run SUCCESS. This verifies the workflow jobs, not a Windows installed-app test.
+- Source fixes for issues #3/#4/#5 have CI gate PASS on this SHA; all remain WINDOWS-UNTESTED / NOT ACCEPTED / OPEN.
+- The next branch commit is documentation-only and is **not** the CI-tested SHA; preserve exact provenance when building or dispatching installer.
+- Isolated DEMO installer workflow is `.github/workflows/ptj-isolated-demo-installer.yml`, manual-only. Before downloading/installing verify exact workflow source SHA, DEMO identity, artifact and data-path safeguards. Do not merge to Private or Public main.
