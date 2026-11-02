@@ -65,9 +65,11 @@ function FeatureRoadmapPanel({onClose}:{onClose:()=>void}){
  return <section className="panel" aria-label="Feature roadmap implementation status" style={{maxWidth:980,margin:'0 auto'}}>
    <div className="panelTitle"><div><h2>Feature Roadmap · Implementation Status</h2><p className="subtle">Feature-family overview; the approved Master Requirements and roadmap remain authoritative. No unfinished requirement is removed.</p></div><button type="button" onClick={onClose}>Back to journal</button></div>
    <p><strong>Priority 1: Quick Workflow & Page Redesign — UX NOT ACCEPTED.</strong> Short, sequential pages must work from the initial draft, not just after plan confirmation.</p>
+   <p className="subtle"><strong>Completion rule:</strong> A feature remains open until every approved requirement is traced, implemented, appropriately CI/Windows-tested, and explicitly accepted by the user. A small independent remaining item may be prioritized without removing dependencies or skipping tests. No automatic closure.</p>
+   <p className="subtle"><strong>Counting rule:</strong> The numbers below count only topics currently listed in this overview, NOT all approved requirements. Exact required/completed/outstanding counts and independent closure readiness are UNKNOWN until reconciled with the complete Master Requirements and verified source/evidence.</p>
    {roadmapGroups.map((item,i)=><details key={item.title} open={i===0} style={{borderBottom:'1px solid #9994',padding:'12px 0'}}>
      <summary style={{cursor:'pointer',fontWeight:650}}>{item.title} · {item.status}</summary>
-     <p>{item.purpose}</p><p className="subtle"><strong>Remaining:</strong></p><ul>{item.remaining.map(task=><li key={task}>{task}</li>)}</ul>
+     <p>{item.purpose}</p><p className="subtle"><strong>Listed open topics:</strong> {item.remaining.length} · <strong>Verified full requirement count:</strong> pending reconciliation · <strong>Independent closure readiness:</strong> not established.</p><ul>{item.remaining.map(task=><li key={task}>{task}</li>)}</ul>
    </details>)}
    <p className="subtle">Statuses are intentionally conservative: implemented, CI-tested, Windows-tested and user-accepted are separate gates. No action is triggered by this overview.</p>
  </section>;
