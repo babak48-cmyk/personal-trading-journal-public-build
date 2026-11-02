@@ -613,7 +613,7 @@ export function App(){
     if(opposite&&!mismatchReason.trim()){setMessage('A trade opposite to the planned direction needs a short reason.');return;}
     decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
     try{
-      const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:mismatchReason||null});
+      const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:opposite?(mismatchReason||null):null});
       // Once the backend acknowledges a decision, do not report a later history-refresh
       // failure as a failed save: retrying could create a duplicate decision.
       try {
