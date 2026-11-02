@@ -154,3 +154,9 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 - Immediate batch candidate: required-in-Quick Decision quality UI plus any *verified, low-risk closely related* Decision capture fixes, not unrelated roadmap areas. The previous F05/console regressions have already passed user Windows testing and must not be needlessly repeated.
 - GitHub repository should retain source and small text checkpoints; avoid committing installer binaries, screenshots, full logs, local database copies, or artifacts. Inspect existing artifacts/retention before repeated builds; do not delete artifacts without user permission.
 - Tooling limitation for this session: available GitHub connector can read workflow run results, but no dispatch/start-workflow action was found. No new CI execution or installer was performed. Request one manual GitHub Actions dispatch only when batch is ready.
+
+  
+## Quick Decision batch refinement — 2026-11-02
+- Source inspected to avoid duplicate feature work. Existing TRADE/NO_TRADE/MISSED saving, history and separate execution are retained.
+- Adjacent Quick UX regression detected after required quality was exposed: grouping the optional `decision.note` field with the required quality control could leak Detailed-only note into Quick for some preferences. Commit `1a47789100c925a9ea42d35c9f8db50b5d0225d0` separates the rendering gates: required `decision.quality` may appear in Quick; `decision.note` stays Detailed-only for this existing UI. Remote source readback verified.
+- Scope is exactly the two closely related Quick Decision UI adjustments. No other features or prior tests changed. **Source-only, CI UNKNOWN, Windows UNKNOWN, user acceptance pending**. Build one DEMO only after CI and batch review, never one installer per tweak.
