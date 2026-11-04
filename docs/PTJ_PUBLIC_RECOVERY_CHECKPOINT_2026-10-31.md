@@ -234,3 +234,8 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 ## DI-1 installed Windows result — 2026-11-04
 - User confirmed in newly installed isolated DEMO: selected NO TRADE reason `MISSING_CONFIRMATION`, switched to MISSED without saving, and prior reason was cleared with no new reason auto-selected. **DI-1 USER-REPORTED WINDOWS PASS** for UI reset only.
 - Outstanding distinct checks: mismatch-reason required when actual opposite-direction TRADE; state reset after direction/type changes; persisted mismatch payload when applicable; USER_REQUIRED decision.note in Quick. No repeats of QD-1..QD-4 or DI-1. No merge/Private changes.
+
+
+## DI-2 installed Windows result — 2026-11-05
+- User reports in isolated DEMO that after selecting a mismatch reason for an opposite-direction TRADE, switching direction back to planned then opposite again resets mismatch reason to `Select`. **DI-2 USER-REPORTED WINDOWS PASS** for visible stale mismatch-state reset.
+- Do not infer payload persistence from this UI observation. Next DI-3: attempt opposite-direction TRADE decision without mismatch reason; must block save with clear message. User acceptance of other bundle behaviors pending; no merge or Private changes.
