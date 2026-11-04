@@ -229,3 +229,8 @@ Scope: installed isolated DEMO from Actions run `41190007062`, build-source SHA 
 ## Feature 5 batch-2 Windows DEMO build — 2026-11-04
 - User manually dispatched isolated installer workflow run `41822017055`, source branch fix/windows-demo-f05-feedback-console-2026-11-01, SHA prefix `6b55c79` (checkpoint HEAD `6b55c79224e4009ce0e9a7328f9e707b4e13e39c`). Independently fetched job and artifacts through GitHub connector: `demo-installer` **completed/success**. One artifact `PTJ-ISOLATED-DEMO-UNTESTED`, ID `13317732706`, ZIP size `3,344,568 bytes`, unexpired.
 - Four previously enumerated integrity changes are included upstream of source SHA; workflow success is **BUILD PASS, not WINDOWS TEST PASS**. No independent assertion about installed EXE or live data safety. Pending user installation and limited targeted tests. Do not re-run installer workflow unless identified defect or missing artifact; no merge/Private change.
+
+
+## DI-1 installed Windows result — 2026-11-04
+- User confirmed in newly installed isolated DEMO: selected NO TRADE reason `MISSING_CONFIRMATION`, switched to MISSED without saving, and prior reason was cleared with no new reason auto-selected. **DI-1 USER-REPORTED WINDOWS PASS** for UI reset only.
+- Outstanding distinct checks: mismatch-reason required when actual opposite-direction TRADE; state reset after direction/type changes; persisted mismatch payload when applicable; USER_REQUIRED decision.note in Quick. No repeats of QD-1..QD-4 or DI-1. No merge/Private changes.
