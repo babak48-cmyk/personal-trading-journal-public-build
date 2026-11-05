@@ -1,6 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { eligibleCustomFields, customFieldFocusId } from './customFieldStage';
+import { missingRequiredCustomValues } from './customFieldRequired';
 import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -498,6 +499,15 @@ export function App(){
 
   async function confirm(){
     if(!active||active.status!=='DRAFT'){setMessage('Initial plan can only be confirmed for a draft session.');return;}
+    // Drafts remain freely editable. Only confirmed plans require persisted custom Session values.
+    try{
+      const customMissing=await missingRequiredCustomValues(localApi,'session',active.session_id);
+      if(customMissing.length){
+        setMessage('Save required Session custom fields before confirming: '+customMissing.map(x=>x.label).join(', ')+'.');
+        window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'session',active.session_id),120);
+        return;
+      }
+    }catch(e){setMessage('Plan not confirmed: could not verify required Session custom fields. '+String(e));return;}
     const configuredLabel=(id:string,fallback:string)=>fieldText[id]?.label?.trim()||fallback;
     const missing=missingRequired([
       ['plan.mainScenario',!!mainScenario.trim()],
@@ -616,6 +626,17 @@ export function App(){
     const opposite=isTrade && ['LONG','SHORT'].includes(decisionCandidate.directional_intent) && decisionDirection!==decisionCandidate.directional_intent;
     if(opposite&&!mismatchReason.trim())decisionMissing.push({id:'decision.mismatchReason',label:'Reason for trading opposite to the Zone plan'});
     if(blockMissing(decisionMissing))return;
+    // A Zone may be revisited repeatedly. Check its persisted required custom answers before EACH decision.
+    try{
+      const customMissing=await missingRequiredCustomValues(localApi,'zone',decisionCandidate.candidate_id);
+      if(customMissing.length){
+        setMessage('Save required Zone custom fields before recording a decision: '+customMissing.map(x=>x.label).join(', ')+'.');
+        setNotebookPage('PLAN');
+        setQuickZoneId(decisionCandidate.candidate_id);
+        window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'zone',decisionCandidate.candidate_id),120);
+        return;
+      }
+    }catch(e){setMessage('Decision not saved: could not verify required Zone custom fields. '+String(e));return;}
     decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
     try{
       const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:opposite?(mismatchReason||null):null});
