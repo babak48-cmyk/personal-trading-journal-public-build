@@ -954,11 +954,20 @@ pub fn create_candidate_decision(conn: &Connection, input: CreateCandidateDecisi
         return Err(AppError::Validation("an unplanned trade decision requires a reason".into()));
     }
 
+    // Do not persist stale opposite-plan explanations on aligned or non-trade decisions.
+    // Unplanned TRADE decisions retain their separately required explanation.
+    let stored_mismatch_reason = if input.decision_type == "TRADE"
+        && (alignment == "MISMATCH" || input.candidate_id.is_none()) {
+        input.plan_mismatch_reason.clone()
+    } else {
+        None
+    };
+
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO candidate_decisions(decision_id,candidate_id,session_id,occurred_at,decision_type,reason_code,reason_note,decision_quality,decision_quality_note,based_on_plan_revision_id,based_on_candidate_revision_id,provenance,intended_direction,plan_alignment,plan_mismatch_reason) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,'NATIVE',?12,?13,?14)",
-        params![id,input.candidate_id,input.session_id,now,input.decision_type,input.reason_code,input.reason_note,input.decision_quality,input.decision_quality_note,latest_plan,candidate_revision_id,input.intended_direction,alignment,input.plan_mismatch_reason]
+        params![id,input.candidate_id,input.session_id,now,input.decision_type,input.reason_code,input.reason_note,input.decision_quality,input.decision_quality_note,latest_plan,candidate_revision_id,input.intended_direction,alignment,stored_mismatch_reason]
     )?;
 
     Ok(CandidateDecisionDto {
@@ -971,7 +980,7 @@ pub fn create_candidate_decision(conn: &Connection, input: CreateCandidateDecisi
         reason_note: input.reason_note,
         decision_quality: input.decision_quality,
         plan_alignment: Some(alignment),
-        plan_mismatch_reason: input.plan_mismatch_reason,
+        plan_mismatch_reason: stored_mismatch_reason,
         based_on_plan_revision_id: latest_plan,
         based_on_candidate_revision_id: candidate_revision_id,
     })
@@ -1779,5 +1788,80 @@ mod review_pending_validation_tests {
         input.psychology_state = Some("hesitation".into());
         input.psychology_stage = Some("ENTRY".into());
         assert!(validate_review_input(&input).is_ok());
+    }
+}
+
+
+#[cfg(test)]
+mod decision_mismatch_persistence_tests {
+    use super::*;
+
+    fn memory_db() -> Connection {
+        let db=Connection::open_in_memory().expect("isolated SQLite test database");
+        db.execute_batch("
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY, status TEXT NOT NULL);
+            CREATE TABLE candidates(candidate_id TEXT PRIMARY KEY, session_id TEXT NOT NULL);
+            CREATE TABLE session_plan_revisions(session_id TEXT,revision_id TEXT,revision_number INTEGER);
+            CREATE TABLE candidate_revisions(candidate_id TEXT,candidate_revision_id TEXT,revision_number INTEGER,directional_intent TEXT,trend_relationship TEXT);
+            CREATE TABLE candidate_decisions(
+                decision_id TEXT PRIMARY KEY,candidate_id TEXT,session_id TEXT,occurred_at TEXT,
+                decision_type TEXT,reason_code TEXT,reason_note TEXT,decision_quality TEXT,
+                decision_quality_note TEXT,based_on_plan_revision_id TEXT,based_on_candidate_revision_id TEXT,
+                provenance TEXT,intended_direction TEXT,plan_alignment TEXT,plan_mismatch_reason TEXT
+            );
+            INSERT INTO sessions VALUES('s1','ACTIVE');
+            INSERT INTO candidates VALUES('zone1','s1');
+            INSERT INTO candidate_revisions VALUES('zone1','rev1',1,'LONG','WITH_TREND');
+        ").expect("minimal test-only schema");
+        db
+    }
+
+    fn input(kind:&str,direction:Option<&str>,reason:Option<&str>) -> CreateCandidateDecisionInput {
+        CreateCandidateDecisionInput{
+            session_id:"s1".into(),candidate_id:Some("zone1".into()),
+            decision_type:kind.into(),intended_direction:direction.map(str::to_string),
+            reason_code:if kind=="TRADE"{None}else{Some("MISSING_CONFIRMATION".into())},
+            reason_note:None,decision_quality:None,decision_quality_note:None,
+            plan_mismatch_reason:reason.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn opposite_trade_reason_round_trips_through_sqlite() {
+        let db=memory_db();
+        let saved=create_candidate_decision(&db,input("TRADE",Some("SHORT"),Some("NEW_EVIDENCE"))).unwrap();
+        assert_eq!(saved.plan_alignment.as_deref(),Some("MISMATCH"));
+        assert_eq!(saved.plan_mismatch_reason.as_deref(),Some("NEW_EVIDENCE"));
+        let history=list_candidate_decisions(&db,"zone1").unwrap();
+        assert_eq!(history.len(),1);
+        assert_eq!(history[0].plan_mismatch_reason.as_deref(),Some("NEW_EVIDENCE"));
+    }
+
+    #[test]
+    fn opposite_trade_without_reason_never_inserts_a_row() {
+        let db=memory_db();
+        assert!(create_candidate_decision(&db,input("TRADE",Some("SHORT"),None)).is_err());
+        assert!(list_candidate_decisions(&db,"zone1").unwrap().is_empty());
+    }
+
+    #[test]
+    fn aligned_trade_discards_stale_mismatch_reason_before_storage() {
+        let db=memory_db();
+        let saved=create_candidate_decision(&db,input("TRADE",Some("LONG"),Some("STALE_REASON"))).unwrap();
+        assert_eq!(saved.plan_alignment.as_deref(),Some("ALIGNED"));
+        assert_eq!(saved.plan_mismatch_reason,None);
+        assert_eq!(list_candidate_decisions(&db,"zone1").unwrap()[0].plan_mismatch_reason,None);
+    }
+
+    #[test]
+    fn no_trade_and_missed_discard_stale_mismatch_reason_before_storage() {
+        let db=memory_db();
+        for kind in ["NO_TRADE","MISSED"] {
+            let saved=create_candidate_decision(&db,input(kind,None,Some("STALE_REASON"))).unwrap();
+            assert_eq!(saved.plan_mismatch_reason,None);
+        }
+        let history=list_candidate_decisions(&db,"zone1").unwrap();
+        assert_eq!(history.len(),2);
+        assert!(history.iter().all(|row| row.plan_mismatch_reason.is_none()));
     }
 }
