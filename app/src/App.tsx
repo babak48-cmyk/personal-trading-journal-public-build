@@ -1,5 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
+import { eligibleCustomFields, customFieldFocusId } from './customFieldStage';
 import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -1019,8 +1020,8 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   </div></div>;
 }
 
-function focusRequiredCustomField(fieldId:string){
-  const target=document.getElementById('custom-required-'+fieldId);
+function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'zone',ownerId:string){
+  const target=document.getElementById(customFieldFocusId(ownerStage,ownerId,fieldId));
   target?.scrollIntoView({behavior:'smooth',block:'center'});
   target?.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
 }
@@ -1035,7 +1036,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ow
     let live=true;
     setFields([]);setOptions({});setSelected({});setOriginal({});setNotice('');
     localApi.listCustomFieldDefinitions().then(async defs=>{
-      const eligible=defs.filter(f=>f.active&&f.stage===ownerStage&&['SINGLE_SELECT','MULTI_SELECT'].includes(f.field_type));
+      const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
         const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
         return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[]};
@@ -1060,13 +1061,13 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ow
   const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
   return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
-    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id)}>{f.label}</button>)}</div>}
+    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {fields.map(field=>{
       const values=selected[field.field_id]||[];
       const available=options[field.field_id]||[];
       const same=values.length===(original[field.field_id]||[]).length&&values.every(v=>(original[field.field_id]||[]).includes(v));
       const valid=!same&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
-      return <div id={`custom-required-${field.field_id}`} key={field.field_id} className="requirementGroup">
+      return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className="requirementGroup">
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
         {field.field_type==='SINGLE_SELECT'
           ? <select aria-label={field.label} value={values[0]||''} onChange={e=>setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}))}>
@@ -1096,7 +1097,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;o
     let current=true;
     setFields([]);setValues({});setOriginal({});setMessage('');
     localApi.listCustomFieldDefinitions().then(async all=>{
-      const eligible=all.filter(f=>f.active&&f.stage===ownerStage&&['TEXT','NUMBER','DATE','BOOLEAN'].includes(f.field_type));
+      const eligible=eligibleCustomFields(all,ownerStage,'typed');
       const entries=await Promise.all(eligible.map(async f=>{
         const value=await localApi.currentCustomFieldTypedValue(ownerStage,ownerId,f.field_id);
         const display=value?.value_type==='BOOLEAN' ? (value.boolean_value===true?'true':value.boolean_value===false?'false':'') :
@@ -1131,8 +1132,8 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;o
   const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
   return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
-    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id)}>{f.label}</button>)}</div>}
-    {fields.map(f=><div id={`custom-required-${f.field_id}`} className="requirementGroup" key={f.field_id}>
+    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
+    {fields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className="requirementGroup" key={f.field_id}>
       <label>{f.label}{f.required?' · Required':''}
         {f.field_type==='BOOLEAN'
           ?<select value={values[f.field_id]??''} onChange={e=>setValues(v=>({...v,[f.field_id]:e.target.value}))}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
