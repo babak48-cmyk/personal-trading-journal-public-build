@@ -236,6 +236,16 @@ describe('All-input connection audit and mandatory presentation invariants', () 
     expect(requiredPresentationIssues(overrides,hidden,detailed,conditional)).toEqual([]);
   });
 
+  it('keeps Decision note mandatory in Quick only when explicitly user-required', () => {
+    const id='decision.note';
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.formalFieldId).toBe(id);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,false,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{}, {[id]:'DETAILED_ONLY'},{})).toBe(false);
+    expect(isFieldPresented(id,false,{}, {[id]:'DETAILED_ONLY'},{})).toBe(true);
+    expect(requiredPresentationIssues({[id]:true},{[id]:false},{[id]:'DETAILED_ONLY'})).toEqual([]);
+  });
+
   it('keeps optional field preferences effective without altering underlying data', () => {
     expect(isFieldPresented('review.note',true,{'review.note':false},
       {'review.note':'DETAILED_ONLY'},{})).toBe(false);
