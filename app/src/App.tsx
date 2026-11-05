@@ -797,8 +797,8 @@ export function App(){
             :settingsSection==='SOURCES'
               ?<LevelSourceManager onClose={()=>setShowSettings(false)} onSwitch={()=>setSettingsSection('INSTRUMENTS')} onRequirements={()=>setSettingsSection('REQUIREMENTS')} onAppearance={()=>setSettingsSection('APPEARANCE')} onChanged={async()=>setSources(await localApi.listLevelSources())}/>
               :<FieldRequirementManager onClose={()=>setShowSettings(false)} onInstruments={()=>setSettingsSection('INSTRUMENTS')} onSources={()=>setSettingsSection('SOURCES')} onAppearance={()=>setSettingsSection('APPEARANCE')} overrides={requirementOverrides} visibility={fieldVisibility} placements={fieldPlacements} order={fieldOrder} fieldText={fieldText} onFieldTextChanged={async()=>setFieldText(await localApi.getFieldTextPreferences())} onOrderChanged={async()=>setFieldOrder(await localApi.getFieldOrderPreferences())} onPlacementChanged={async()=>setFieldPlacements(await localApi.getFieldPlacementPreferences())} onVisibilityChanged={async()=>setFieldVisibility(await localApi.getFieldVisibilityPreferences())} onChanged={refreshRequirements}/>)} 
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<SessionCustomSelections sessionId={active.session_id} quickMode={quickMode}/>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<SessionTypedCustomFields sessionId={active.session_id} quickMode={quickMode}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections ownerId={active.session_id} ownerStage="session" quickMode={quickMode}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields ownerId={active.session_id} ownerStage="session" quickMode={quickMode}/>}
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&plan&&(!quickMode||notebookPage==='DECISION')&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
           <div className="panelTitle"><div><h2>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p></div></div>
           <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
@@ -871,7 +871,10 @@ export function App(){
 
             {showLiveCandidate&&<div className="inlineEditor"><h3>Add a new zone during the live session</h3><CandidateEditor candidate={liveCandidate} patch={p=>setLiveCandidate(c=>({...c,...p}))} groupedSources={groupedSources} selected={liveCandidate.sources.map(s=>s.source_type_id)} toggleSource={toggleLiveSource} tickStep={tickStep} requirementOverrides={requirementOverrides} fieldVisibility={fieldVisibility} fieldPlacements={fieldPlacements} fieldText={fieldText} fieldOrder={fieldOrder} quickMode={quickMode} validationPrefix="liveCandidate" validationErrors={validationErrors} clearValidation={clearValidation}/><div className="formGrid"><label>Why is this new zone being added?<textarea value={liveCandidateReason} onChange={e=>setLiveCandidateReason(e.target.value)} placeholder="Required — e.g. new structure / new liquidity information"/></label><label>New evidence summary<textarea value={liveCandidateEvidence} onChange={e=>setLiveCandidateEvidence(e.target.value)} placeholder="Optional"/></label></div><div className="rowActions"><button onClick={()=>setShowLiveCandidate(false)}>Cancel</button><button className="primary" disabled={!liveCandidateReason.trim()} onClick={addLiveZone}>Add through new plan revision</button></div></div>}
 
-            <div id="journal-zone-actions">{quickMode&&plan.candidates.length>1&&<div className="rowActions"><label htmlFor="notebook-zone">Zone on this page</label><select id="notebook-zone" value={quickZoneId||plan.candidates[0]?.candidate_id||""} onChange={e=>setQuickZoneId(e.target.value)}>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||"Unnamed zone"} · {c.directional_intent}</option>)}</select></div>}<div className="planCards">{plan.candidates.filter(c=>!quickMode||c.candidate_id===(quickZoneId||plan.candidates[0]?.candidate_id)).map(c=><article className={`zoneSummary intent-${c.directional_intent.toLowerCase()}`} key={c.candidate_id}><div className="zoneHead"><strong>{c.directional_intent} · {c.label||'Unnamed zone'}</strong><span className={`statusPill status-${c.current_status.toLowerCase()}`}>{c.current_status}</span></div><span>{c.price_mode==='RANGE'?`${c.price_from} – ${c.price_to}`:c.price_mode==='SINGLE'?c.reference_price:'Price not fixed'}</span><p>{c.sources.join(' · ')||'No source recorded'}</p>{c.required_conditions.length>0&&<small>Need: {c.required_conditions.join(' · ')}</small>}<div className="quickStatus"><button onClick={()=>setStatus(c,'WATCHING')}>Watching</button><button onClick={()=>setStatus(c,'REACHED')}>Reached</button><button onClick={()=>setStatus(c,'VALID')}>Valid</button><button onClick={()=>setStatus(c,'INVALIDATED')}>Invalid</button><button onClick={()=>setStatus(c,'CANCELLED')}>Cancel</button>{['INVALIDATED','CANCELLED','EXPIRED'].includes(c.current_status)&&<button onClick={()=>setStatus(c,'PLANNED')}>Reactivate</button>}</div><div className="zoneActions"><button onClick={()=>openDecision(c,'TRADE')} className="decisionTrade">Trade</button><button onClick={()=>openDecision(c,'NO_TRADE')}>No-trade</button><button onClick={()=>openDecision(c,'MISSED')}>Missed</button><button onClick={()=>openEvidence(c)}>+ Evidence</button>{!quickMode&&<button onClick={()=>beginCandidateEdit(c)}>Revise zone</button>}</div>{(candidateDecisions[c.candidate_id]?.length??0)>0&&<small className="decisionCount">{candidateDecisions[c.candidate_id].length} decision(s) recorded</small>}</article>)}</div></div>
+            <div id="journal-zone-actions">{quickMode&&plan.candidates.length>1&&<div className="rowActions"><label htmlFor="notebook-zone">Zone on this page</label><select id="notebook-zone" value={quickZoneId||plan.candidates[0]?.candidate_id||""} onChange={e=>setQuickZoneId(e.target.value)}>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||"Unnamed zone"} · {c.directional_intent}</option>)}</select></div>}<div className="planCards">{plan.candidates.filter(c=>!quickMode||c.candidate_id===(quickZoneId||plan.candidates[0]?.candidate_id)).map(c=><article className={`zoneSummary intent-${c.directional_intent.toLowerCase()}`} key={c.candidate_id}><div className="zoneHead"><strong>{c.directional_intent} · {c.label||'Unnamed zone'}</strong><span className={`statusPill status-${c.current_status.toLowerCase()}`}>{c.current_status}</span></div><span>{c.price_mode==='RANGE'?`${c.price_from} – ${c.price_to}`:c.price_mode==='SINGLE'?c.reference_price:'Price not fixed'}</span><p>{c.sources.join(' · ')||'No source recorded'}</p>{c.required_conditions.length>0&&<small>Need: {c.required_conditions.join(' · ')}</small>}
+              <OwnerCustomSelections key={'zone-options-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="zone" quickMode={quickMode}/>
+              <OwnerTypedCustomFields key={'zone-typed-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="zone" quickMode={quickMode}/>
+              <div className="quickStatus"><button onClick={()=>setStatus(c,'WATCHING')}>Watching</button><button onClick={()=>setStatus(c,'REACHED')}>Reached</button><button onClick={()=>setStatus(c,'VALID')}>Valid</button><button onClick={()=>setStatus(c,'INVALIDATED')}>Invalid</button><button onClick={()=>setStatus(c,'CANCELLED')}>Cancel</button>{['INVALIDATED','CANCELLED','EXPIRED'].includes(c.current_status)&&<button onClick={()=>setStatus(c,'PLANNED')}>Reactivate</button>}</div><div className="zoneActions"><button onClick={()=>openDecision(c,'TRADE')} className="decisionTrade">Trade</button><button onClick={()=>openDecision(c,'NO_TRADE')}>No-trade</button><button onClick={()=>openDecision(c,'MISSED')}>Missed</button><button onClick={()=>openEvidence(c)}>+ Evidence</button>{!quickMode&&<button onClick={()=>beginCandidateEdit(c)}>Revise zone</button>}</div>{(candidateDecisions[c.candidate_id]?.length??0)>0&&<small className="decisionCount">{candidateDecisions[c.candidate_id].length} decision(s) recorded</small>}</article>)}</div></div>
             <p className="locked">Confirmed records are never overwritten. Updates create new immutable revisions or timestamped events.</p>
           </div>
 
@@ -1021,7 +1024,7 @@ function focusRequiredCustomField(fieldId:string){
   target?.scrollIntoView({behavior:'smooth',block:'center'});
   target?.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
 }
-function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMode:boolean}){
+function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [options,setOptions]=useState<Record<string,import('./services/localApi').CustomFieldOption[]>>({});
   const [selected,setSelected]=useState<Record<string,string[]>>({});
@@ -1032,22 +1035,22 @@ function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMo
     let live=true;
     setFields([]);setOptions({});setSelected({});setOriginal({});setNotice('');
     localApi.listCustomFieldDefinitions().then(async defs=>{
-      const eligible=defs.filter(f=>f.active&&f.stage==='session'&&['SINGLE_SELECT','MULTI_SELECT'].includes(f.field_type));
+      const eligible=defs.filter(f=>f.active&&f.stage===ownerStage&&['SINGLE_SELECT','MULTI_SELECT'].includes(f.field_type));
       const pairs=await Promise.all(eligible.map(async f=>{
-        const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection('session',sessionId,f.field_id)]);
+        const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
         return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[]};
       }));
       if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));}
     }).catch(e=>{if(live)setNotice('Custom fields unavailable: '+String(e));});
     return ()=>{live=false;};
-  },[sessionId]);
+  },[ownerId,ownerStage]);
   async function save(fieldId:string){
     const values=selected[fieldId]||[];if(values.length===0||busy)return;
     if(values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setNotice('No change to save.');return;}
     setBusy(true);
     try {
-      await localApi.recordCustomFieldSelection({event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:'session',owner_id:sessionId,option_ids:values});
-      const current=await localApi.currentCustomFieldSelection('session',sessionId,fieldId);
+      await localApi.recordCustomFieldSelection({event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:ownerStage,owner_id:ownerId,option_ids:values});
+      const current=await localApi.currentCustomFieldSelection(ownerStage,ownerId,fieldId);
       setOriginal(v=>({...v,[fieldId]:values}));
       setNotice('Saved: '+(current?.options.map(o=>o.label_at_selection).join(', ')||''));
     }catch(e){setNotice('Not saved: '+String(e));}
@@ -1055,8 +1058,8 @@ function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMo
   }
   if(!fields.length&&!notice)return null;
   const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
-  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>Session custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
-    <p className="subtle">Save required choices before completing the Session stage. Unsaved changes do not count as completed.</p>
+  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+    <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id)}>{f.label}</button>)}</div>}
     {fields.map(field=>{
       const values=selected[field.field_id]||[];
@@ -1083,7 +1086,7 @@ function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMo
 }
 
 
-function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickMode:boolean}){
+function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [values,setValues]=useState<Record<string,string>>({});
   const [message,setMessage]=useState('');
@@ -1093,9 +1096,9 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
     let current=true;
     setFields([]);setValues({});setOriginal({});setMessage('');
     localApi.listCustomFieldDefinitions().then(async all=>{
-      const eligible=all.filter(f=>f.active&&f.stage==='session'&&['TEXT','NUMBER','DATE','BOOLEAN'].includes(f.field_type));
+      const eligible=all.filter(f=>f.active&&f.stage===ownerStage&&['TEXT','NUMBER','DATE','BOOLEAN'].includes(f.field_type));
       const entries=await Promise.all(eligible.map(async f=>{
-        const value=await localApi.currentCustomFieldTypedValue('session',sessionId,f.field_id);
+        const value=await localApi.currentCustomFieldTypedValue(ownerStage,ownerId,f.field_id);
         const display=value?.value_type==='BOOLEAN' ? (value.boolean_value===true?'true':value.boolean_value===false?'false':'') :
           value?.value_type==='NUMBER' ? (value.number_value==null?'':String(value.number_value)) :
           value?.value_type==='DATE' ? (value.date_value||'') : (value?.text_value||'');
@@ -1104,7 +1107,7 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
       if(current){setFields(eligible);setValues(Object.fromEntries(entries));setOriginal(Object.fromEntries(entries));}
     }).catch(e=>{if(current)setMessage('Typed fields unavailable: '+String(e));});
     return ()=>{current=false;};
-  },[sessionId]);
+  },[ownerId,ownerStage]);
   async function save(field:import('./services/localApi').CustomFieldDefinition){
     const raw=values[field.field_id]??'';
     if(raw===original[field.field_id]){setMessage('No change to save.');return;}
@@ -1113,7 +1116,7 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
     setBusy(true);
     try{
       await localApi.recordCustomFieldTypedValue({
-        event_id:crypto.randomUUID(),field_id:field.field_id,owner_stage:'session',owner_id:sessionId,
+        event_id:crypto.randomUUID(),field_id:field.field_id,owner_stage:ownerStage,owner_id:ownerId,
         text_value:field.field_type==='TEXT'?raw:null,
         number_value:field.field_type==='NUMBER'?number:null,
         date_value:field.field_type==='DATE'?raw:null,
@@ -1126,8 +1129,8 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
   }
   if(!fields.length&&!message)return null;
   const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
-  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>Session custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
-    <p className="subtle">Save required values before completing the Session stage. Unsaved changes do not count as completed.</p>
+  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+    <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id)}>{f.label}</button>)}</div>}
     {fields.map(f=><div id={`custom-required-${f.field_id}`} className="requirementGroup" key={f.field_id}>
       <label>{f.label}{f.required?' · Required':''}
