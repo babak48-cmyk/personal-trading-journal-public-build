@@ -1,6 +1,9 @@
 name: PTJ manual checks
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/package-a-evidence-decision-completion-2026-11-06
 permissions:
   contents: read
 jobs:
