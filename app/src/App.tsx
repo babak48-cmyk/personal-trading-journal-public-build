@@ -1053,9 +1053,21 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
 }
 
 function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'zone',ownerId:string){
-  const target=document.getElementById(customFieldFocusId(ownerStage,ownerId,fieldId));
-  target?.scrollIntoView({behavior:'smooth',block:'center'});
-  target?.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
+  // Switching Quick notebook pages and loading saved field definitions are asynchronous.
+  // Wait briefly for the correct owner-specific control instead of silently missing focus.
+  const targetId=customFieldFocusId(ownerStage,ownerId,fieldId);
+  function focusWhenReady(attempt:number){
+    const target=document.getElementById(targetId);
+    if(!target){
+      if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
+      return;
+    }
+    const disclosure=target.closest('details');
+    if(disclosure&&!disclosure.open)disclosure.open=true;
+    target.scrollIntoView({behavior:'smooth',block:'center'});
+    target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
+  }
+  focusWhenReady(0);
 }
 function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
