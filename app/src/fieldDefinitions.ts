@@ -1,5 +1,5 @@
 export type RequirementDefault = 'SYSTEM_REQUIRED'|'OPTIONAL'|'CONDITIONAL';
-export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Decision'|'Trade'|'Review'|'Psychology';
+export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology';
 
 export type FieldDefinition = {
   id:string;
@@ -49,6 +49,11 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
     helpShort:'What must happen at the location before the trade becomes acceptable.',helpExample:'Price rejects the level, absorption appears, then delta shifts in the intended direction.',helpLong:'Keep this as observable conditions. It is your pre-commitment filter against entering just because price reached a level.'},
   {id:'candidate.invalidationConditions',group:'Candidate',label:'Abandon if',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'What would invalidate the candidate thesis before or around entry.',helpExample:'Price accepts above the zone and holds there; the original rejection thesis is no longer valid.',helpLong:'Invalidation is not the same as a stop distance. It describes when the market thesis itself is no longer valid.'},
+
+  {id:'evidence.price',group:'Evidence',label:'Observed price',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Market price where the evidence was actually observed, if known.',helpExample:'ES 6025.25 for a contemporaneous absorption observation; do not invent a price.'},
+  {id:'evidence.note',group:'Evidence',label:'Evidence note',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Short description of what you actually observed at this moment.',helpExample:'Sellers repeatedly hit the bid but price held; observed evidence is not premarket provenance.'},
 
   {id:'decision.type',group:'Decision',label:'Decision',defaultRequirement:'OPTIONAL',systemLocked:true,requirementManaged:false,
     helpShort:'What you actually decided when the candidate became actionable.',helpExample:'NO_TRADE if the level was reached but required confirmation never appeared.',optionHelp:{TRADE:'You decided to enter and will record execution separately.',NO_TRADE:'You deliberately chose not to trade.',MISSED:'A valid opportunity may have existed, but you did not execute it.'}},
