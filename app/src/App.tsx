@@ -568,7 +568,7 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); 
+    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); 
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
