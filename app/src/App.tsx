@@ -626,6 +626,8 @@ export function App(){
     const opposite=isTrade && ['LONG','SHORT'].includes(decisionCandidate.directional_intent) && decisionDirection!==decisionCandidate.directional_intent;
     if(opposite&&!mismatchReason.trim())decisionMissing.push({id:'decision.mismatchReason',label:'Reason for trading opposite to the Zone plan'});
     if(blockMissing(decisionMissing))return;
+    // Lock before the awaited custom-field read to prevent duplicate decisions on rapid clicks.
+    decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
     // A Zone may be revisited repeatedly. Check its persisted required custom answers before EACH decision.
     try{
       const customMissing=await missingRequiredCustomValues(localApi,'zone',decisionCandidate.candidate_id);
@@ -634,10 +636,14 @@ export function App(){
         setNotebookPage('PLAN');
         setQuickZoneId(decisionCandidate.candidate_id);
         window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'zone',decisionCandidate.candidate_id),120);
+        decisionSavingRef.current=false;setDecisionSaving(false);
         return;
       }
-    }catch(e){setMessage('Decision not saved: could not verify required Zone custom fields. '+String(e));return;}
-    decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
+    }catch(e){
+      setMessage('Decision not saved: could not verify required Zone custom fields. '+String(e));
+      decisionSavingRef.current=false;setDecisionSaving(false);
+      return;
+    }
     try{
       const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:opposite?(mismatchReason||null):null});
       // Once the backend acknowledges a decision, do not report a later history-refresh
