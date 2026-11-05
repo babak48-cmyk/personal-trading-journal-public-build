@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - feature/package-a-evidence-decision-completion-2026-11-06
+    paths:
+      - 'app/**'
 permissions:
   contents: read
 jobs:
