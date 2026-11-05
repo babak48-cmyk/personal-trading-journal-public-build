@@ -598,8 +598,7 @@ export function App(){
       await localApi.addEvidenceObservationsAtomic(inputs);
       setEvidenceSaved(true);
       setSavedEvidenceIds([...selectedEvidenceIds]);
-      setEvidenceFeedback(inputs.length+' observations saved together. Choose Record another for fresh observations.');
-      setEvidenceNote('');setEvidencePrice(null);
+      setEvidenceFeedback(inputs.length+' observations saved together. The captured values remain visible, read-only, until you choose Record another.');
       try{
         const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
         setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
@@ -837,6 +836,12 @@ export function App(){
                 if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Change Zone?'))return;
                 setQuickZoneId(e.target.value);setDecisionCandidate(null);
               }}><option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}</select>
+              <button type="button" disabled={!quickZoneId||evidenceSaving||decisionSaving} onClick={()=>{
+                const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
+                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Discard unsaved decision details and record fresh observed evidence?'))return;
+                setDecisionCandidate(null);
+                void openEvidence(zone);
+              }}>Record evidence</button>
               {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId} onClick={()=>{
                 const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
                 if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&decisionCandidate.candidate_id!==zone.candidate_id&&!window.confirm('Discard unsaved decision details?'))return;
