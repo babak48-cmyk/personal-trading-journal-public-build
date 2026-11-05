@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { evidenceRequiredIssues } from './evidenceValidation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -574,10 +575,7 @@ export function App(){
   }
   async function saveEvidence(){
     if(!active||!evidenceCandidate||!selectedEvidenceIds.length||evidenceSavingRef.current||evidenceSaved)return;
-    const evidenceMissing:ValidationIssue[]=[];
-    if(isUserRequired('evidence.price',requirementOverrides)&&evidencePrice===null)evidenceMissing.push({id:'evidence.price',label:'Observed price'});
-    if(isUserRequired('evidence.note',requirementOverrides)&&!evidenceNote.trim())evidenceMissing.push({id:'evidence.note',label:'Evidence note'});
-    if(blockMissing(evidenceMissing))return;
+    if(blockMissing(evidenceRequiredIssues(requirementOverrides,evidencePrice,evidenceNote)))return;
     evidenceSavingRef.current=true;setEvidenceSaving(true);setEvidenceFeedback('');
     try {
       const inputs=selectedEvidenceIds.map(id=>({
