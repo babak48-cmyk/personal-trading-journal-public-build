@@ -67,7 +67,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('decision.type','Decision type','decision','journal-field',false,'decision.type','Decision/No-trade/Missed distinction'),
   entry('decision.reason','Decision reason','decision','conditional-journal-field',false,'decision.reason','Required for No-trade/Missed'),
   entry('decision.quality','Decision quality','decision','journal-field',true,'decision.quality'),
-  entry('decision.note','Decision note','decision','journal-field',true),
+  entry('decision.note','Decision note','decision','journal-field',true,'decision.note'),
   entry('decision.mismatchReason','Opposite-plan explanation','decision','conditional-journal-field',false,undefined,'Required only when relevant'),
   entry('trade.entryPrice','Executed entry','execution','journal-field',false,'trade.entryPrice','Execution fill integrity'),
   entry('trade.stopPrice','Initial protective stop','execution','journal-field',false,'trade.stopPrice','Initial risk baseline'),
