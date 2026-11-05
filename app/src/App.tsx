@@ -116,6 +116,8 @@ export function App(){
   const [draftZonePage,setDraftZonePage]=useState(0);
   const [draftPlanPage,setDraftPlanPage]=useState(0);
   const [draftBusy,setDraftBusy]=useState(false);
+  const confirmingPlanRef=useRef(false);
+  const [confirmingPlan,setConfirmingPlan]=useState(false);
   const [draftSaveFeedback,setDraftSaveFeedback]=useState('');
   const [draftDirty,setDraftDirty]=useState(false);
 
@@ -499,6 +501,9 @@ export function App(){
 
   async function confirm(){
     if(!active||active.status!=='DRAFT'){setMessage('Initial plan can only be confirmed for a draft session.');return;}
+    if(confirmingPlanRef.current)return;
+    confirmingPlanRef.current=true;setConfirmingPlan(true);
+    try {
     // Drafts remain freely editable. Only confirmed plans require persisted custom Session values.
     try{
       const [sessionMissing,planMissing]=await Promise.all([
@@ -549,6 +554,9 @@ export function App(){
       await localApi.confirmInitialPlan({session_id:active.session_id,initial_bias:bias,main_scenario:mainScenario||null,alternative_scenario:altScenario||null,expected_context:[],things_not_to_do:[],pre_session_state:preSessionState||null,pre_session_state_intensity:preSessionStateIntensity,candidates:candidates.map(cleanCandidate)});
       setMessage('Initial plan confirmed and locked into immutable history.'); await refreshPlan();
     }catch(e){setMessage(String(e));}
+    } finally {
+      confirmingPlanRef.current=false;setConfirmingPlan(false);
+    }
   }
 
   async function savePlanUpdate(){
@@ -892,7 +900,7 @@ export function App(){
             <p><strong>Pre-session state:</strong> {preSessionState||'Not set'}{preSessionStateIntensity!=null?` · Intensity ${preSessionStateIntensity}/5`:''}</p>
             <div className="rowActions"><button onClick={()=>saveAndAdvanceDraft(1)} disabled={draftBusy}>Edit Plan</button><button onClick={()=>saveAndAdvanceDraft(2)} disabled={draftBusy}>Edit Zones</button></div>
             {candidates.map((c,i)=><div key={i} className="panel"><div className="summaryStrip"><span><b>Zone {i+1}</b>{c.label||'Unnamed'}</span><span><b>Intent</b>{c.directional_intent}</span><span><b>Price</b>{c.price_mode==='RANGE'?`${c.price_from??'—'} – ${c.price_to??'—'}`:c.price_mode==='SINGLE'?String(c.reference_price??'—'):'Unspecified'}</span><span><b>Sources</b>{c.sources.length}</span></div>{c.trend_relationship&&c.trend_relationship!=='UNCLEAR'&&<p><strong>Trend context:</strong> {c.trend_relationship.replaceAll('_',' ')}</p>}{c.sources.length>0&&<p><strong>Level sources:</strong> {c.sources.map(source=>groupedSources.flatMap(([,items])=>items).find(item=>item.source_type_id===source.source_type_id)?.label??source.source_type_id).join(', ')}</p>}{cleanLines(c.required_conditions).length>0&&<p><strong>Planned entry conditions:</strong> {cleanLines(c.required_conditions).join('; ')}</p>}{cleanLines(c.invalidation_conditions).length>0&&<p><strong>Abandon idea when:</strong> {cleanLines(c.invalidation_conditions).join('; ')}</p>}</div>)}
-            <div className="rowActions"><button onClick={()=>saveAndAdvanceDraft(2)} disabled={draftBusy}>← Back</button><button className="primary" disabled={draftBusy} onClick={confirm}>Confirm initial plan</button></div>
+            <div className="rowActions"><button onClick={()=>saveAndAdvanceDraft(2)} disabled={draftBusy}>← Back</button><button className="primary" disabled={draftBusy||confirmingPlan} onClick={confirm}>{confirmingPlan?'Confirming…':'Confirm initial plan'}</button></div>
           </div>}
           </div>
         </>}
