@@ -501,10 +501,18 @@ export function App(){
     if(!active||active.status!=='DRAFT'){setMessage('Initial plan can only be confirmed for a draft session.');return;}
     // Drafts remain freely editable. Only confirmed plans require persisted custom Session values.
     try{
-      const customMissing=await missingRequiredCustomValues(localApi,'session',active.session_id);
-      if(customMissing.length){
-        setMessage('Save required Session custom fields before confirming: '+customMissing.map(x=>x.label).join(', ')+'.');
-        window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'session',active.session_id),120);
+      const [sessionMissing,planMissing]=await Promise.all([
+        missingRequiredCustomValues(localApi,'session',active.session_id),
+        missingRequiredCustomValues(localApi,'premarket-plan',active.session_id),
+      ]);
+      if(sessionMissing.length||planMissing.length){
+        const first=sessionMissing[0]??planMissing[0];
+        const stage=sessionMissing.length?'session':'premarket-plan';
+        setMessage('Save required custom fields before confirming: '+[
+          ...sessionMissing.map(x=>'Session: '+x.label),
+          ...planMissing.map(x=>'Pre-market plan: '+x.label),
+        ].join(', ')+'.');
+        window.setTimeout(()=>focusRequiredCustomField(first.fieldId,stage,active.session_id),120);
         return;
       }
     }catch(e){setMessage('Plan not confirmed: could not verify required Session custom fields. '+String(e));return;}
@@ -826,6 +834,9 @@ export function App(){
               :<FieldRequirementManager onClose={()=>setShowSettings(false)} onInstruments={()=>setSettingsSection('INSTRUMENTS')} onSources={()=>setSettingsSection('SOURCES')} onAppearance={()=>setSettingsSection('APPEARANCE')} overrides={requirementOverrides} visibility={fieldVisibility} placements={fieldPlacements} order={fieldOrder} fieldText={fieldText} onFieldTextChanged={async()=>setFieldText(await localApi.getFieldTextPreferences())} onOrderChanged={async()=>setFieldOrder(await localApi.getFieldOrderPreferences())} onPlacementChanged={async()=>setFieldPlacements(await localApi.getFieldPlacementPreferences())} onVisibilityChanged={async()=>setFieldVisibility(await localApi.getFieldVisibilityPreferences())} onChanged={refreshRequirements}/>)} 
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections ownerId={active.session_id} ownerStage="session" quickMode={quickMode}/>}
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields ownerId={active.session_id} ownerStage="session" quickMode={quickMode}/>}
+        {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode}/>}
+        {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode}/>}
+        
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&plan&&(!quickMode||notebookPage==='DECISION')&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
           <div className="panelTitle"><div><h2>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p></div></div>
           <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
@@ -1052,7 +1063,7 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   </div></div>;
 }
 
-function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'zone',ownerId:string){
+function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'premarket-plan'|'zone',ownerId:string){
   // Switching Quick notebook pages and loading saved field definitions are asynchronous.
   // Wait briefly for the correct owner-specific control instead of silently missing focus.
   const targetId=customFieldFocusId(ownerStage,ownerId,fieldId);
@@ -1069,7 +1080,7 @@ function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'zone',own
   }
   focusWhenReady(0);
 }
-function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
+function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'premarket-plan'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [options,setOptions]=useState<Record<string,import('./services/localApi').CustomFieldOption[]>>({});
   const [selected,setSelected]=useState<Record<string,string[]>>({});
@@ -1103,7 +1114,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ow
   }
   if(!fields.length&&!notice)return null;
   const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
-  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {fields.map(field=>{
@@ -1131,7 +1142,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ow
 }
 
 
-function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
+function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'premarket-plan'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [values,setValues]=useState<Record<string,string>>({});
   const [message,setMessage]=useState('');
@@ -1174,7 +1185,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;o
   }
   if(!fields.length&&!message)return null;
   const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
-  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {fields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className="requirementGroup" key={f.field_id}>
