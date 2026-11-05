@@ -1,6 +1,6 @@
 import type { CustomFieldDefinition } from './services/localApi';
 
-export type CustomFieldOwnerStage = 'session'|'zone';
+export type CustomFieldOwnerStage = 'session'|'premarket-plan'|'zone';
 export type CustomFieldInputKind = 'typed'|'select';
 
 const TYPED = new Set(['TEXT','NUMBER','DATE','BOOLEAN']);
