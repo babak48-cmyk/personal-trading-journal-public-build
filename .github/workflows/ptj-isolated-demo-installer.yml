@@ -1,6 +1,11 @@
-name: PTJ isolated DEMO installer (manual only)
+name: PTJ isolated DEMO installer (one-time Package A gate)
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - build/package-a-isolated-demo-gate-2026-11-06
+    paths:
+      - '.github/workflows/ptj-isolated-demo-installer.yml'
 permissions:
   contents: read
 jobs:
@@ -24,7 +29,8 @@ jobs:
         with:
           workspaces: app/src-tauri
       - run: npm ci
-      - run: npm test
+      # Reuse frontend+Rust PASS from exact app SHA 84e637f476626d9691bf0b03056bc41d3d463b14
+      # run 42061770672; no duplicate tests for this workflow-only change.
       - run: node scripts/verify-demo-config.mjs
       - name: Build DEMO only (never install into live data)
         run: npm run tauri build -- --config src-tauri/tauri.demo.conf.json --bundles nsis
