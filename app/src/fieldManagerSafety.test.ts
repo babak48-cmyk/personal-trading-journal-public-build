@@ -25,7 +25,9 @@ describe('Field Manager integration safety', () => {
 
   it('distinguishes visibility-only from formal field coverage', () => {
     const report = fieldConnectionReport();
-    expect(report.find(x => x.id === 'evidence.note')?.status).toBe('VISIBILITY_ONLY');
+    expect(report.find(x => x.id === 'evidence.note')?.status).toBe('CONNECTED');
+    expect(report.find(x => x.id === 'evidence.price')?.status).toBe('CONNECTED');
+    expect(report.find(x => x.id === 'evidence.direction')?.status).toBe('VISIBILITY_ONLY');
     expect(report.find(x => x.id === 'review.note')?.status).toBe('CONNECTED');
     expect(fieldConnectionSummary().VISIBILITY_ONLY).toBeGreaterThan(0);
   });
@@ -63,13 +65,26 @@ describe('All-input coverage regression boundaries', () => {
   });
 
   it('does not treat an unregistered preference key as a formal Required rule', () => {
-    const id = 'evidence.note';
+    const id = 'evidence.direction';
     const overrides = { [id]: true };
     const visibility = { [id]: false };
     const placements = { [id]: 'DETAILED_ONLY' as const };
     expect(FIELD_DEFINITION_BY_ID[id]).toBeUndefined();
     expect(isFieldPresented(id, true, visibility, placements, overrides)).toBe(false);
     expect(isFieldPresented(id, false, visibility, placements, overrides)).toBe(false);
+  });
+
+  it.each(['evidence.price','evidence.note'])('required %s is protected from Quick/Detailed hiding', id => {
+    const override = { [id]: true };
+    const visibility = { [id]: false };
+    const placements = { [id]: 'DETAILED_ONLY' as const };
+    expect(FIELD_DEFINITION_BY_ID[id]?.group).toBe('Evidence');
+    expect(isUserRequired(id, override)).toBe(true);
+    expect(fieldConnectionReport().find(item => item.id===id)?.status).toBe('CONNECTED');
+    expect(isFieldPresented(id,true,visibility,placements,override)).toBe(true);
+    expect(isFieldPresented(id,false,visibility,placements,override)).toBe(true);
+    expect(requiredPresentationIssues(override,visibility,placements)).toEqual([]);
+    expect(isFieldPresented(id,true,visibility,placements,{})).toBe(false);
   });
 
   it('never turns unknown controls into hidden controls', () => {

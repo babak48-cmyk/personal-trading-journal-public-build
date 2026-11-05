@@ -253,3 +253,18 @@ describe('All-input connection audit and mandatory presentation invariants', () 
       {'review.note':'DETAILED_ONLY'},{})).toBe(true);
   });
 });
+
+
+describe('Evidence field ordering in one persisted preference map', () => {
+  it('retains the default order and applies the saved two-field order', () => {
+    expect(orderFieldIdsWithinSection(['evidence.price','evidence.note'], {}))
+      .toEqual(['evidence.price','evidence.note']);
+    expect(orderFieldIdsWithinSection(['evidence.price','evidence.note'], {'evidence.price':1,'evidence.note':0}))
+      .toEqual(['evidence.note','evidence.price']);
+  });
+  it('never duplicates or discards observed inputs when order is changed', () => {
+    const keys=['evidence.price','evidence.note'];
+    const ordered=orderFieldIdsWithinSection(keys,{'evidence.note':0,'evidence.price':1});
+    expect(new Set(ordered)).toEqual(new Set(keys));
+  });
+});

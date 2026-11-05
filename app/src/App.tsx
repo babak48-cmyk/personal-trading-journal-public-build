@@ -1,4 +1,8 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { evidenceRequiredIssues } from './evidenceValidation';
+import { eligibleCustomFields, customFieldFocusId } from './customFieldStage';
+import { missingRequiredCustomValues } from './customFieldRequired';
+import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -495,6 +499,15 @@ export function App(){
 
   async function confirm(){
     if(!active||active.status!=='DRAFT'){setMessage('Initial plan can only be confirmed for a draft session.');return;}
+    // Drafts remain freely editable. Only confirmed plans require persisted custom Session values.
+    try{
+      const customMissing=await missingRequiredCustomValues(localApi,'session',active.session_id);
+      if(customMissing.length){
+        setMessage('Save required Session custom fields before confirming: '+customMissing.map(x=>x.label).join(', ')+'.');
+        window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'session',active.session_id),120);
+        return;
+      }
+    }catch(e){setMessage('Plan not confirmed: could not verify required Session custom fields. '+String(e));return;}
     const configuredLabel=(id:string,fallback:string)=>fieldText[id]?.label?.trim()||fallback;
     const missing=missingRequired([
       ['plan.mainScenario',!!mainScenario.trim()],
@@ -566,7 +579,7 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); 
+    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection('NEUTRAL'); 
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
@@ -574,6 +587,7 @@ export function App(){
   }
   async function saveEvidence(){
     if(!active||!evidenceCandidate||!selectedEvidenceIds.length||evidenceSavingRef.current||evidenceSaved)return;
+    if(blockMissing(evidenceRequiredIssues(requirementOverrides,evidencePrice,evidenceNote)))return;
     evidenceSavingRef.current=true;setEvidenceSaving(true);setEvidenceFeedback('');
     try {
       const inputs=selectedEvidenceIds.map(id=>({
@@ -584,8 +598,7 @@ export function App(){
       await localApi.addEvidenceObservationsAtomic(inputs);
       setEvidenceSaved(true);
       setSavedEvidenceIds([...selectedEvidenceIds]);
-      setEvidenceFeedback(inputs.length+' observations saved together. Choose Record another for fresh observations.');
-      setEvidenceNote('');setEvidencePrice(null);
+      setEvidenceFeedback(inputs.length+' observations saved together. The captured values remain visible, read-only, until you choose Record another.');
       try{
         const rows=await localApi.listCandidateEvidence(evidenceCandidate.candidate_id);
         setCandidateEvidence(v=>({...v,[evidenceCandidate.candidate_id]:rows}));
@@ -612,7 +625,24 @@ export function App(){
     const opposite=isTrade && ['LONG','SHORT'].includes(decisionCandidate.directional_intent) && decisionDirection!==decisionCandidate.directional_intent;
     if(opposite&&!mismatchReason.trim())decisionMissing.push({id:'decision.mismatchReason',label:'Reason for trading opposite to the Zone plan'});
     if(blockMissing(decisionMissing))return;
+    // Lock before the awaited custom-field read to prevent duplicate decisions on rapid clicks.
     decisionSavingRef.current=true;setDecisionSaving(true);setDecisionSaveFeedback('');setLastDecisionNotice('');
+    // A Zone may be revisited repeatedly. Check its persisted required custom answers before EACH decision.
+    try{
+      const customMissing=await missingRequiredCustomValues(localApi,'zone',decisionCandidate.candidate_id);
+      if(customMissing.length){
+        setMessage('Save required Zone custom fields before recording a decision: '+customMissing.map(x=>x.label).join(', ')+'.');
+        setNotebookPage('PLAN');
+        setQuickZoneId(decisionCandidate.candidate_id);
+        window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'zone',decisionCandidate.candidate_id),120);
+        decisionSavingRef.current=false;setDecisionSaving(false);
+        return;
+      }
+    }catch(e){
+      setMessage('Decision not saved: could not verify required Zone custom fields. '+String(e));
+      decisionSavingRef.current=false;setDecisionSaving(false);
+      return;
+    }
     try{
       const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:opposite?(mismatchReason||null):null});
       // Once the backend acknowledges a decision, do not report a later history-refresh
@@ -794,8 +824,8 @@ export function App(){
             :settingsSection==='SOURCES'
               ?<LevelSourceManager onClose={()=>setShowSettings(false)} onSwitch={()=>setSettingsSection('INSTRUMENTS')} onRequirements={()=>setSettingsSection('REQUIREMENTS')} onAppearance={()=>setSettingsSection('APPEARANCE')} onChanged={async()=>setSources(await localApi.listLevelSources())}/>
               :<FieldRequirementManager onClose={()=>setShowSettings(false)} onInstruments={()=>setSettingsSection('INSTRUMENTS')} onSources={()=>setSettingsSection('SOURCES')} onAppearance={()=>setSettingsSection('APPEARANCE')} overrides={requirementOverrides} visibility={fieldVisibility} placements={fieldPlacements} order={fieldOrder} fieldText={fieldText} onFieldTextChanged={async()=>setFieldText(await localApi.getFieldTextPreferences())} onOrderChanged={async()=>setFieldOrder(await localApi.getFieldOrderPreferences())} onPlacementChanged={async()=>setFieldPlacements(await localApi.getFieldPlacementPreferences())} onVisibilityChanged={async()=>setFieldVisibility(await localApi.getFieldVisibilityPreferences())} onChanged={refreshRequirements}/>)} 
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<SessionCustomSelections sessionId={active.session_id} quickMode={quickMode}/>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<SessionTypedCustomFields sessionId={active.session_id} quickMode={quickMode}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections ownerId={active.session_id} ownerStage="session" quickMode={quickMode}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields ownerId={active.session_id} ownerStage="session" quickMode={quickMode}/>}
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&plan&&(!quickMode||notebookPage==='DECISION')&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
           <div className="panelTitle"><div><h2>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p></div></div>
           <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
@@ -806,6 +836,12 @@ export function App(){
                 if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Change Zone?'))return;
                 setQuickZoneId(e.target.value);setDecisionCandidate(null);
               }}><option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}</select>
+              <button type="button" disabled={!quickZoneId||evidenceSaving||decisionSaving} onClick={()=>{
+                const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
+                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Discard unsaved decision details and record fresh observed evidence?'))return;
+                setDecisionCandidate(null);
+                void openEvidence(zone);
+              }}>Record evidence</button>
               {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId} onClick={()=>{
                 const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
                 if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&decisionCandidate.candidate_id!==zone.candidate_id&&!window.confirm('Discard unsaved decision details?'))return;
@@ -868,7 +904,10 @@ export function App(){
 
             {showLiveCandidate&&<div className="inlineEditor"><h3>Add a new zone during the live session</h3><CandidateEditor candidate={liveCandidate} patch={p=>setLiveCandidate(c=>({...c,...p}))} groupedSources={groupedSources} selected={liveCandidate.sources.map(s=>s.source_type_id)} toggleSource={toggleLiveSource} tickStep={tickStep} requirementOverrides={requirementOverrides} fieldVisibility={fieldVisibility} fieldPlacements={fieldPlacements} fieldText={fieldText} fieldOrder={fieldOrder} quickMode={quickMode} validationPrefix="liveCandidate" validationErrors={validationErrors} clearValidation={clearValidation}/><div className="formGrid"><label>Why is this new zone being added?<textarea value={liveCandidateReason} onChange={e=>setLiveCandidateReason(e.target.value)} placeholder="Required — e.g. new structure / new liquidity information"/></label><label>New evidence summary<textarea value={liveCandidateEvidence} onChange={e=>setLiveCandidateEvidence(e.target.value)} placeholder="Optional"/></label></div><div className="rowActions"><button onClick={()=>setShowLiveCandidate(false)}>Cancel</button><button className="primary" disabled={!liveCandidateReason.trim()} onClick={addLiveZone}>Add through new plan revision</button></div></div>}
 
-            <div id="journal-zone-actions">{quickMode&&plan.candidates.length>1&&<div className="rowActions"><label htmlFor="notebook-zone">Zone on this page</label><select id="notebook-zone" value={quickZoneId||plan.candidates[0]?.candidate_id||""} onChange={e=>setQuickZoneId(e.target.value)}>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||"Unnamed zone"} · {c.directional_intent}</option>)}</select></div>}<div className="planCards">{plan.candidates.filter(c=>!quickMode||c.candidate_id===(quickZoneId||plan.candidates[0]?.candidate_id)).map(c=><article className={`zoneSummary intent-${c.directional_intent.toLowerCase()}`} key={c.candidate_id}><div className="zoneHead"><strong>{c.directional_intent} · {c.label||'Unnamed zone'}</strong><span className={`statusPill status-${c.current_status.toLowerCase()}`}>{c.current_status}</span></div><span>{c.price_mode==='RANGE'?`${c.price_from} – ${c.price_to}`:c.price_mode==='SINGLE'?c.reference_price:'Price not fixed'}</span><p>{c.sources.join(' · ')||'No source recorded'}</p>{c.required_conditions.length>0&&<small>Need: {c.required_conditions.join(' · ')}</small>}<div className="quickStatus"><button onClick={()=>setStatus(c,'WATCHING')}>Watching</button><button onClick={()=>setStatus(c,'REACHED')}>Reached</button><button onClick={()=>setStatus(c,'VALID')}>Valid</button><button onClick={()=>setStatus(c,'INVALIDATED')}>Invalid</button><button onClick={()=>setStatus(c,'CANCELLED')}>Cancel</button>{['INVALIDATED','CANCELLED','EXPIRED'].includes(c.current_status)&&<button onClick={()=>setStatus(c,'PLANNED')}>Reactivate</button>}</div><div className="zoneActions"><button onClick={()=>openDecision(c,'TRADE')} className="decisionTrade">Trade</button><button onClick={()=>openDecision(c,'NO_TRADE')}>No-trade</button><button onClick={()=>openDecision(c,'MISSED')}>Missed</button><button onClick={()=>openEvidence(c)}>+ Evidence</button>{!quickMode&&<button onClick={()=>beginCandidateEdit(c)}>Revise zone</button>}</div>{(candidateDecisions[c.candidate_id]?.length??0)>0&&<small className="decisionCount">{candidateDecisions[c.candidate_id].length} decision(s) recorded</small>}</article>)}</div></div>
+            <div id="journal-zone-actions">{quickMode&&plan.candidates.length>1&&<div className="rowActions"><label htmlFor="notebook-zone">Zone on this page</label><select id="notebook-zone" value={quickZoneId||plan.candidates[0]?.candidate_id||""} onChange={e=>setQuickZoneId(e.target.value)}>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||"Unnamed zone"} · {c.directional_intent}</option>)}</select></div>}<div className="planCards">{plan.candidates.filter(c=>!quickMode||c.candidate_id===(quickZoneId||plan.candidates[0]?.candidate_id)).map(c=><article className={`zoneSummary intent-${c.directional_intent.toLowerCase()}`} key={c.candidate_id}><div className="zoneHead"><strong>{c.directional_intent} · {c.label||'Unnamed zone'}</strong><span className={`statusPill status-${c.current_status.toLowerCase()}`}>{c.current_status}</span></div><span>{c.price_mode==='RANGE'?`${c.price_from} – ${c.price_to}`:c.price_mode==='SINGLE'?c.reference_price:'Price not fixed'}</span><p>{c.sources.join(' · ')||'No source recorded'}</p>{c.required_conditions.length>0&&<small>Need: {c.required_conditions.join(' · ')}</small>}
+              <OwnerCustomSelections key={'zone-options-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="zone" quickMode={quickMode}/>
+              <OwnerTypedCustomFields key={'zone-typed-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="zone" quickMode={quickMode}/>
+              <div className="quickStatus"><button onClick={()=>setStatus(c,'WATCHING')}>Watching</button><button onClick={()=>setStatus(c,'REACHED')}>Reached</button><button onClick={()=>setStatus(c,'VALID')}>Valid</button><button onClick={()=>setStatus(c,'INVALIDATED')}>Invalid</button><button onClick={()=>setStatus(c,'CANCELLED')}>Cancel</button>{['INVALIDATED','CANCELLED','EXPIRED'].includes(c.current_status)&&<button onClick={()=>setStatus(c,'PLANNED')}>Reactivate</button>}</div><div className="zoneActions"><button onClick={()=>openDecision(c,'TRADE')} className="decisionTrade">Trade</button><button onClick={()=>openDecision(c,'NO_TRADE')}>No-trade</button><button onClick={()=>openDecision(c,'MISSED')}>Missed</button><button onClick={()=>openEvidence(c)}>+ Evidence</button>{!quickMode&&<button onClick={()=>beginCandidateEdit(c)}>Revise zone</button>}</div>{(candidateDecisions[c.candidate_id]?.length??0)>0&&<small className="decisionCount">{candidateDecisions[c.candidate_id].length} decision(s) recorded</small>}</article>)}</div></div>
             <p className="locked">Confirmed records are never overwritten. Updates create new immutable revisions or timestamped events.</p>
           </div>
 
@@ -891,7 +930,7 @@ export function App(){
           </div>
           <div style={{display:!quickMode||notebookPage==='EVIDENCE'?'block':'none'}}>
           {quickMode&&!evidenceCandidate&&<div className="panel"><h2>Evidence for this Zone</h2><p className="subtle">Only record observations that actually happened. Skip if none.</p>{plan.candidates.length>0&&<button type="button" onClick={()=>{const c=plan.candidates.find(x=>x.candidate_id===quickZoneId)??plan.candidates[0];void openEvidence(c);}}>Record evidence</button>}</div>}
-          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button onClick={()=>setEvidenceCandidate(null)}>Close</button></div><div className="evidencePicker"><p className="subtle">Select all observations actually seen. Mark each as supporting or contradicting only if you decide; unclassified is the default.</p>{groupedEvidence.map(([group,items])=><div className="sourceGroup" key={group}><strong>{group.replaceAll('_',' ')}</strong><div className="chips">{items.map(e=><button type="button" key={e.evidence_type_id} disabled={evidenceSaving||evidenceSaved||savedEvidenceIds.length>0} aria-pressed={selectedEvidenceIds.includes(e.evidence_type_id)} className={selectedEvidenceIds.includes(e.evidence_type_id)?'chip selected':'chip'} onClick={()=>setSelectedEvidenceIds(v=>v.includes(e.evidence_type_id)?v.filter(x=>x!==e.evidence_type_id):[...v,e.evidence_type_id])}>{e.label}</button>)}</div></div>)}</div>{selectedEvidenceIds.length>0&&<div className="panel"><strong>Selected ({selectedEvidenceIds.length})</strong>{selectedEvidenceIds.map(id=><div className="rowActions" key={id}><span>{evidenceTypes.find(t=>t.evidence_type_id===id)?.label??id}</span><select aria-label={'Classification for '+id} disabled={evidenceSaving||evidenceSaved||savedEvidenceIds.includes(id)} value={evidenceStances[id]??'GENERAL_OBSERVATION'} onChange={e=>setEvidenceStances(v=>({...v,[id]:e.target.value as 'GENERAL_OBSERVATION'|'SETUP_SUPPORT'|'CONTRADICTING_EVIDENCE'|'ENTRY_CONFIRMATION'|'INVALIDATION'}))}><option value="GENERAL_OBSERVATION">Unclassified</option><option value="SETUP_SUPPORT">Supporting</option><option value="CONTRADICTING_EVIDENCE">Contradicting</option>{!quickMode&&<><option value="ENTRY_CONFIRMATION">Entry confirmation</option><option value="INVALIDATION">Invalidation</option></>}</select></div>)}</div>}<div className="formGrid"><label>Direction<select value={evidenceDirection} onChange={e=>setEvidenceDirection(e.target.value as any)}><option>NEUTRAL</option><option>BUY</option><option>SELL</option></select></label>{isFieldPresented('evidence.price',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>Price (optional)<input type="number" step={tickStep} value={evidencePrice??''} onChange={e=>setEvidencePrice(e.target.value?Number(e.target.value):null)}/></label>}{isFieldPresented('evidence.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label>{fieldText['evidence.note']?.label?.trim()||'Note'}{fieldText['evidence.note']?.help&&<small title={fieldText['evidence.note'].help}>ⓘ</small>}<textarea value={evidenceNote} onChange={e=>setEvidenceNote(e.target.value)} placeholder="Optional"/></label>}</div><div className="rowActions">{evidenceSaved?<button className="primary" type="button" onClick={()=>{setEvidenceSaved(false);setEvidenceFeedback("");setSelectedEvidenceIds([]);setSavedEvidenceIds([]);setEvidenceStances({});}}>Record another observation</button>:<button className="primary" type="button" disabled={!selectedEvidenceIds.length||evidenceSaving} onClick={saveEvidence}>{evidenceSaving?"Saving…":'Capture '+selectedEvidenceIds.length+' observation(s)'}</button>}</div>{evidenceFeedback&&<p role="status" aria-live="polite" className={evidenceSaved?"okBox":"warningBox"}>{evidenceFeedback}</p>}<div className="evidenceHistory"><h3>Recent evidence</h3>{(candidateEvidence[evidenceCandidate.candidate_id]??[]).slice(0,8).map(ev=><div className="evidenceRow" key={ev.evidence_id}><time>{timeLabel(ev.occurred_at)}</time><div><b>{ev.evidence_label}</b><small>{ev.role} · {ev.direction||'—'}{ev.price!=null?` · ${ev.price}`:''}</small>{ev.note&&<span>{ev.note}</span>}</div></div>)}</div></div>}
+          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button onClick={()=>setEvidenceCandidate(null)}>Close</button></div><div className="evidencePicker"><p className="subtle">Select all observations actually seen. Mark each as supporting or contradicting only if you decide; unclassified is the default.</p>{groupedEvidence.map(([group,items])=><div className="sourceGroup" key={group}><strong>{group.replaceAll('_',' ')}</strong><div className="chips">{items.map(e=><button type="button" key={e.evidence_type_id} disabled={evidenceSaving||evidenceSaved||savedEvidenceIds.length>0} aria-pressed={selectedEvidenceIds.includes(e.evidence_type_id)} className={selectedEvidenceIds.includes(e.evidence_type_id)?'chip selected':'chip'} onClick={()=>setSelectedEvidenceIds(v=>v.includes(e.evidence_type_id)?v.filter(x=>x!==e.evidence_type_id):[...v,e.evidence_type_id])}>{e.label}</button>)}</div></div>)}</div>{selectedEvidenceIds.length>0&&<div className="panel"><strong>Selected ({selectedEvidenceIds.length})</strong>{selectedEvidenceIds.map(id=><div className="rowActions" key={id}><span>{evidenceTypes.find(t=>t.evidence_type_id===id)?.label??id}</span><select aria-label={'Classification for '+id} disabled={evidenceSaving||evidenceSaved||savedEvidenceIds.includes(id)} value={evidenceStances[id]??'GENERAL_OBSERVATION'} onChange={e=>setEvidenceStances(v=>({...v,[id]:e.target.value as 'GENERAL_OBSERVATION'|'SETUP_SUPPORT'|'CONTRADICTING_EVIDENCE'|'ENTRY_CONFIRMATION'|'INVALIDATION'}))}><option value="GENERAL_OBSERVATION">Unclassified</option><option value="SETUP_SUPPORT">Supporting</option><option value="CONTRADICTING_EVIDENCE">Contradicting</option>{!quickMode&&<><option value="ENTRY_CONFIRMATION">Entry confirmation</option><option value="INVALIDATION">Invalidation</option></>}</select></div>)}</div>}<div className="formGrid"><label>Direction<select disabled={evidenceSaving||evidenceSaved} value={evidenceDirection} onChange={e=>setEvidenceDirection(e.target.value as any)}><option>NEUTRAL</option><option>BUY</option><option>SELL</option></select></label>{orderFieldIdsWithinSection(['evidence.price','evidence.note'],fieldOrder).map(id=><div key={id}>{id==='evidence.price'?isFieldPresented('evidence.price',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="evidence.price" className={invalidClass('evidence.price')}>{fieldText['evidence.price']?.label?.trim()||'Observed price'} <small>{isUserRequired('evidence.price',requirementOverrides)?'Required':'Optional'}</small>{fieldText['evidence.price']?.help?<small title={fieldText['evidence.price'].help}>ⓘ</small>:<FieldHelp id="evidence.price"/>}<input type="number" step={tickStep} disabled={evidenceSaving||evidenceSaved} value={evidencePrice??''} onChange={e=>{setEvidencePrice(e.target.value===''?null:Number(e.target.value));clearValidation('evidence.price')}}/></label>:isFieldPresented('evidence.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="evidence.note" className={invalidClass('evidence.note')}>{fieldText['evidence.note']?.label?.trim()||'Evidence note'} <small>{isUserRequired('evidence.note',requirementOverrides)?'Required':'Optional'}</small>{fieldText['evidence.note']?.help?<small title={fieldText['evidence.note'].help}>ⓘ</small>:<FieldHelp id="evidence.note"/>}<textarea disabled={evidenceSaving||evidenceSaved} value={evidenceNote} onChange={e=>{setEvidenceNote(e.target.value);clearValidation('evidence.note')}} placeholder={isUserRequired('evidence.note',requirementOverrides)?'Describe the observed evidence':'Optional'}/></label>}</div>)}</div><div className="rowActions">{evidenceSaved?<button className="primary" type="button" onClick={()=>{setEvidenceSaved(false);setEvidenceFeedback("");setSelectedEvidenceIds([]);setSavedEvidenceIds([]);setEvidenceStances({});setEvidenceDirection("NEUTRAL");setEvidencePrice(null);setEvidenceNote("");}}>Record another observation</button>:<button className="primary" type="button" disabled={!selectedEvidenceIds.length||evidenceSaving} onClick={saveEvidence}>{evidenceSaving?"Saving…":'Capture '+selectedEvidenceIds.length+' observation(s)'}</button>}</div>{evidenceSaved&&<div className="rowActions" aria-label="Continue to a decision for this Zone"><span>Next: decide for this Zone</span>{(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!!pendingTradeDecision||decisionSaving||evidenceSaving} onClick={()=>{void openDecision(evidenceCandidate,type);}}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}{pendingTradeDecision&&<small>Complete the already saved trade decision first.</small>}<small>Choose an intent; review and save the decision separately. No execution is created here.</small></div>}{evidenceFeedback&&<p role="status" aria-live="polite" className={evidenceSaved?"okBox":"warningBox"}>{evidenceFeedback}</p>}<div className="evidenceHistory"><h3>Recent evidence</h3>{(candidateEvidence[evidenceCandidate.candidate_id]??[]).slice(0,8).map(ev=><div className="evidenceRow" key={ev.evidence_id}><time>{timeLabel(ev.occurred_at)}</time><div><b>{ev.evidence_label}</b><small>{ev.role} · {ev.direction||'—'}{ev.price!=null?` · ${ev.price}`:''}</small>{ev.note&&<span>{ev.note}</span>}</div></div>)}</div></div>}
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
@@ -1013,12 +1052,12 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   </div></div>;
 }
 
-function focusRequiredCustomField(fieldId:string){
-  const target=document.getElementById('custom-required-'+fieldId);
+function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'zone',ownerId:string){
+  const target=document.getElementById(customFieldFocusId(ownerStage,ownerId,fieldId));
   target?.scrollIntoView({behavior:'smooth',block:'center'});
   target?.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
 }
-function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMode:boolean}){
+function OwnerCustomSelections({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [options,setOptions]=useState<Record<string,import('./services/localApi').CustomFieldOption[]>>({});
   const [selected,setSelected]=useState<Record<string,string[]>>({});
@@ -1029,22 +1068,22 @@ function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMo
     let live=true;
     setFields([]);setOptions({});setSelected({});setOriginal({});setNotice('');
     localApi.listCustomFieldDefinitions().then(async defs=>{
-      const eligible=defs.filter(f=>f.active&&f.stage==='session'&&['SINGLE_SELECT','MULTI_SELECT'].includes(f.field_type));
+      const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
-        const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection('session',sessionId,f.field_id)]);
+        const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
         return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[]};
       }));
       if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));}
     }).catch(e=>{if(live)setNotice('Custom fields unavailable: '+String(e));});
     return ()=>{live=false;};
-  },[sessionId]);
+  },[ownerId,ownerStage]);
   async function save(fieldId:string){
     const values=selected[fieldId]||[];if(values.length===0||busy)return;
     if(values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setNotice('No change to save.');return;}
     setBusy(true);
     try {
-      await localApi.recordCustomFieldSelection({event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:'session',owner_id:sessionId,option_ids:values});
-      const current=await localApi.currentCustomFieldSelection('session',sessionId,fieldId);
+      await localApi.recordCustomFieldSelection({event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:ownerStage,owner_id:ownerId,option_ids:values});
+      const current=await localApi.currentCustomFieldSelection(ownerStage,ownerId,fieldId);
       setOriginal(v=>({...v,[fieldId]:values}));
       setNotice('Saved: '+(current?.options.map(o=>o.label_at_selection).join(', ')||''));
     }catch(e){setNotice('Not saved: '+String(e));}
@@ -1052,15 +1091,15 @@ function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMo
   }
   if(!fields.length&&!notice)return null;
   const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
-  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>Session custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
-    <p className="subtle">Save required choices before completing the Session stage. Unsaved changes do not count as completed.</p>
-    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id)}>{f.label}</button>)}</div>}
+  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+    <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
+    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {fields.map(field=>{
       const values=selected[field.field_id]||[];
       const available=options[field.field_id]||[];
       const same=values.length===(original[field.field_id]||[]).length&&values.every(v=>(original[field.field_id]||[]).includes(v));
       const valid=!same&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
-      return <div id={`custom-required-${field.field_id}`} key={field.field_id} className="requirementGroup">
+      return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className="requirementGroup">
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
         {field.field_type==='SINGLE_SELECT'
           ? <select aria-label={field.label} value={values[0]||''} onChange={e=>setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}))}>
@@ -1080,7 +1119,7 @@ function SessionCustomSelections({sessionId,quickMode}:{sessionId:string;quickMo
 }
 
 
-function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickMode:boolean}){
+function OwnerTypedCustomFields({ownerId,ownerStage,quickMode}:{ownerId:string;ownerStage:'session'|'zone';quickMode:boolean}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [values,setValues]=useState<Record<string,string>>({});
   const [message,setMessage]=useState('');
@@ -1090,9 +1129,9 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
     let current=true;
     setFields([]);setValues({});setOriginal({});setMessage('');
     localApi.listCustomFieldDefinitions().then(async all=>{
-      const eligible=all.filter(f=>f.active&&f.stage==='session'&&['TEXT','NUMBER','DATE','BOOLEAN'].includes(f.field_type));
+      const eligible=eligibleCustomFields(all,ownerStage,'typed');
       const entries=await Promise.all(eligible.map(async f=>{
-        const value=await localApi.currentCustomFieldTypedValue('session',sessionId,f.field_id);
+        const value=await localApi.currentCustomFieldTypedValue(ownerStage,ownerId,f.field_id);
         const display=value?.value_type==='BOOLEAN' ? (value.boolean_value===true?'true':value.boolean_value===false?'false':'') :
           value?.value_type==='NUMBER' ? (value.number_value==null?'':String(value.number_value)) :
           value?.value_type==='DATE' ? (value.date_value||'') : (value?.text_value||'');
@@ -1101,7 +1140,7 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
       if(current){setFields(eligible);setValues(Object.fromEntries(entries));setOriginal(Object.fromEntries(entries));}
     }).catch(e=>{if(current)setMessage('Typed fields unavailable: '+String(e));});
     return ()=>{current=false;};
-  },[sessionId]);
+  },[ownerId,ownerStage]);
   async function save(field:import('./services/localApi').CustomFieldDefinition){
     const raw=values[field.field_id]??'';
     if(raw===original[field.field_id]){setMessage('No change to save.');return;}
@@ -1110,7 +1149,7 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
     setBusy(true);
     try{
       await localApi.recordCustomFieldTypedValue({
-        event_id:crypto.randomUUID(),field_id:field.field_id,owner_stage:'session',owner_id:sessionId,
+        event_id:crypto.randomUUID(),field_id:field.field_id,owner_stage:ownerStage,owner_id:ownerId,
         text_value:field.field_type==='TEXT'?raw:null,
         number_value:field.field_type==='NUMBER'?number:null,
         date_value:field.field_type==='DATE'?raw:null,
@@ -1123,10 +1162,10 @@ function SessionTypedCustomFields({sessionId,quickMode}:{sessionId:string;quickM
   }
   if(!fields.length&&!message)return null;
   const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
-  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>Session custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
-    <p className="subtle">Save required values before completing the Session stage. Unsaved changes do not count as completed.</p>
-    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id)}>{f.label}</button>)}</div>}
-    {fields.map(f=><div id={`custom-required-${f.field_id}`} className="requirementGroup" key={f.field_id}>
+  return <details className="guidedMore" open={quickMode&&missing.length>0}><summary>{ownerStage==='zone'?'Zone':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+    <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
+    {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
+    {fields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className="requirementGroup" key={f.field_id}>
       <label>{f.label}{f.required?' · Required':''}
         {f.field_type==='BOOLEAN'
           ?<select value={values[f.field_id]??''} onChange={e=>setValues(v=>({...v,[f.field_id]:e.target.value}))}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
@@ -1282,7 +1321,20 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
       await onOrderChanged();setMsg('Zone condition order saved. Recorded plan values are unchanged.');
     }catch(e){setMsg(String(e));}
   }
-  const groups=['Session','Plan','Candidate','Decision','Trade','Review','Psychology'] as const;
+  async function moveEvidenceField(id:string,direction:-1|1){
+    const ids=orderFieldIdsWithinSection(['evidence.price','evidence.note'],order);
+    const index=ids.indexOf(id),nextIndex=index+direction;
+    if(index<0||nextIndex<0||nextIndex>=ids.length)return;
+    [ids[index],ids[nextIndex]]=[ids[nextIndex],ids[index]];
+    try{
+      await localApi.saveFieldOrderPreferences({...order,...Object.fromEntries(ids.map((field,index)=>[field,index]))});
+      await onOrderChanged();
+      setMsg('Evidence field order saved. Prior observations are unchanged.');
+    }catch(e){setMsg('Evidence field order not confirmed: '+String(e));}
+  }
+  const groups=['Session','Plan','Candidate','Evidence','Decision','Trade','Review','Psychology'] as const;
+  const coverageReport=fieldConnectionReport();
+  const coverageSummary=fieldConnectionSummary();
   return <div className="guideOverlay" onClick={onClose}><div className="guideCard sourceManagerCard" onClick={e=>e.stopPropagation()}>
     <div className="panelTitle"><div><h2>Field Requirements</h2><p className="subtle">Choose which optional fields must be completed. System and conditional requirements are locked to protect workflow integrity.</p></div><div className="headerActions"><button onClick={onAppearance}>Appearance</button><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onClose}>Close</button></div></div>
     {msg&&<p className="subtle">{msg}</p>}
@@ -1290,10 +1342,10 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     <details className="guidedMore"><summary>All-input inventory and connection status ({FIELD_CONTROL_INVENTORY.length} controls)</summary>
       <p className="subtle">Every inventoried input is listed here. Only connected controls have live visibility/placement settings below; inventory-only entries are not falsely presented as configurable. Protected system, lifecycle and reporting controls remain visible and cannot be disabled here.</p>
       <label>Find any input<input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Name, workflow stage or field ID"/></label>
-      <div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(item=>!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase())).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage} · {item.id}</span></div><div className="requirementControl"><span>{isActiveVisibilityControl(item.id)?'Connected':item.protectedReason?'Protected':'Not yet connected'}</span></div></div>)}</div>
-      <p className="subtle">Connected: {FIELD_CONTROL_INVENTORY.filter(x=>isActiveVisibilityControl(x.id)).length} · Protected: {FIELD_CONTROL_INVENTORY.filter(x=>!isActiveVisibilityControl(x.id)&&!!x.protectedReason).length} · Not yet connected: {FIELD_CONTROL_INVENTORY.filter(x=>!isActiveVisibilityControl(x.id)&&!x.protectedReason).length}. This inventory does not change saved trading data.</p>
+      <div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(item=>!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase())).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage} · {item.id}</span></div><div className="requirementControl"><span>{coverageReport.find(row=>row.id===item.id)?.status.replaceAll('_',' ')??'UNKNOWN'}</span></div></div>)}</div>
+      <p className="subtle">Full requirement + visibility connection: {coverageSummary.CONNECTED} · Visibility only: {coverageSummary.VISIBILITY_ONLY} · Protected: {coverageSummary.PROTECTED} · Pending: {coverageSummary.PENDING}. This inventory does not change saved trading data.</p>
     </details>
-    <details className="guidedMore"><summary>Field visibility and Quick/Detailed placement</summary><p className="subtle">Only connected controls can be changed. Required fields always remain visible. Hidden fields retain saved journal values.</p><label>Find a connected field<input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Search by field name or stage"/></label><div className="requirementGroup"><h3>Plan scenario order</h3><p className="subtle">Change the position of the existing main and alternative scenario prompts.</p>{orderFieldIdsWithinSection(['plan.mainScenario','plan.alternativeScenario'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='plan.mainScenario'?'Main scenario':'Alternative scenario'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>movePlanScenario(id,-1)}>Up</button><button disabled={index===1} onClick={()=>movePlanScenario(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Zone condition order</h3><p className="subtle">Reorder only the two connected planned-condition prompts.</p>{orderFieldIdsWithinSection(['candidate.requiredConditions','candidate.invalidationConditions'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='candidate.requiredConditions'?'Entry conditions':'Abandon conditions'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveZoneCondition(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveZoneCondition(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Session Review field order</h3><p className="subtle">Move the two connected main reflection fields without editing recorded answers. Order persists across restarts.</p>{orderFieldIdsWithinSection(['sessionReview.wentWell','sessionReview.nextImprovement'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='sessionReview.wentWell'?'What went well?':'One thing to improve next session'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Detailed Session Review field order</h3>{orderFieldIdsWithinSection(['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'],order).map((id,index,ids)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={index===ids.length-1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Session Review field labels and help</h3><p className="subtle">Optional wording only. Original field IDs and saved answers do not change.</p>{(['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning','plan.mainScenario','plan.alternativeScenario','candidate.label','evidence.note','decision.note'] as const).map(id=><div className="requirementRow" key={id}><label>{FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} — label<input maxLength={100} value={textDraft[id]?.label??''} placeholder={FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],label:e.target.value}}))}/></label><label>Help text<input maxLength={240} value={textDraft[id]?.help??''} placeholder="Optional short explanation" onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],help:e.target.value}}))}/></label></div>)}<button onClick={saveTextSettings}>Save labels and help</button></div><p className="subtle">{ACTIVE_VISIBILITY_FIELD_IDS.length} connected field controls. Other inventory controls remain protected or pending integration.</p><div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(x=>ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===x.id)&&isActiveVisibilityControl(x.id)&&(!fieldSearch.trim()||`${x.label} ${x.stage} ${x.id}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()))).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage}</span></div><div className="requirementControl"><button disabled={isUserRequired(item.id,draft)} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button><button disabled={!ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===item.id)||isUserRequired(item.id,draft)} onClick={()=>togglePlacement(item.id)}>{placements[item.id]==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button></div></div>)}</div></details>
+    <details className="guidedMore"><summary>Field visibility and Quick/Detailed placement</summary><p className="subtle">Only connected controls can be changed. Required fields always remain visible. Hidden fields retain saved journal values.</p><label>Find a connected field<input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Search by field name or stage"/></label><div className="requirementGroup"><h3>Plan scenario order</h3><p className="subtle">Change the position of the existing main and alternative scenario prompts.</p>{orderFieldIdsWithinSection(['plan.mainScenario','plan.alternativeScenario'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='plan.mainScenario'?'Main scenario':'Alternative scenario'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>movePlanScenario(id,-1)}>Up</button><button disabled={index===1} onClick={()=>movePlanScenario(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Zone condition order</h3><p className="subtle">Reorder only the two connected planned-condition prompts.</p>{orderFieldIdsWithinSection(['candidate.requiredConditions','candidate.invalidationConditions'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='candidate.requiredConditions'?'Entry conditions':'Abandon conditions'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveZoneCondition(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveZoneCondition(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Live Evidence field order</h3><p className="subtle">Move optional observation details without changing historical Evidence records.</p>{orderFieldIdsWithinSection(['evidence.price','evidence.note'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_DEFINITION_BY_ID[id]?.label??id}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveEvidenceField(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveEvidenceField(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Session Review field order</h3><p className="subtle">Move the two connected main reflection fields without editing recorded answers. Order persists across restarts.</p>{orderFieldIdsWithinSection(['sessionReview.wentWell','sessionReview.nextImprovement'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='sessionReview.wentWell'?'What went well?':'One thing to improve next session'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Detailed Session Review field order</h3>{orderFieldIdsWithinSection(['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'],order).map((id,index,ids)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={index===ids.length-1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Field labels and help</h3><p className="subtle">Optional wording only. Original field IDs and saved answers do not change.</p>{(['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning','plan.mainScenario','plan.alternativeScenario','candidate.label','evidence.price','evidence.note','decision.note'] as const).map(id=><div className="requirementRow" key={id}><label>{FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} — label<input maxLength={100} value={textDraft[id]?.label??''} placeholder={FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],label:e.target.value}}))}/></label><label>Help text<input maxLength={240} value={textDraft[id]?.help??''} placeholder="Optional short explanation" onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],help:e.target.value}}))}/></label></div>)}<button onClick={saveTextSettings}>Save labels and help</button></div><p className="subtle">{ACTIVE_VISIBILITY_FIELD_IDS.length} connected field controls. Other inventory controls remain protected or pending integration.</p><div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(x=>ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===x.id)&&isActiveVisibilityControl(x.id)&&(!fieldSearch.trim()||`${x.label} ${x.stage} ${x.id}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()))).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage}</span></div><div className="requirementControl"><button disabled={isUserRequired(item.id,draft)} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button><button disabled={!ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===item.id)||isUserRequired(item.id,draft)} onClick={()=>togglePlacement(item.id)}>{placements[item.id]==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button></div></div>)}</div></details>
     <div className="requirementGroups">{groups.map(group=><section className="requirementGroup" key={group}><h3>{group}</h3>
       {FIELD_DEFINITIONS.filter(x=>x.group===group&&x.requirementManaged!==false).map(def=><div className="requirementRow" key={def.id}>
         <div><b>{def.label}</b>{def.conditionalText&&<span>{def.conditionalText}</span>}</div>

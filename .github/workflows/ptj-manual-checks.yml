@@ -1,6 +1,15 @@
 name: PTJ manual checks
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/package-a-evidence-decision-completion-2026-11-06
+    paths:
+      - 'app/**'
+concurrency:
+  group: ptj-manual-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
