@@ -18,6 +18,11 @@ describe('Session Review completion requirements', () => {
     expect(sessionReviewRequiredIssues({[id]:true},{...empty,[id]:'  \n  '})).toHaveLength(1);
     expect(sessionReviewRequiredIssues({[id]:true},{...empty,[id]:'I kept my risk limit'})).toEqual([]);
   });
+  it('accepts actual select ratings, but not the blank placeholder when required', () => {
+    const id='sessionReview.discipline';
+    expect(sessionReviewRequiredIssues({[id]:true},{...empty,[id]:''})).toHaveLength(1);
+    expect(sessionReviewRequiredIssues({[id]:true},{...empty,[id]:'GOOD'})).toEqual([]);
+  });
   it('reports only required unanswered fields, not optional ones', () => {
     expect(sessionReviewRequiredIssues({
       'sessionReview.wentWell':true,
