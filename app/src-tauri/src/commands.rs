@@ -57,6 +57,27 @@ pub fn edit_custom_field_option(app:AppHandle,field_id:String,option_id:String,l
 }
 
 #[tauri::command]
+pub fn custom_field_cleanup_preflight(app:AppHandle,field_id:String)->Result<crate::custom_fields::CleanupPreflight,AppError>{
+    let conn=open_custom_fields_readonly(&app)?;
+    crate::custom_fields::cleanup_preflight(&conn,&field_id)
+}
+#[tauri::command]
+pub fn cleanup_unused_custom_field(app:AppHandle,field_id:String,confirmation:String)->Result<String,AppError>{
+    if confirmation!="DELETE" {return Err(AppError::Validation("explicit DELETE confirmation required".into()));}
+    // Physical cleanup is restricted to the isolated test profile. Production remains append-only.
+    let paths=AppPaths::from_app(&app)?;
+    if paths.root.file_name().and_then(|s|s.to_str())!=Some("com.personaltradingjournal.desktop.demo"){
+        return Err(AppError::Validation("physical custom-field cleanup is restricted to the isolated DEMO profile".into()));
+    }
+    // A fresh, validated safety backup is required before the transaction.
+    let backup_path=backup::create_backup(&paths)?;
+    restore::validate_backup(&backup_path)?;
+    let mut conn=open_custom_fields_write(&app)?;
+    crate::custom_fields::cleanup_unused_definition(&mut conn,&field_id,&confirmation)?;
+    Ok(backup_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 pub fn record_custom_field_selection(app:AppHandle,input:crate::custom_fields::RecordSelectInput)->Result<(),AppError>{
     let mut conn=open_custom_fields_write(&app)?;
     crate::custom_fields::record_select(&mut conn,&input)
