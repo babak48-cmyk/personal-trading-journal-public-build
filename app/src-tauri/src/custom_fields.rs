@@ -234,6 +234,48 @@ pub fn list_custom_fields(conn:&Connection)->Result<Vec<ManagedField>,AppError>{
 }
 
 
+/// Read-only preflight: never delete an existing custom-field value or snapshot.
+#[derive(Serialize, PartialEq, Debug)]
+pub struct CleanupPreflight {
+    pub field_id: String,
+    pub label: String,
+    pub stage: String,
+    pub option_count: i64,
+    pub event_count: i64,
+    pub snapshot_count: i64,
+    pub eligible_unused_definition: bool,
+}
+pub fn cleanup_preflight(conn:&Connection,field_id:&str)->Result<CleanupPreflight,AppError>{
+    if !valid_key(field_id){return Err(invalid("invalid cleanup field ID"));}
+    let (label,stage):(String,String)=conn.query_row(
+        "SELECT label,stage FROM custom_field_definitions WHERE field_id=?1",
+        [field_id],|r|Ok((r.get(0)?,r.get(1)?))
+    ).map_err(|_|invalid("custom field not found"))?;
+    let option_count:i64=conn.query_row(
+        "SELECT COUNT(*) FROM custom_field_options WHERE field_id=?1",[field_id],|r|r.get(0))?;
+    let event_count:i64=conn.query_row(
+        "SELECT COUNT(*) FROM custom_field_value_events WHERE field_id=?1",[field_id],|r|r.get(0))?;
+    let snapshot_count:i64=conn.query_row(
+        "SELECT COUNT(*) FROM custom_field_selection_snapshots s JOIN custom_field_value_events e ON e.event_id=s.event_id WHERE e.field_id=?1",
+        [field_id],|r|r.get(0))?;
+    Ok(CleanupPreflight{field_id:field_id.to_string(),label,stage,option_count,event_count,snapshot_count,eligible_unused_definition:event_count==0&&snapshot_count==0})
+}
+/// Only unused field definitions may be physically removed. Recorded history is NEVER purged.
+/// Rechecking under a single write transaction prevents a stale preflight from deleting data.
+pub fn cleanup_unused_definition(conn:&mut Connection,field_id:&str,confirmation:&str)->Result<(),AppError>{
+    if confirmation!="DELETE"{return Err(invalid("type DELETE to confirm irreversible field deletion"));}
+    let tx=conn.transaction()?;
+    let report=cleanup_preflight(&tx,field_id)?;
+    if !report.eligible_unused_definition {
+        return Err(invalid("field has saved values: history is protected; use Deactivate. Historical test-data purge is not implemented"));
+    }
+    tx.execute("DELETE FROM custom_field_options WHERE field_id=?1",[field_id])?;
+    let n=tx.execute("DELETE FROM custom_field_definitions WHERE field_id=?1",[field_id])?;
+    if n!=1{return Err(invalid("field deletion did not affect exactly one definition"));}
+    tx.commit()?;
+    Ok(())
+}
+
 #[derive(Deserialize)]
 pub struct TypedValueInput {
     pub event_id: String,
