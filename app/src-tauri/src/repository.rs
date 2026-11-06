@@ -1280,7 +1280,9 @@ fn validate_review_input(input:&SaveTradeReviewInput)->Result<(),AppError>{
     if input.emotion_affected==Some(false) && (input.psychology_state.is_some() || input.psychology_intensity.is_some() || input.psychology_stage.is_some()) {
         return Err(AppError::Validation("psychology details should be empty when emotion did not affect the trade".into()));
     }
-    if input.emotion_affected==Some(true) {
+    // Review Pending is deliberately incomplete: only finalization requires
+    // full emotion details. Do not weaken value/domain checks or immutable history.
+    if input.finalize==Some(true) && input.emotion_affected==Some(true) {
         if input.psychology_state.as_deref().unwrap_or("").trim().is_empty() {
             return Err(AppError::Validation("psychology state is required when emotion affected the trade".into()));
         }
@@ -1775,6 +1777,20 @@ mod review_pending_validation_tests {
     #[test]
     fn review_pending_allows_partial_psychology_details() {
         assert!(validate_review_input(&review(false)).is_ok());
+    }
+
+    #[test]
+    fn review_pending_allows_only_one_psychology_detail() {
+        let mut input = review(false);
+        input.psychology_state = Some("hesitation".into());
+        assert!(validate_review_input(&input).is_ok());
+    }
+
+    #[test]
+    fn review_pending_still_rejects_invalid_psychology_stage() {
+        let mut input = review(false);
+        input.psychology_stage = Some("NOT_A_REAL_STAGE".into());
+        assert!(validate_review_input(&input).is_err());
     }
 
     #[test]
