@@ -138,6 +138,16 @@ describe('Session Review Field Manager requirement coverage', () => {
   });
 });
 
+describe('Session Review select field management', () => {
+  it.each(['sessionReview.overall','sessionReview.planQuality','sessionReview.discipline'])('%s is connected and cannot be hidden when Required', id => {
+    const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
+    expect(entry?.formalFieldId).toBe(id);
+    expect(fieldConnectionReport().find(item=>item.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
 describe('Formal requirement registry coverage for active customizable inputs', () => {
   it('requires formal definitions for each user-required Plan, Zone and Review control', () => {
     const managedIds = [
