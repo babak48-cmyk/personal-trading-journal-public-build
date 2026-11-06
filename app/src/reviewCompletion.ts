@@ -10,6 +10,7 @@ export type ReviewCompletionInput = Readonly<{
   emotionAffected:boolean|null;
   psychologyState:string;
   psychologyStage:string;
+  psychologyIntensity:number|null;
 }>;
 export type ReviewCompletionIssue = Readonly<{id:string;label:string}>;
 
@@ -34,6 +35,8 @@ export function reviewCompletionIssues(
   if(values.emotionAffected===true){
     if(!values.psychologyState.trim())issues.push({id:'psychology.state',label:'Psychology state'});
     if(!values.psychologyStage.trim())issues.push({id:'psychology.stage',label:'Affected stage'});
+    if(isUserRequired('psychology.intensity',overrides) && values.psychologyIntensity==null)
+      issues.push({id:'psychology.intensity',label:FIELD_DEFINITION_BY_ID['psychology.intensity']?.label??'Emotion intensity'});
   }
   return issues;
 }
