@@ -8,6 +8,9 @@ export const SESSION_REVIEW_REFLECTION_IDS = [
   'sessionReview.bestDecision',
   'sessionReview.biggestMistake',
   'sessionReview.marketLearning',
+  'sessionReview.overall',
+  'sessionReview.planQuality',
+  'sessionReview.discipline',
 ] as const;
 export type SessionReviewReflectionId = (typeof SESSION_REVIEW_REFLECTION_IDS)[number];
 export type SessionReviewReflections = Readonly<Record<SessionReviewReflectionId,string>>;
