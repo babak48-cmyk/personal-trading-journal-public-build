@@ -99,6 +99,13 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'sessionReview.marketLearning',group:'SessionReview',label:'What did the market teach me?',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Capture one observation that may inform the next plan, not a proven edge.',helpExample:'Acceptance above the prior level challenged my rejection hypothesis.'},
 
+  {id:'sessionReview.overall',group:'SessionReview',label:'Overall session assessment',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Your overall session process assessment, separate from net P&L.',helpExample:'ACCEPTABLE if you followed most of the plan with one execution slip.'},
+  {id:'sessionReview.planQuality',group:'SessionReview',label:'Plan quality',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Evaluate whether the plan was clear and useful before judging the outcome.',helpExample:'GOOD if the plan defined clear zones, conditions and invalidation.'},
+  {id:'sessionReview.discipline',group:'SessionReview',label:'Discipline',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Assess adherence to planned rules and risk limits independently of profit.',helpExample:'NEEDS_IMPROVEMENT if a trade broke your pre-committed risk cap.'},
+
   {id:'psychology.emotionAffected',group:'Psychology',label:'Did emotion affect the trade?',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Only mark Yes when emotion materially changed entry, management or exit.',helpExample:'Yes if FOMO made you chase; No if you felt nervous but still followed the plan.'},
   {id:'psychology.state',group:'Psychology',label:'Psychology state',defaultRequirement:'CONDITIONAL',systemLocked:true,conditionalText:'Required when emotion affected the trade',
