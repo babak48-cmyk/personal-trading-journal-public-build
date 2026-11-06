@@ -138,6 +138,16 @@ describe('Session Review Field Manager requirement coverage', () => {
   });
 });
 
+describe('Existing intensity controls are formally manageable', () => {
+  it.each(['plan.preSessionStateIntensity','psychology.intensity'])('%s is connected, optional by default and visible when Required in Quick', id => {
+    expect(FIELD_CONTROL_INVENTORY.find(item=>item.id===id)?.formalFieldId).toBe(id);
+    expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(false);
+    expect(isUserRequired(id,{})).toBe(false);
+    expect(isUserRequired(id,{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
 describe('Session Review select field management', () => {
   it.each(['sessionReview.overall','sessionReview.planQuality','sessionReview.discipline'])('%s is connected and cannot be hidden when Required', id => {
     const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
