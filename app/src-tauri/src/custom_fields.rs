@@ -526,3 +526,44 @@ mod tests {
         assert_eq!(count,1);
     }
 }
+
+#[cfg(test)]
+mod cleanup_safety_tests {
+    use super::*;
+    fn fixture()->Connection {
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        crate::db::migrate(&c).unwrap();
+        c.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label) VALUES('cleanup-demo','zone','SINGLE_SELECT','Test Zone Context')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_options(option_id,field_id,label) VALUES('support','cleanup-demo','Support')",[]).unwrap();
+        c
+    }
+    #[test]
+    fn unused_field_cleanup_removes_only_definition_and_options() {
+        let mut c=fixture();
+        let p=cleanup_preflight(&c,"cleanup-demo").unwrap();
+        assert_eq!((p.option_count,p.event_count,p.snapshot_count),(1,0,0));
+        assert!(p.eligible_unused_definition);
+        assert!(cleanup_unused_definition(&mut c,"cleanup-demo","wrong").is_err());
+        cleanup_unused_definition(&mut c,"cleanup-demo","DELETE").unwrap();
+        let remaining:i64=c.query_row("SELECT count(*) FROM custom_field_definitions WHERE field_id='cleanup-demo'",[],|r|r.get(0)).unwrap();
+        let options:i64=c.query_row("SELECT count(*) FROM custom_field_options WHERE field_id='cleanup-demo'",[],|r|r.get(0)).unwrap();
+        assert_eq!((remaining,options),(0,0));
+        assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+    #[test]
+    fn saved_value_and_snapshot_block_cleanup_without_side_effects() {
+        let mut c=fixture();
+        c.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type) VALUES('evt','cleanup-demo','zone','zone1','SINGLE_SELECT')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_selection_snapshots(event_id,option_id,label_at_selection,ordinal) VALUES('evt','support','Support',0)",[]).unwrap();
+        let p=cleanup_preflight(&c,"cleanup-demo").unwrap();
+        assert_eq!((p.event_count,p.snapshot_count),(1,1));
+        assert!(!p.eligible_unused_definition);
+        assert!(cleanup_unused_definition(&mut c,"cleanup-demo","DELETE").is_err());
+        for table in ["custom_field_definitions","custom_field_options","custom_field_value_events","custom_field_selection_snapshots"] {
+            let count:i64=c.query_row(&format!("SELECT count(*) FROM {table}"),[],|r|r.get(0)).unwrap();
+            assert_eq!(count,1,"preserve {table}");
+        }
+        assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
