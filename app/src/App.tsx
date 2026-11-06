@@ -1,5 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
+import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { eligibleCustomFields, customFieldFocusId } from './customFieldStage';
 import { missingRequiredCustomValues } from './customFieldRequired';
 import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
@@ -769,14 +770,14 @@ export function App(){
   }
   async function saveSessionReview(finalize=false){
     if(!active)return;
-    if(finalize && blockMissing(missingRequired([
-      ['sessionReview.wentWell',!!srWentWell.trim()],
-      ['sessionReview.nextImprovement',!!srNextImprovement.trim()],
-      ['sessionReview.wentPoorly',!!srWentPoorly.trim()],
-      ['sessionReview.bestDecision',!!srBestDecision.trim()],
-      ['sessionReview.biggestMistake',!!srBiggestMistake.trim()],
-      ['sessionReview.marketLearning',!!srMarketLearning.trim()],
-    ])))return;
+    if(finalize && blockMissing(sessionReviewRequiredIssues(requirementOverrides,{
+      'sessionReview.wentWell':srWentWell,
+      'sessionReview.nextImprovement':srNextImprovement,
+      'sessionReview.wentPoorly':srWentPoorly,
+      'sessionReview.bestDecision':srBestDecision,
+      'sessionReview.biggestMistake':srBiggestMistake,
+      'sessionReview.marketLearning':srMarketLearning,
+    })))return;
     try{const r=await localApi.saveSessionReview({session_id:active.session_id,what_went_well:srWentWell||null,what_went_poorly:srWentPoorly||null,best_decision:srBestDecision||null,biggest_mistake:srBiggestMistake||null,market_learning:srMarketLearning||null,next_improvement:srNextImprovement||null,plan_quality:srPlanQuality||null,discipline:srDiscipline||null,overall_assessment:srOverall||null,finalize});applySessionReview(r);setMessage(finalize?'Session review completed and session closed.':'Session review draft saved.');await refresh();if(finalize){setActive(a=>a?{...a,status:'CLOSED'}:a);}}catch(e){setMessage(String(e));}
   }
   async function saveReview(finalize=false){
