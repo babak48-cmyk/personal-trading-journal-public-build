@@ -93,15 +93,15 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('rule.violatedIds','Violated rules','post-trade-review','conditional-journal-field',false,undefined,'Mandatory when rule violation is reported'),
   entry('rule.note','Rule violation note','post-trade-review','journal-field',true),
   entry('review.note','Review note','post-trade-review','journal-field',true,'review.note'),
-  entry('sessionReview.overall','Overall session assessment','session-review','journal-field',true),
+  entry('sessionReview.overall','Overall session assessment','session-review','journal-field',true,'sessionReview.overall'),
   entry('sessionReview.wentWell','What went well','session-review','journal-field',true,'sessionReview.wentWell'),
   entry('sessionReview.wentPoorly','What went poorly','session-review','journal-field',true,'sessionReview.wentPoorly'),
   entry('sessionReview.bestDecision','Best decision','session-review','journal-field',true,'sessionReview.bestDecision'),
   entry('sessionReview.biggestMistake','Biggest mistake','session-review','journal-field',true,'sessionReview.biggestMistake'),
   entry('sessionReview.marketLearning','Market learning','session-review','journal-field',true,'sessionReview.marketLearning'),
   entry('sessionReview.nextImprovement','Next improvement','session-review','journal-field',true,'sessionReview.nextImprovement'),
-  entry('sessionReview.planQuality','Plan quality','session-review','journal-field',true),
-  entry('sessionReview.discipline','Discipline','session-review','journal-field',true),
+  entry('sessionReview.planQuality','Plan quality','session-review','journal-field',true,'sessionReview.planQuality'),
+  entry('sessionReview.discipline','Discipline','session-review','journal-field',true,'sessionReview.discipline'),
   entry('attachment.stage','Attachment stage','attachment','attachment-metadata',false,undefined,'Evidence linkage'),
   entry('attachment.caption','Attachment caption','attachment','attachment-metadata',true),
   entry('analytics.from','From date','analytics','analytics-filter',false),
@@ -210,6 +210,9 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'sessionReview.marketLearning',
   'sessionReview.wentWell',
   'sessionReview.nextImprovement',
+  'sessionReview.overall',
+  'sessionReview.planQuality',
+  'sessionReview.discipline',
 ] as const;
 
 /** Report stale or duplicated active setting IDs before enabling them in Settings. */
