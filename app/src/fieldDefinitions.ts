@@ -1,5 +1,5 @@
 export type RequirementDefault = 'SYSTEM_REQUIRED'|'OPTIONAL'|'CONDITIONAL';
-export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology';
+export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview';
 
 export type FieldDefinition = {
   id:string;
@@ -85,6 +85,19 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
     helpShort:'How well you executed the intended entry and order mechanics.',helpExample:'NEEDS IMPROVEMENT if you chased the entry even though the idea itself was valid.',optionHelp:{GOOD:'Execution matched the intended plan well.',ACCEPTABLE:'Usable execution with a small imperfection.',NEEDS_IMPROVEMENT:'A meaningful execution error occurred.',UNCLEAR:'Not enough information to judge.'}},
   {id:'review.managementQuality',group:'Review',label:'Management quality',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'How well you managed the open trade after entry.',helpExample:'NEEDS IMPROVEMENT if you widened the stop or exited early without evidence.',optionHelp:{GOOD:'Management followed the intended process well.',ACCEPTABLE:'Mostly sound with a minor issue.',NEEDS_IMPROVEMENT:'A meaningful management mistake occurred.',UNCLEAR:'Not enough information to judge.'}},
+
+  {id:'sessionReview.wentWell',group:'SessionReview',label:'What went well?',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Identify a useful behavior or decision to repeat.',helpExample:'Followed the planned risk limit despite a losing trade.'},
+  {id:'sessionReview.nextImprovement',group:'SessionReview',label:'One thing to improve next session',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Name one concrete action to try in the next session.',helpExample:'Wait for the specified entry confirmation before committing.'},
+  {id:'sessionReview.wentPoorly',group:'SessionReview',label:'What went poorly?',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Record the most important process weakness without duplicating every trade note.',helpExample:'Entered early before the level reaction was established.'},
+  {id:'sessionReview.bestDecision',group:'SessionReview',label:'Best decision',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'A disciplined decision can be a no-trade or a losing trade.',helpExample:'Skipped a trade because invalidation had already occurred.'},
+  {id:'sessionReview.biggestMistake',group:'SessionReview',label:'Biggest mistake',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Capture the most significant process error, if one occurred.',helpExample:'Moved the initial stop without a valid management reason.'},
+  {id:'sessionReview.marketLearning',group:'SessionReview',label:'What did the market teach me?',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Capture one observation that may inform the next plan, not a proven edge.',helpExample:'Acceptance above the prior level challenged my rejection hypothesis.'},
 
   {id:'psychology.emotionAffected',group:'Psychology',label:'Did emotion affect the trade?',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Only mark Yes when emotion materially changed entry, management or exit.',helpExample:'Yes if FOMO made you chase; No if you felt nervous but still followed the plan.'},
