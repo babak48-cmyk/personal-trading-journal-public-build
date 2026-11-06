@@ -33,6 +33,9 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'plan.preSessionState',group:'Plan',label:'Pre-session state',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'A quick check of your mental/physical state before trading.',helpExample:'FOCUSED, TIRED or DISTRACTED.',helpLong:'This is intentionally lightweight. It helps find patterns without turning psychology logging into a long questionnaire.'},
 
+  {id:'plan.preSessionStateIntensity',group:'Plan',label:'Pre-session intensity',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Optional 1–5 rating of your pre-session state. This is descriptive, not a trading edge or threshold.',helpExample:'3 means a moderate intensity of the state you selected.'},
+
   {id:'candidate.intent',group:'Candidate',label:'Directional intent',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
     helpShort:'What the level/zone is currently being watched for.',helpExample:'LONG means the zone is a candidate area for a long thesis, not that a trade is already approved.',optionHelp:{LONG:'Watch for a long-side opportunity.',SHORT:'Watch for a short-side opportunity.',CONDITIONAL:'Direction depends on how price interacts with the area.',WATCH:'Important location to monitor without a directional commitment.',UNKNOWN:'Intent is not clear yet.'}},
   {id:'candidate.trendRelationship',group:'Candidate',label:'Role vs trend',defaultRequirement:'OPTIONAL',systemLocked:true,requirementManaged:false,
@@ -108,6 +111,8 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
 
   {id:'psychology.emotionAffected',group:'Psychology',label:'Did emotion affect the trade?',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Only mark Yes when emotion materially changed entry, management or exit.',helpExample:'Yes if FOMO made you chase; No if you felt nervous but still followed the plan.'},
+  {id:'psychology.intensity',group:'Psychology',label:'Emotion intensity',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Optional 1–5 intensity only when emotion affected this trade. It measures experience, not profitability.',helpExample:'4 when FOMO strongly influenced your entry.'},
   {id:'psychology.state',group:'Psychology',label:'Psychology state',defaultRequirement:'CONDITIONAL',systemLocked:true,conditionalText:'Required when emotion affected the trade',
     helpShort:'The main emotional/mental state that influenced the trade.',helpExample:'Hesitation, FOMO, frustration, revenge or overconfidence.'},
   {id:'psychology.stage',group:'Psychology',label:'Affected stage',defaultRequirement:'CONDITIONAL',systemLocked:true,conditionalText:'Required when emotion affected the trade',
