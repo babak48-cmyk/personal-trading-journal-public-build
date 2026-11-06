@@ -4,6 +4,7 @@ export type CustomTypedValue = {event_id:string;value_type:string;text_value:str
 export type CustomTypedInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;text_value:string|null;number_value:number|null;boolean_value:boolean|null;date_value:string|null};
 export type CustomSelection = {event_id:string;options:{option_id:string;label_at_selection:string;ordinal:number}[]};
 export type CustomSelectionInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;option_ids:string[]};
+export type CustomFieldCleanupPreflight = {field_id:string;label:string;stage:string;option_count:number;event_count:number;snapshot_count:number;eligible_unused_definition:boolean};
 export type CustomFieldDefinitionInput = {field_id:string;stage:string;field_type:string;label:string;help_text:string;required:boolean;display_order:number};
 export type CustomFieldOptionInput = {option_id:string;field_id:string;label:string;display_order:number};
 export type CustomFieldDefinition = {field_id:string;stage:string;field_type:string;label:string;help_text:string;required:boolean;active:boolean;display_order:number};
@@ -111,6 +112,8 @@ export const localApi = {
   recordCustomFieldSelection: (input:CustomSelectionInput) => invoke<void>('record_custom_field_selection',{input}),
   currentCustomFieldSelection: (ownerStage:string,ownerId:string,fieldId:string) => invoke<CustomSelection|null>('current_custom_field_selection',{ownerStage,ownerId,fieldId}),
   listCustomFieldDefinitions: () => invoke<CustomFieldDefinition[]>('list_custom_field_definitions'),
+  customFieldCleanupPreflight: (fieldId:string) => invoke<CustomFieldCleanupPreflight>('custom_field_cleanup_preflight',{fieldId}),
+  cleanupUnusedCustomField: (fieldId:string,confirmation:string) => invoke<string>('cleanup_unused_custom_field',{fieldId,confirmation}),
   listCustomFieldOptions: (fieldId:string) => invoke<CustomFieldOption[]>('list_custom_field_options',{fieldId}),
 
   health: () => invoke<DatabaseHealth>('database_health'),
