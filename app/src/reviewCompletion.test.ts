@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { reviewCompletionIssues, type ReviewCompletionInput } from './reviewCompletion';
 const blank:ReviewCompletionInput={
   decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',emotionAffected:true,
-  psychologyState:'',psychologyStage:'',
+  psychologyState:'',psychologyStage:'',psychologyIntensity:null,
 };
 
 describe('Review Pending and finalization boundaries',()=>{
@@ -33,6 +33,13 @@ describe('Review Pending and finalization boundaries',()=>{
     expect(reviewCompletionIssues(true,{[id]:true},opts).map(x=>x.id)).toEqual([id]);
     expect(reviewCompletionIssues(true,{[id]:true},{...opts,[key]:answer})).toEqual([]);
     expect(reviewCompletionIssues(true,{[id]:true},{...opts,[key]:'   '})).toHaveLength(1);
+  });
+  it('enforces intensity only if configured Required and emotion affected the trade',()=>{
+    const opts={...blank,psychologyState:'FEAR',psychologyStage:'ENTRY'};
+    expect(reviewCompletionIssues(true,{'psychology.intensity':true},opts).map(x=>x.id)).toEqual(['psychology.intensity']);
+    expect(reviewCompletionIssues(false,{'psychology.intensity':true},opts)).toEqual([]);
+    expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...opts,psychologyIntensity:3})).toEqual([]);
+    expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...opts,emotionAffected:false})).toEqual([]);
   });
   it('does not invent a requirement when emotion flag is optional',()=>{
     expect(reviewCompletionIssues(true,{}, {...blank,emotionAffected:null})).toEqual([]);
