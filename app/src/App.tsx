@@ -1,6 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
+import { reviewCompletionIssues } from './reviewCompletion';
 import { eligibleCustomFields, customFieldFocusId } from './customFieldStage';
 import { missingRequiredCustomValues } from './customFieldRequired';
 import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
@@ -785,16 +786,14 @@ export function App(){
   }
   async function saveReview(finalize=false){
     if(!activeTrade)return;
-    const missing=missingRequired([
-      ['review.decisionQuality',!!reviewDecisionQuality],
-      ['review.executionQuality',!!reviewExecutionQuality],
-      ['review.managementQuality',!!reviewManagementQuality],
-      ['psychology.emotionAffected',emotionAffected!==null],
-    ]);
-    if(emotionAffected===true){
-      if(!psychState)missing.push({id:'psychology.state',label:'Psychology state'});
-      if(!psychStage)missing.push({id:'psychology.stage',label:'Affected stage'});
-    }
+    const missing=reviewCompletionIssues(finalize,requirementOverrides,{
+      decisionQuality:reviewDecisionQuality,
+      executionQuality:reviewExecutionQuality,
+      managementQuality:reviewManagementQuality,
+      emotionAffected,
+      psychologyState:psychState,
+      psychologyStage:psychStage,
+    });
     if(blockMissing(missing))return;
     try{
       if(ruleViolationReported!==null){
