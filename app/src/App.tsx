@@ -1256,6 +1256,26 @@ function CustomFieldDiscovery(){
       <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}</p>
       <label><input type="checkbox" checked={field.required} disabled={busy||!field.active} onChange={e=>{void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,e.target.checked,field.active,field.display_order));}}/> Required at this stage</label>
       <button type="button" disabled={busy} onClick={()=>runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,!field.active,field.display_order))}>{field.active?'Deactivate':'Reactivate'}</button>
+      <button type="button" disabled={busy} onClick={async()=>{
+        if(busy)return;
+        setBusy(true);
+        try {
+          const report=await localApi.customFieldCleanupPreflight(field.field_id);
+          const details=`Controlled Cleanup — ${report.label} (${report.stage})\nField ID: ${report.field_id}\nOptions: ${report.option_count}; saved events: ${report.event_count}; selection snapshots: ${report.snapshot_count}`;
+          if(!report.eligible_unused_definition){
+            setNotice(details+' — BLOCKED: saved history is protected. Deactivate this field instead; test-data history purge is not implemented.');
+            return;
+          }
+          if(!window.confirm(details+'\n\nPERMANENT deletion of this unused field and its options. A safety backup will be created and validated first. Continue?'))return;
+          const typed=window.prompt('Final confirmation: type DELETE to permanently delete this unused field and all its options.');
+          if(typed!=='DELETE'){setNotice('Cleanup cancelled; DELETE not confirmed.');return;}
+          const path=await localApi.cleanupUnusedCustomField(field.field_id,typed);
+          setFields(await localApi.listCustomFieldDefinitions());
+          setOptions({});
+          setNotice('Unused field deleted after verified backup: '+path);
+        }catch(e){setNotice('Cleanup not performed: '+String(e));}
+        finally{setBusy(false);}
+      }}>Controlled cleanup</button>
       <button type="button" disabled={busy} onClick={()=>{
         const label=window.prompt('New field label',field.label);
         if(label!==null&&label.trim())void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order));
