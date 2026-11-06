@@ -122,6 +122,22 @@ describe('Plan, Zone and Review required-field presentation gate', () => {
   });
 });
 
+describe('Session Review Field Manager requirement coverage', () => {
+  const ids = ["sessionReview.wentWell","sessionReview.nextImprovement","sessionReview.wentPoorly","sessionReview.bestDecision","sessionReview.biggestMistake","sessionReview.marketLearning"];
+  it.each(ids)('%s is genuinely user-required and visible in both modes', id => {
+    const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
+    expect(entry?.formalFieldId).toBe(id);
+    expect(FIELD_DEFINITION_BY_ID[id]?.group).toBe('SessionReview');
+    expect(isUserRequired(id,{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,false,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    expect(requiredPresentationIssues({[id]:true},{[id]:false},{[id]:'DETAILED_ONLY'})).toEqual([]);
+  });
+  it('keeps the fields optional until the user marks them required', () => {
+    for(const id of ids)expect(isUserRequired(id,{})).toBe(false);
+  });
+});
+
 describe('Formal requirement registry coverage for active customizable inputs', () => {
   it('requires formal definitions for each user-required Plan, Zone and Review control', () => {
     const managedIds = [
