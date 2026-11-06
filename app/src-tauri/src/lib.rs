@@ -57,6 +57,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::database_health,
             commands::list_custom_field_definitions,
+            commands::custom_field_cleanup_preflight,
+            commands::cleanup_unused_custom_field,
             commands::list_custom_field_options,
             commands::create_custom_field_definition,
             commands::edit_custom_field_definition,
