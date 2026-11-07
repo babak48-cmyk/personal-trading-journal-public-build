@@ -6,6 +6,7 @@ on:
       - feature/package-a-evidence-decision-completion-2026-11-06
     paths:
       - 'app/**'
+      - '.github/workflows/ptj-manual-checks.yml'
 concurrency:
   group: ptj-manual-${{ github.ref }}
   cancel-in-progress: true
@@ -58,9 +59,9 @@ jobs:
       - name: Verify Rust source with locked dependencies
         working-directory: app/src-tauri
         run: cargo check --locked
-      - name: Test Evidence batch atomicity and rollback
+      - name: Test complete Rust library (review, custom fields and Evidence regression)
         working-directory: app/src-tauri
-        run: cargo test --locked --lib evidence_atomic_batch_tests
+        run: cargo test --locked --lib
       - name: Save generated Cargo.lock for canonical review
         uses: actions/upload-artifact@v4
         with:
