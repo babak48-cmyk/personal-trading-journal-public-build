@@ -195,6 +195,8 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'evidence.price',
   'evidence.note',
   'decision.note',
+  'decision.quality',
+  'trade.plannedTarget',
   'review.note',
   'review.decisionQuality',
   'review.executionQuality',
