@@ -148,6 +148,15 @@ describe('Existing intensity controls are formally manageable', () => {
   });
 });
 
+describe('Decision and execution Field Manager connections', () => {
+  it.each(['decision.quality','trade.plannedTarget'])('%s is formally connected and user-required Quick visibility is preserved', id => {
+    expect(FIELD_CONTROL_INVENTORY.find(entry=>entry.id===id)?.formalFieldId).toBe(id);
+    expect(fieldConnectionReport().find(entry=>entry.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{})).toBe(false);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
 describe('Session Review select field management', () => {
   it.each(['sessionReview.overall','sessionReview.planQuality','sessionReview.discipline'])('%s is connected and cannot be hidden when Required', id => {
     const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
