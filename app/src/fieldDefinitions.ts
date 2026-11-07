@@ -53,6 +53,9 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'candidate.invalidationConditions',group:'Candidate',label:'Abandon if',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'What would invalidate the candidate thesis before or around entry.',helpExample:'Price accepts above the zone and holds there; the original rejection thesis is no longer valid.',helpLong:'Invalidation is not the same as a stop distance. It describes when the market thesis itself is no longer valid.'},
 
+  {id:'planRevision.evidence',group:'Plan',label:'New evidence summary for plan revision',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Summarize observed information behind a timestamped change to the market plan, without replacing the original plan.',helpExample:'A sustained acceptance above the previously watched resistance prompted a new plan revision.'},
+
   {id:'evidence.price',group:'Evidence',label:'Observed price',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Market price where the evidence was actually observed, if known.',helpExample:'ES 6025.25 for a contemporaneous absorption observation; do not invent a price.'},
   {id:'evidence.note',group:'Evidence',label:'Evidence note',defaultRequirement:'OPTIONAL',systemLocked:false,
