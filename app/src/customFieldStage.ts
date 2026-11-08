@@ -1,6 +1,6 @@
 import type { CustomFieldDefinition } from './services/localApi';
 
-export const CAPTURABLE_CUSTOM_FIELD_STAGES = ['session','premarket-plan','candidate','zone','trade','post-trade-review'] as const;
+export const CAPTURABLE_CUSTOM_FIELD_STAGES = ['session','premarket-plan','candidate','zone','trade','post-trade-review','session-review'] as const;
 export type CustomFieldOwnerStage = typeof CAPTURABLE_CUSTOM_FIELD_STAGES[number];
 export function canCaptureCustomFieldStage(stage:string):stage is CustomFieldOwnerStage {
   return (CAPTURABLE_CUSTOM_FIELD_STAGES as readonly string[]).includes(stage);
