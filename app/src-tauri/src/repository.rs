@@ -2212,3 +2212,65 @@ mod chronological_trade_accounting_tests {
         assert!(execution_ledger(&events(&[("ENTRY",f64::NAN,1.0,0.0,0.0)]),"LONG",50.0).is_err());
     }
 }
+
+#[cfg(test)]
+mod execution_sqlite_reconciliation_tests {
+    use super::*;
+
+    #[test]
+    fn immutable_sqlite_fills_drive_chronological_pnl_and_open_position_risk() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        let session=create_draft_session(&db,CreateSessionInput{
+            session_date:"2026-11-09".into(),instrument_symbol:"ES".into(),
+            environment:"DEMO".into(),session_label:None,
+        }).unwrap();
+        db.execute(
+            "INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('decision-test',?1,'2026-11-09T08:00:00Z','TRADE','LONG')",
+            [&session.session_id],
+        ).unwrap();
+        let input=CreateTradeExecutionInput{
+            decision_id:"decision-test".into(),entry_price:100.0,stop_price:95.0,
+            quantity:2.0,order_type:Some("MARKET".into()),
+            planned_target_price:Some(130.0),commission:Some(1.0),fees:Some(0.5),
+        };
+        let created=create_trade_with_entry(&mut db,input).unwrap();
+        let trade_id=created.metrics.trade_id.clone();
+        let add=|db:&mut Connection,action:&str,price:f64,qty:f64| {
+            add_trade_fill(db,AddTradeFillInput {
+                trade_id:trade_id.clone(),action:action.into(),price,quantity:qty,
+                order_type:Some("MARKET".into()),commission:Some(1.0),fees:Some(0.5),note:None,
+            }).unwrap()
+        };
+        let first=add(&mut db,"EXIT",110.0,1.0);
+        assert_eq!(first.metrics.gross_realized_pnl,Some(500.0));
+        assert_eq!(first.metrics.open_quantity,1.0);
+        let second=add(&mut db,"ENTRY",120.0,1.0);
+        assert_eq!(second.metrics.gross_realized_pnl,Some(500.0));
+        assert_eq!(second.metrics.open_quantity,2.0);
+        assert_eq!(second.metrics.average_entry,Some(110.0));
+        let latest:(f64,f64)=db.query_row(
+            "SELECT quantity,risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='MODIFIED' ORDER BY rowid DESC LIMIT 1",
+            [&trade_id],|r|Ok((r.get(0)?,r.get(1)?)),
+        ).unwrap();
+        assert_eq!(latest,(2.0,1500.0));
+        let stop=move_trade_stop(&mut db,MoveStopInput{
+            trade_id:trade_id.clone(),stop_price:105.0,reason:Some("Trailing structure".into()),
+            was_rule_compliant:Some(true),
+        }).unwrap();
+        assert_eq!(stop.metrics.latest_stop_price,Some(105.0));
+        let updated:(f64,f64)=db.query_row(
+            "SELECT quantity,risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='MODIFIED' ORDER BY rowid DESC LIMIT 1",
+            [&trade_id],|r|Ok((r.get(0)?,r.get(1)?)),
+        ).unwrap();
+        assert_eq!(updated,(2.0,500.0));
+        let last=add(&mut db,"EXIT",130.0,1.0);
+        assert_eq!(last.metrics.gross_realized_pnl,Some(1500.0));
+        assert_eq!(last.metrics.net_realized_pnl,Some(1494.0));
+        assert!((last.metrics.realized_r.unwrap()-2.988).abs()<1e-9);
+        assert_eq!(last.metrics.open_quantity,1.0);
+        assert_eq!(last.fills.len(),4);
+        let count:i64=db.query_row("SELECT COUNT(*) FROM execution_fills WHERE trade_id=?1",[&trade_id],|r|r.get(0)).unwrap();
+        assert_eq!(count,4);
+    }
+}
