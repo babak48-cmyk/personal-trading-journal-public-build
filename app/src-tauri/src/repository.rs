@@ -1652,6 +1652,42 @@ pub fn save_session_review(conn:&mut Connection,input:SaveSessionReviewInput)->R
     }
     let existing:Option<(String,String)>=tx.query_row("SELECT review_id,status FROM session_reviews WHERE session_id=?1",[&input.session_id],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
     if let Some((_,s))=&existing {if s=="COMPLETED" {return Err(AppError::Validation("completed session review is immutable".into()));}}
+    if input.finalize==Some(true) {
+        // Enforce custom-field completion at the persistence boundary too, not only in React.
+        // A review_id must already exist to allow custom events to be attached to it.
+        let mut query=tx.prepare(
+            "SELECT field_id,field_type,label FROM custom_field_definitions WHERE stage='session-review' AND required=1 AND is_active=1 ORDER BY display_order,field_id"
+        )?;
+        let required=query.query_map([],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?)))?
+            .collect::<Result<Vec<_>,_>>()?;
+        drop(query);
+        if !required.is_empty() && existing.is_none() {
+            return Err(AppError::Validation("save a session review draft before completing required custom fields".into()));
+        }
+        if let Some((review_id,_))=&existing {
+            for (field_id,field_type,label) in required {
+                let present=match field_type.as_str() {
+                    "SINGLE_SELECT" | "MULTI_SELECT" =>
+                        crate::custom_fields::read_current_selection(&tx,"session-review",review_id,&field_id)?
+                            .is_some_and(|value|!value.options.is_empty()),
+                    "TEXT" | "NUMBER" | "BOOLEAN" | "DATE" => {
+                        let value=crate::custom_fields::read_current_typed_value(&tx,"session-review",review_id,&field_id)?;
+                        value.is_some_and(|v|match field_type.as_str(){
+                            "TEXT"=>v.text_value.is_some_and(|s|!s.trim().is_empty()),
+                            "NUMBER"=>v.number_value.is_some_and(|n|n.is_finite()),
+                            "BOOLEAN"=>v.boolean_value.is_some(),
+                            "DATE"=>v.date_value.is_some_and(|s|!s.trim().is_empty()),
+                            _=>false
+                        })
+                    },
+                    _=>false
+                };
+                if !present {
+                    return Err(AppError::Validation(format!("required Session Review custom field missing: {label}")));
+                }
+            }
+        }
+    }
     let now=Utc::now().to_rfc3339(); let review_id=existing.as_ref().map(|x|x.0.clone()).unwrap_or_else(||Uuid::new_v4().to_string());
     let review_status=if input.finalize==Some(true){"COMPLETED"}else{"DRAFT"}; let completed=if review_status=="COMPLETED"{Some(now.clone())}else{None};
     if existing.is_some(){
