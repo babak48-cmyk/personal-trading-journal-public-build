@@ -25,4 +25,16 @@ describe('Quick Workflow missing-required navigation',()=>{
     expect(quickValidationRoute('unknown.data',false,true).notebookPage).toBeNull();
     expect(quickValidationRoute('review.note',true,false).notebookPage).toBeNull();
   });
+  it('routes missing persisted custom field values by canonical owner stage',()=>{
+    expect(quickValidationRoute('custom-required-premarket-plan-session1-fieldA',true,false))
+      .toMatchObject({draftStep:1,draftPlanPage:0});
+    expect(quickValidationRoute('custom-required-candidate-zone1-fieldA',false,true).notebookPage).toBe('PLAN');
+    expect(quickValidationRoute('custom-required-zone-zone1-fieldB',false,true).notebookPage).toBe('PLAN');
+    expect(quickValidationRoute('custom-required-trade-trade1-fieldC',false,true).notebookPage).toBe('EXECUTION');
+    expect(quickValidationRoute('custom-required-post-trade-review-trade1-fieldD',false,true).notebookPage).toBe('EXECUTION');
+  });
+  it('never navigates into a nonexistent confirmed stage for draft custom fields',()=>{
+    expect(quickValidationRoute('custom-required-trade-t1-f1',true,false).notebookPage).toBeNull();
+  });
+
 });
