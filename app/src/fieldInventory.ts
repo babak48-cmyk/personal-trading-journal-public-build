@@ -91,7 +91,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('review.mistakes','Recorded mistakes','post-trade-review','journal-field',true),
   entry('rule.violationReported','Rule violation reported','post-trade-review','conditional-journal-field',false,undefined,'Affects rule adherence classification'),
   entry('rule.violatedIds','Violated rules','post-trade-review','conditional-journal-field',false,undefined,'Mandatory when rule violation is reported'),
-  entry('rule.note','Rule violation note','post-trade-review','journal-field',true),
+  entry('rule.note','Rule violation note','post-trade-review','journal-field',true,'rule.note'),
   entry('review.note','Review note','post-trade-review','journal-field',true,'review.note'),
   entry('sessionReview.overall','Overall session assessment','session-review','journal-field',true,'sessionReview.overall'),
   entry('sessionReview.wentWell','What went well','session-review','journal-field',true,'sessionReview.wentWell'),
