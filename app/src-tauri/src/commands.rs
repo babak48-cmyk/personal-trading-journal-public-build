@@ -281,6 +281,7 @@ pub fn save_appearance_preferences(app: AppHandle, json: String) -> Result<(), A
     valid("fontSize", &["COMPACT", "DEFAULT", "LARGE"])?;
     valid("fontFamily", &["SYSTEM", "SEGOE", "SERIF"])?;
     valid("backgroundTone", &["NEUTRAL", "COOL", "WARM"])?;
+    valid("accent", &["DEFAULT", "BLUE", "TEAL", "PURPLE", "AMBER"])?;
 
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
