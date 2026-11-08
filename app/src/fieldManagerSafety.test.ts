@@ -187,6 +187,17 @@ describe('Execution event reason field management', () => {
   });
 });
 
+describe('Screenshot metadata Field Manager integration', () => {
+  it('connects the actual attachment caption control without requiring an attachment by default', () => {
+    const id='attachment.caption';
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.formalFieldId).toBe(id);
+    expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{})).toBe(false);
+    expect(isUserRequired(id,{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
 describe('Session Review select field management', () => {
   it.each(['sessionReview.overall','sessionReview.planQuality','sessionReview.discipline'])('%s is connected and cannot be hidden when Required', id => {
     const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
