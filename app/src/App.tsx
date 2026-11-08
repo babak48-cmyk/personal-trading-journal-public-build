@@ -1803,11 +1803,11 @@ function InstrumentManager({onClose,onSwitch,onRequirements,onAppearance,onChang
         <label>Currency<input value={editCurrency} onChange={e=>setEditCurrency(e.target.value.toUpperCase())}/></label>
         <label>Market type<select value={editMarket} onChange={e=>setEditMarket(e.target.value)}><option value="">Unspecified</option>{INSTRUMENT_MARKET_TYPES.map(v=><option key={v}>{v}</option>)}</select></label>
       </div><div className="rowActions"><button onClick={()=>setEditingId(null)}>Cancel</button><button className="primary" disabled={!editSymbol.trim()||editTick==null||editPoint==null} onClick={()=>saveEdit(x)}>Save</button></div></div>:<>
-        <div><b>{x.symbol}{x.display_name?` · ${x.display_name}`:''}</b><small>Tick {x.tick_size} · Point value {x.point_value} {x.currency} · {x.market_type||'Unspecified'} · {x.active?'Active':'Inactive'}</small></div>
+        <div><b>{x.symbol}{x.display_name?` · ${x.display_name}`:''}</b><small>Tick {x.tick_size} · Point value {x.point_value} {x.currency} · Tick value {(x.tick_size*x.point_value).toLocaleString(undefined,{maximumFractionDigits:4})} {x.currency} · {x.market_type||'Unspecified'} · {x.active?'Active':'Inactive'}</small></div>
         <div className="rowActions"><button disabled={i===0} onClick={()=>move(x.instrument_id,-1)}>↑</button><button disabled={i===items.length-1} onClick={()=>move(x.instrument_id,1)}>↓</button><button onClick={()=>beginEdit(x)}>Edit</button><button onClick={()=>toggleActive(x)}>{x.active?'Deactivate':'Activate'}</button></div>
       </>}
     </div>)}</div>
-    <p className="guideTip">Changing a registry instrument affects future sessions only. Existing confirmed sessions keep the symbol, tick size, point value and currency captured when their draft setup was saved.</p>
+    <p className="guideTip">Futures defaults use the full-sized root contracts (not Micro contracts); U.S. share defaults use 1 USD per $1 share-price change and a 0.01 USD quoting increment. Verify contract month and broker-specific execution specifications before trading. Adding a stock to the catalog does not activate a stock-trading strategy. Changing a registry instrument affects future sessions only; existing sessions retain their captured symbol, tick size, point value and currency.</p>
   </div></div>;
 }
 
