@@ -1556,46 +1556,29 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   async function saveTextSettings(){
     await persistSetting('Field labels and help',()=>localApi.saveFieldTextPreferences(textDraft),onFieldTextChanged);
   }
-  async function moveSessionReflection(id:string,direction:-1|1){
-    const section=id==='sessionReview.wentWell'||id==='sessionReview.nextImprovement' ? ['sessionReview.wentWell','sessionReview.nextImprovement'] : ['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'];
-    const ids=orderFieldIdsWithinSection(section,order);
-    const at=ids.indexOf(id), target=at+direction;
+  async function moveFieldOrder(id:string,direction:-1|1,section:readonly string[],label:string){
+    if(settingsSaveRef.current)return;
+    const ids=orderFieldIdsWithinSection([...section],order);
+    const at=ids.indexOf(id),target=at+direction;
     if(at<0||target<0||target>=ids.length)return;
     [ids[at],ids[target]]=[ids[target],ids[at]];
     const next={...order,...Object.fromEntries(ids.map((field,index)=>[field,index]))};
-    try{await localApi.saveFieldOrderPreferences(next);await onOrderChanged();setMsg('Session reflection order saved. Existing journal values are unchanged.');}
-    catch(e){setMsg(String(e));}
+    await persistSetting(label,()=>localApi.saveFieldOrderPreferences(next),onOrderChanged);
+  }
+  async function moveSessionReflection(id:string,direction:-1|1){
+    const section=id==='sessionReview.wentWell'||id==='sessionReview.nextImprovement'
+      ? ['sessionReview.wentWell','sessionReview.nextImprovement']
+      : ['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'];
+    await moveFieldOrder(id,direction,section,'Session review order');
   }
   async function movePlanScenario(id:string,direction:-1|1){
-    const ids=orderFieldIdsWithinSection(['plan.mainScenario','plan.alternativeScenario'],order);
-    const at=ids.indexOf(id),nextAt=at+direction;
-    if(at<0||nextAt<0||nextAt>=ids.length)return;
-    [ids[at],ids[nextAt]]=[ids[nextAt],ids[at]];
-    try{
-      await localApi.saveFieldOrderPreferences({...order,...Object.fromEntries(ids.map((key,index)=>[key,index]))});
-      await onOrderChanged();setMsg('Plan scenario order saved. Historical plan data are unchanged.');
-    }catch(e){setMsg(String(e));}
+    await moveFieldOrder(id,direction,['plan.mainScenario','plan.alternativeScenario'],'Plan scenario order');
   }
   async function moveZoneCondition(id:string,direction:-1|1){
-    const ids=orderFieldIdsWithinSection(['candidate.requiredConditions','candidate.invalidationConditions'],order);
-    const at=ids.indexOf(id),nextAt=at+direction;
-    if(at<0||nextAt<0||nextAt>=ids.length)return;
-    [ids[at],ids[nextAt]]=[ids[nextAt],ids[at]];
-    try{
-      await localApi.saveFieldOrderPreferences({...order,...Object.fromEntries(ids.map((key,index)=>[key,index]))});
-      await onOrderChanged();setMsg('Zone condition order saved. Recorded plan values are unchanged.');
-    }catch(e){setMsg(String(e));}
+    await moveFieldOrder(id,direction,['candidate.requiredConditions','candidate.invalidationConditions'],'Zone condition order');
   }
   async function moveEvidenceField(id:string,direction:-1|1){
-    const ids=orderFieldIdsWithinSection(['evidence.price','evidence.note'],order);
-    const index=ids.indexOf(id),nextIndex=index+direction;
-    if(index<0||nextIndex<0||nextIndex>=ids.length)return;
-    [ids[index],ids[nextIndex]]=[ids[nextIndex],ids[index]];
-    try{
-      await localApi.saveFieldOrderPreferences({...order,...Object.fromEntries(ids.map((field,index)=>[field,index]))});
-      await onOrderChanged();
-      setMsg('Evidence field order saved. Prior observations are unchanged.');
-    }catch(e){setMsg('Evidence field order not confirmed: '+String(e));}
+    await moveFieldOrder(id,direction,['evidence.price','evidence.note'],'Evidence field order');
   }
   const groups=['Session','Plan','Candidate','Evidence','Decision','Trade','Review','Psychology','SessionReview','Attachment'] as const;
   const coverageReport=fieldConnectionReport();
