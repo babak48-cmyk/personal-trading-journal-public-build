@@ -1656,7 +1656,7 @@ pub fn save_session_review(conn:&mut Connection,input:SaveSessionReviewInput)->R
         // Enforce custom-field completion at the persistence boundary too, not only in React.
         // A review_id must already exist to allow custom events to be attached to it.
         let mut query=tx.prepare(
-            "SELECT field_id,field_type,label FROM custom_field_definitions WHERE stage='session-review' AND required=1 AND is_active=1 ORDER BY display_order,field_id"
+            "SELECT field_id,field_type,label FROM custom_field_definitions WHERE stage='session-review' AND is_required=1 AND is_active=1 ORDER BY display_order,field_id"
         )?;
         let required=query.query_map([],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?)))?
             .collect::<Result<Vec<_>,_>>()?;
