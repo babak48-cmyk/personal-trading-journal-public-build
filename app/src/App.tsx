@@ -1638,13 +1638,13 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
         </select></label></div>
       <div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
-        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&status==='CONNECTED')||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'));
+        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'));
         return matchesFilter&&(!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()));
       }).map(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
         const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
         const connected=isActiveVisibilityControl(item.id);
-        const optionalRequirement=!!def&&!def.systemLocked&&def.requirementManaged!==false&&def.defaultRequirement==='OPTIONAL'&&item.candidateForCustomization;
+        const optionalRequirement=status==='CONNECTED'&&!!def&&!def.systemLocked&&!item.protectedReason&&def.requirementManaged!==false&&def.defaultRequirement==='OPTIONAL'&&item.candidateForCustomization;
         const required=!!def&&isUserRequired(item.id,draft);
         return <div className="requirementRow" key={item.id}>
           <div><b>{fieldText[item.id]?.label?.trim()||item.label}</b><span>{item.stage} · {item.id}</span><small>{status.replaceAll('_',' ')}{def?.defaultRequirement==='SYSTEM_REQUIRED'?' · System required':def?.defaultRequirement==='CONDITIONAL'?' · Conditional':''}</small></div>
