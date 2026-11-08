@@ -662,8 +662,11 @@ export function App(){
 
   async function addLiveZone(){
     if(!active||liveZoneSavingRef.current)return;
-    if(blockMissing(planRevisionEvidenceIssues(requirementOverrides,liveCandidateEvidence))){setLiveZoneFeedback('Complete highlighted required fields.');return;}
-    if(blockMissing(!liveCandidateReason.trim()?[{id:'liveZone.reason',label:'Reason for adding this zone'}]:[])){setLiveZoneFeedback('Complete highlighted required fields.');return;}
+    const missingLiveZone:ValidationIssue[]=[
+      ...(!liveCandidateReason.trim()?[{id:'liveZone.reason',label:'Reason for adding this zone'}]:[]),
+      ...planRevisionEvidenceIssues(requirementOverrides,liveCandidateEvidence),
+    ];
+    if(blockMissing(missingLiveZone)){setLiveZoneFeedback('Complete all highlighted required fields.');return;}
     liveZoneSavingRef.current=true;setLiveZoneSaving(true);setLiveZoneFeedback('Adding new zone…');
     try{
       await localApi.addLiveCandidate({session_id:active.session_id,why_changed:liveCandidateReason,new_evidence_summary:liveCandidateEvidence||null,candidate:cleanCandidate(liveCandidate)});
