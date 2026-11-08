@@ -2002,4 +2002,30 @@ mod expanded_instrument_catalog_tests {
         assert!(!nvda.active);
         assert!(nvda.user_defined);
     }
+    #[test]
+    fn new_futures_and_stock_sessions_snapshot_correct_preset_values() {
+        let db=test_db();
+        for (symbol,tick,point,environment) in [
+            ("NQ",0.25,20.0,"DEMO"),
+            ("RTY",0.1,50.0,"FORWARD_TEST"),
+            ("SI",0.005,5000.0,"DEMO"),
+            ("CL",0.01,1000.0,"DEMO"),
+            ("AAPL",0.01,1.0,"DEMO"),
+        ] {
+            let session=create_draft_session(&db,CreateSessionInput {
+                session_date:"2026-11-09".into(),
+                instrument_symbol:symbol.into(),environment:environment.into(),session_label:None,
+            }).expect("valid preset draft session");
+            assert_eq!(session.instrument_symbol,symbol);
+            assert!((session.instrument_tick_size-tick).abs()<1e-9);
+            assert!((session.instrument_point_value-point).abs()<1e-9);
+            assert_eq!(session.instrument_currency,"USD");
+            let snapshot:(f64,f64)=db.query_row(
+                "SELECT instrument_tick_size_snapshot,instrument_point_value_snapshot FROM sessions WHERE session_id=?1",
+                [&session.session_id],|row|Ok((row.get(0)?,row.get(1)?))
+            ).unwrap();
+            assert_eq!(snapshot,(tick,point));
+        }
+    }
+
 }
