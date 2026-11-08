@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { customFieldFocusId,eligibleCustomFields } from './customFieldStage';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES,canCaptureCustomFieldStage,customFieldFocusId,eligibleCustomFields } from './customFieldStage';
 import type { CustomFieldDefinition } from './services/localApi';
 
 const entry=(field_id:string,stage:string,field_type:string,display_order:number,active=true):CustomFieldDefinition=>({
@@ -7,6 +7,12 @@ const entry=(field_id:string,stage:string,field_type:string,display_order:number
 });
 
 describe('canonical owner-stage custom-field capture',()=>{
+  it('only offers creation in stages with end-to-end value editors and real owner IDs',()=>{
+    expect(CAPTURABLE_CUSTOM_FIELD_STAGES).toEqual(['session','premarket-plan','zone','post-trade-review']);
+    for(const stage of CAPTURABLE_CUSTOM_FIELD_STAGES)expect(canCaptureCustomFieldStage(stage)).toBe(true);
+    for(const stage of ['candidate','trade','execution','session-review','evidence','decision'])
+      expect(canCaptureCustomFieldStage(stage)).toBe(false);
+  });
   const fields=[
     entry('s-text','session','TEXT',2),
     entry('p-text','premarket-plan','TEXT',1),
