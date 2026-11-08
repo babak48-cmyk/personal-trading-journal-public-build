@@ -119,6 +119,7 @@ export function App(){
   const [fieldOrder,setFieldOrder]=useState<Record<string,number>>({});
   const [fieldText,setFieldText]=useState<Record<string,{label?:string;help?:string}>>({});
   const [validationErrors,setValidationErrors]=useState<string[]>([]);
+  const [validationIssueLabels,setValidationIssueLabels]=useState<Record<string,string>>({});
   const [showDraftSetup,setShowDraftSetup]=useState(false);
   const [draftStep,setDraftStep]=useState(1);
   const [draftZonePage,setDraftZonePage]=useState(0);
@@ -346,34 +347,46 @@ export function App(){
   }
   function clearValidation(id:string){setValidationErrors(v=>v.filter(x=>x!==id));}
   function invalidClass(id:string){return validationErrors.includes(id)?'validationFieldError':'';}
-  function blockMissing(issues:ValidationIssue[]){
-    if(!issues.length){setValidationErrors([]);return false;}
-    const unique=issues.filter((issue,index,all)=>all.findIndex(x=>x.id===issue.id)===index);
-    setValidationErrors(unique.map(x=>x.id));
-    setMessage(`Missing required field${unique.length>1?'s':''}: ${unique.map(x=>x.label).join(', ')}.`);
-    const firstId=unique[0].id;
-    const route=quickValidationRoute(firstId,active?.status==='DRAFT',!!plan);
-    if(route.draftStep!==null){setDraftStep(route.draftStep);}
-    if(route.draftPlanPage!==null){setDraftPlanPage(route.draftPlanPage);}
-    if(route.draftZonePage!==null){setDraftZonePage(route.draftZonePage);}
-    if(route.notebookPage!==null){setNotebookPage(route.notebookPage);}
-    // Quick pages and Zones remain mounted but are display:none until the state update.
-    // Wait for a visible control; never focus an invisible field or create another record.
+  function jumpToRequiredField(id:string){
+    const route=quickValidationRoute(id,active?.status==='DRAFT',!!plan);
+    if(route.draftStep!==null)setDraftStep(route.draftStep);
+    if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
+    if(route.draftZonePage!==null)setDraftZonePage(route.draftZonePage);
+    if(route.notebookPage!==null)setNotebookPage(route.notebookPage);
+    // Custom fields follow the canonical owner rather than a generic field name.
+    if(id.startsWith('custom-required-')){
+      if(id.startsWith('custom-required-candidate-')||id.startsWith('custom-required-zone-'))setNotebookPage('PLAN');
+      if(id.startsWith('custom-required-trade-')||id.startsWith('custom-required-post-trade-review-'))setNotebookPage('EXECUTION');
+      if(id.startsWith('custom-required-premarket-plan-')){
+        if(active?.status==='DRAFT')setDraftStep(1);
+        else setNotebookPage('PLAN');
+      }
+    }
     const focusVisible=(attempt:number)=>{
-      const candidates=Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]'))
-        .filter(el=>el.dataset.validationId===firstId);
-      // A collapsed optional details panel can make its child invisible even on
-      // the correct Quick page. Open it only after the relevant page is visible.
+      const candidates=[
+        ...Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]')).filter(el=>el.dataset.validationId===id),
+        ...Array.from(document.querySelectorAll<HTMLElement>('[id]')).filter(el=>el.id===id)
+      ];
       for(const el of candidates){
         const disclosure=el.closest('details');
-        if(disclosure&&!disclosure.open&&disclosure.getClientRects().length>0)disclosure.open=true;
+        if(disclosure&&!disclosure.open)disclosure.open=true;
       }
       const target=candidates.find(el=>el.getClientRects().length>0);
       if(!target){if(attempt<12)window.setTimeout(()=>focusVisible(attempt+1),90);return;}
       target.scrollIntoView({behavior:'smooth',block:'center'});
-      target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled)')?.focus({preventScroll:true});
+      const input=target.matches('input,select,textarea,button')?target:
+        target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled)');
+      input?.focus({preventScroll:true});
     };
     window.setTimeout(()=>focusVisible(0),90);
+  }
+  function blockMissing(issues:ValidationIssue[]){
+    if(!issues.length){setValidationErrors([]);return false;}
+    const unique=issues.filter((issue,index,all)=>all.findIndex(x=>x.id===issue.id)===index);
+    setValidationErrors(unique.map(x=>x.id));
+    setValidationIssueLabels(v=>({...v,...Object.fromEntries(unique.map(x=>[x.id,x.label]))}));
+    setMessage(`Missing required field${unique.length>1?'s':''}: ${unique.map(x=>x.label).join(', ')}.`);
+    jumpToRequiredField(unique[0].id);
     return true;
   }
   async function refreshSafety(){try{setRuntimeReadiness(await localApi.runtimeReadiness());}catch(e){setMessage(String(e));}}
@@ -606,6 +619,7 @@ export function App(){
       ]);
       if(sessionMissing.length||planMissing.length){
         setValidationErrors([...sessionMissing.map(x=>customFieldFocusId('session',active.session_id,x.fieldId)),...planMissing.map(x=>customFieldFocusId('premarket-plan',active.session_id,x.fieldId))]);
+        setValidationIssueLabels(v=>({...v,...Object.fromEntries([...sessionMissing.map(x=>[customFieldFocusId('session',active.session_id,x.fieldId),x.label]),...planMissing.map(x=>[customFieldFocusId('premarket-plan',active.session_id,x.fieldId),x.label])])}));
         const first=sessionMissing[0]??planMissing[0];
         const stage=sessionMissing.length?'session':'premarket-plan';
         setMessage('Save required custom fields before confirming: '+[
@@ -770,6 +784,7 @@ export function App(){
       ]);
       if(candidateMissing.length||zoneMissing.length){
         setValidationErrors([...candidateMissing.map(x=>customFieldFocusId('candidate',decisionCandidate.candidate_id,x.fieldId)),...zoneMissing.map(x=>customFieldFocusId('zone',decisionCandidate.candidate_id,x.fieldId))]);
+        setValidationIssueLabels(v=>({...v,...Object.fromEntries([...candidateMissing.map(x=>[customFieldFocusId('candidate',decisionCandidate.candidate_id,x.fieldId),x.label]),...zoneMissing.map(x=>[customFieldFocusId('zone',decisionCandidate.candidate_id,x.fieldId),x.label])])}));
         const first=candidateMissing[0]??zoneMissing[0];
         const firstStage:CustomFieldOwnerStage=candidateMissing.length?'candidate':'zone';
         setMessage('Save required Candidate/Zone custom fields before recording a decision: '+[
@@ -960,6 +975,7 @@ export function App(){
         ]);
         if(tradeMissing.length||reviewMissing.length){
           setValidationErrors([...tradeMissing.map(x=>customFieldFocusId('trade',activeTrade.metrics.trade_id,x.fieldId)),...reviewMissing.map(x=>customFieldFocusId('post-trade-review',activeTrade.metrics.trade_id,x.fieldId))]);
+          setValidationIssueLabels(v=>({...v,...Object.fromEntries([...tradeMissing.map(x=>[customFieldFocusId('trade',activeTrade.metrics.trade_id,x.fieldId),x.label]),...reviewMissing.map(x=>[customFieldFocusId('post-trade-review',activeTrade.metrics.trade_id,x.fieldId),x.label])])}));
           const first=tradeMissing[0]??reviewMissing[0];
           const firstStage:CustomFieldOwnerStage=tradeMissing.length?'trade':'post-trade-review';
           setMessage('Save required Trade/Review custom fields before completing: '+[
@@ -999,6 +1015,11 @@ export function App(){
 
   return <main className="appShell" data-theme={activeTheme.toLowerCase()} data-font-size={appearance.fontSize.toLowerCase()} data-font-family={appearance.fontFamily.toLowerCase()} data-background-tone={appearance.backgroundTone.toLowerCase()}>
     <header className="topbar"><div><p className="eyebrow">Personal Trading Journal</p><h1>Planning + Decisions + Execution</h1></div><div className="topActions"><button onClick={()=>setShowGuide(true)}>Guide</button><button className={quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(true)}>Quick</button><button className={!quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(false)}>Detailed</button><span className="statusText">{message}</span></div></header>
+    {validationErrors.length>0&&!showAnalysis&&!showSettings&&<section className="panel requiredNavigator" role="alert" aria-label="Required fields to complete">
+      <div className="panelTitle"><strong>Complete {validationErrors.length} highlighted required field{validationErrors.length===1?'':'s'}</strong><button type="button" onClick={()=>setValidationErrors([])}>Dismiss</button></div>
+      <div className="rowActions">{validationErrors.map(id=><button key={id} type="button" className="requiredJump" onClick={()=>jumpToRequiredField(id)}>{validationIssueLabels[id]??FIELD_DEFINITION_BY_ID[id]?.label??id}</button>)}</div>
+      <p className="subtle">Select an item to open its page and focus the missing field. Fixing a field removes its highlight; saved custom values must be confirmed before completing.</p>
+    </section>}
     {!showAnalysis && !showSettings && <div className="journeyStrip" aria-label="Trading journal workflow">
       <div className="journeyHeading"><strong>YOUR WORKFLOW</strong><span>{active ? `${active.session_date} · ${active.instrument_symbol} · ${active.environment}` : 'Start a DEMO session to begin'}</span></div>
       <div className="journeySteps">
