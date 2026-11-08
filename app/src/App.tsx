@@ -1630,7 +1630,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     <div className="panelTitle"><div><h2>Field Requirements</h2><p className="subtle">Choose which optional fields must be completed. System and conditional requirements are locked to protect workflow integrity.</p></div><div className="headerActions"><button onClick={onAppearance}>Appearance</button><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onClose}>Close</button></div></div>
     {msg&&<p role="status" aria-live="polite" className="subtle">{msg}</p>}
     <CustomFieldDiscovery/>
-    <details className="guidedMore" open><summary>All-input Field Manager · search and configure ({FIELD_CONTROL_INVENTORY.length} inputs)</summary>
+    <details className="guidedMore"><summary>All-input Field Manager · search and configure ({FIELD_CONTROL_INVENTORY.length} inputs)</summary>
       <p className="subtle">Manage connected inputs in one place. Protected fields and unresolved connections remain visible for audit, but cannot be silently changed. Only confirmed settings persist; saved historical field values stay intact.</p>
       <div className="rowActions"><label>Find an input <input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Field, stage or ID"/></label>
         <label>Show <select aria-label="Input coverage filter" value={inventoryFilter} onChange={e=>setInventoryFilter(e.target.value as 'ALL'|'EDITABLE'|'PROTECTED'|'OPEN')}>
