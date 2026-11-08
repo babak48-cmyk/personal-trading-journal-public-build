@@ -22,13 +22,13 @@ fn valid_key(s:&str)->bool { !s.is_empty() && s.len()<=128 && !s.chars().any(cha
 // Do not append a custom review answer after the corresponding review was finalized.
 // The check runs in the same transaction as the new immutable value event.
 fn ensure_review_writable(conn:&Connection,stage:&str,trade_id:&str)->Result<(),AppError>{
-    if stage!="post-trade-review" {return Ok(());}
+    if !matches!(stage,"post-trade-review"|"trade") {return Ok(());}
     let status:Option<String>=conn.query_row(
         "SELECT status FROM trade_reviews WHERE trade_id=?1",
         [trade_id],|row|row.get(0)
     ).optional()?;
     if status.as_deref()==Some("COMPLETED") {
-        return Err(invalid("completed post-trade review custom fields are locked"));
+        return Err(invalid("completed trade/review custom fields are locked"));
     }
     Ok(())
 }
@@ -598,6 +598,9 @@ mod custom_review_lock_tests {
         assert!(ensure_review_writable(&db,"post-trade-review","trade-a").is_ok());
         assert!(ensure_review_writable(&db,"post-trade-review","trade-new").is_ok());
         assert!(ensure_review_writable(&db,"post-trade-review","trade-b").is_err());
+        assert!(ensure_review_writable(&db,"trade","trade-a").is_ok());
+        assert!(ensure_review_writable(&db,"trade","trade-new").is_ok());
+        assert!(ensure_review_writable(&db,"trade","trade-b").is_err());
         // Existing Session, Pre-market, Zone and Execution semantics are not changed.
         assert!(ensure_review_writable(&db,"zone","trade-b").is_ok());
     }
