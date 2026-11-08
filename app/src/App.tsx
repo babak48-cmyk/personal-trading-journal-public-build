@@ -1,5 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
+import { quickValidationRoute } from './quickValidationRoute';
 import { attachmentCaptionIssue } from './attachmentCaptionValidation';
 import { planRevisionEvidenceIssues } from './planRevisionValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
@@ -286,11 +287,23 @@ export function App(){
     const unique=issues.filter((issue,index,all)=>all.findIndex(x=>x.id===issue.id)===index);
     setValidationErrors(unique.map(x=>x.id));
     setMessage(`Missing required field${unique.length>1?'s':''}: ${unique.map(x=>x.label).join(', ')}.`);
-    window.setTimeout(()=>{
-      const target=document.querySelector<HTMLElement>(`[data-validation-id="${unique[0].id}"]`);
-      target?.scrollIntoView({behavior:'smooth',block:'center'});
-      target?.querySelector<HTMLElement>('input,select,textarea,button')?.focus({preventScroll:true});
-    },80);
+    const firstId=unique[0].id;
+    const route=quickValidationRoute(firstId,active?.status==='DRAFT',!!plan);
+    if(route.draftStep!==null){setDraftStep(route.draftStep);}
+    if(route.draftPlanPage!==null){setDraftPlanPage(route.draftPlanPage);}
+    if(route.draftZonePage!==null){setDraftZonePage(route.draftZonePage);}
+    if(route.notebookPage!==null){setNotebookPage(route.notebookPage);}
+    // Quick pages and Zones remain mounted but are display:none until the state update.
+    // Wait for a visible control; never focus an invisible field or create another record.
+    const focusVisible=(attempt:number)=>{
+      const target=Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]'))
+        .find(el=>el.dataset.validationId===firstId && el.getClientRects().length>0);
+      if(!target){if(attempt<12)window.setTimeout(()=>focusVisible(attempt+1),90);return;}
+      const disclosure=target.closest('details');if(disclosure&&!disclosure.open)disclosure.open=true;
+      target.scrollIntoView({behavior:'smooth',block:'center'});
+      target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled)')?.focus({preventScroll:true});
+    };
+    window.setTimeout(()=>focusVisible(0),90);
     return true;
   }
   async function refreshSafety(){try{setRuntimeReadiness(await localApi.runtimeReadiness());}catch(e){setMessage(String(e));}}
