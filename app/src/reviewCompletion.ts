@@ -7,6 +7,8 @@ export type ReviewCompletionInput = Readonly<{
   exitReason:string;
   exitNote:string;
   reviewNote:string;
+  ruleNote:string;
+  ruleViolationReported:boolean|null;
   emotionAffected:boolean|null;
   psychologyState:string;
   psychologyStage:string;
@@ -32,6 +34,9 @@ export function reviewCompletionIssues(
   ];
   const issues=fields.filter(([id,present])=>isUserRequired(id,overrides)&&!present)
     .map(([id])=>({id,label:FIELD_DEFINITION_BY_ID[id]?.label??id}));
+  // Exception-based: never require a rule note when no violation was reported.
+  if(values.ruleViolationReported===true && isUserRequired('rule.note',overrides) && !values.ruleNote.trim())
+    issues.push({id:'rule.note',label:FIELD_DEFINITION_BY_ID['rule.note']?.label??'Rule violation note'});
   if(values.emotionAffected===true){
     if(!values.psychologyState.trim())issues.push({id:'psychology.state',label:'Psychology state'});
     if(!values.psychologyStage.trim())issues.push({id:'psychology.stage',label:'Affected stage'});
