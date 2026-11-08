@@ -1910,3 +1910,96 @@ mod decision_mismatch_persistence_tests {
         assert!(history.iter().all(|row| row.plan_mismatch_reason.is_none()));
     }
 }
+
+#[cfg(test)]
+mod expanded_instrument_catalog_tests {
+    use super::*;
+
+    fn test_db()->Connection {
+        let conn=Connection::open_in_memory().expect("isolated in-memory SQLite");
+        crate::db::migrate(&conn).expect("schema v9");
+        conn
+    }
+
+    #[test]
+    fn fresh_catalog_has_all_preset_contracts_and_stock_profiles() {
+        let db=test_db();
+        let instruments=list_all_instruments(&db).unwrap();
+        assert_eq!(instruments.len(),DEFAULT_INSTRUMENT_PROFILES.len());
+        for &(_,symbol,_,tick,point,currency,kind) in DEFAULT_INSTRUMENT_PROFILES {
+            let profile=instruments.iter().find(|i|i.symbol==symbol).expect("missing preset");
+            assert!((profile.tick_size-tick).abs()<1e-9,"wrong tick for {symbol}");
+            assert!((profile.point_value-point).abs()<1e-9,"wrong point value for {symbol}");
+            assert_eq!(profile.currency,currency);
+            assert_eq!(profile.market_type.as_deref(),Some(kind));
+            assert!(profile.active);
+            assert!(!profile.user_defined);
+            assert!((profile.tick_size*profile.point_value)>0.0);
+        }
+        assert_eq!(instruments[0].symbol,"ES");
+        assert_eq!(instruments[1].symbol,"GC");
+    }
+
+    #[test]
+    fn reopening_never_restores_deactivated_or_overwrites_edited_presets() {
+        let db=test_db();
+        let first=list_all_instruments(&db).unwrap();
+        let nq=first.iter().find(|i|i.symbol=="NQ").unwrap().clone();
+        let mut changed=UpdateInstrumentInput {
+            instrument_id:nq.instrument_id.clone(),
+            symbol:nq.symbol.clone(),display_name:Some("MY CUSTOM NQ LABEL".into()),
+            tick_size:0.5,point_value:22.0,currency:"USD".into(),
+            market_type:Some("FUTURES".into()),active:false,display_order:321,
+        };
+        update_instrument(&db,changed).unwrap();
+        let second=list_all_instruments(&db).unwrap();
+        assert_eq!(first.len(),second.len());
+        let preserved=second.iter().find(|i|i.symbol=="NQ").unwrap();
+        assert!(!preserved.active);
+        assert_eq!(preserved.tick_size,0.5);
+        assert_eq!(preserved.point_value,22.0);
+        assert_eq!(preserved.display_name.as_deref(),Some("MY CUSTOM NQ LABEL"));
+        assert_eq!(preserved.display_order,321);
+        changed.active=true; // activating remains an explicit trader action
+        assert!(!list_instruments(&db).unwrap().iter().any(|i|i.symbol=="NQ"));
+    }
+
+    #[test]
+    fn old_two_symbol_catalog_grows_without_rewriting_existing_or_custom_order() {
+        let db=test_db();
+        db.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('default-workspace','Existing','2026-10-15')",[]).unwrap();
+        for (id,symbol,order) in [("instrument-ES","ES",20_i64),("instrument-GC","GC",2_i64)] {
+            db.execute(
+                "INSERT INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES(?1,'default-workspace',?2,'Original user value',0.5,80,'USD',1,'FUTURES',?3,0)",
+                params![id,symbol,order],
+            ).unwrap();
+        }
+        db.execute("INSERT INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES('custom-1','default-workspace','CUSTOM','Custom symbol',0.01,1,'USD',1,'STOCK',75,1)",[]).unwrap();
+        let rows=list_all_instruments(&db).unwrap();
+        assert_eq!(rows.len(),DEFAULT_INSTRUMENT_PROFILES.len()+1);
+        let old_es=rows.iter().find(|i|i.symbol=="ES").unwrap();
+        assert_eq!(old_es.display_order,20);
+        assert_eq!(old_es.tick_size,0.5);
+        assert_eq!(old_es.point_value,80.0);
+        let custom=rows.iter().find(|i|i.symbol=="CUSTOM").unwrap();
+        assert_eq!(custom.display_order,75);
+        assert!(custom.user_defined);
+        let added=rows.iter().find(|i|i.symbol=="NQ").unwrap();
+        assert!(added.display_order>75);
+        assert_eq!(list_all_instruments(&db).unwrap().len(),rows.len());
+    }
+
+    #[test]
+    fn trader_owned_ticker_is_not_replaced_by_same_symbol_catalog_entry() {
+        let db=test_db();
+        db.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('default-workspace','Existing','2026-10-15')",[]).unwrap();
+        db.execute("INSERT INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES('user-symbol','default-workspace','NVDA','Trader chosen symbol',0.05,1,'USD',0,'STOCK',10,1)",[]).unwrap();
+        let rows=list_all_instruments(&db).unwrap();
+        assert_eq!(rows.len(),DEFAULT_INSTRUMENT_PROFILES.len());
+        let nvda=rows.iter().find(|i|i.symbol=="NVDA").unwrap();
+        assert_eq!(nvda.instrument_id,"user-symbol");
+        assert_eq!(nvda.tick_size,0.05);
+        assert!(!nvda.active);
+        assert!(nvda.user_defined);
+    }
+}
