@@ -797,7 +797,7 @@ export function App(){
     if(blockMissing([{id:'fill.price',label:'Fill price',missing:fillPrice===null||!Number.isFinite(fillPrice)},{id:'fill.quantity',label:'Fill quantity',missing:!Number.isFinite(fillQty)||fillQty<=0}].filter(x=>x.missing).map(x=>({id:x.id,label:x.label})).concat(missingRequired([['fill.reason',!!fillReason.trim()]])))){setFillFeedback('Complete the highlighted required fill fields.');return;}
     fillSavingRef.current=true;setFillSaving(true);setFillFeedback('');
     try{
-      const detail=await localApi.addTradeFill({trade_id:activeTrade.metrics.trade_id,action:fillAction,price:fillPrice,quantity:fillQty,order_type:'MARKET',note:fillReason||null});
+      const detail=await localApi.addTradeFill({trade_id:activeTrade.metrics.trade_id,action:fillAction,price:fillPrice!,quantity:fillQty,order_type:'MARKET',note:fillReason||null});
       setActiveTrade(detail);setReviewQueue(null);setFillPrice(null);setFillQty(1);setFillReason('');
       const request=++reviewSelectionRequestRef.current;
       applyReview(null,detail.metrics.trade_id);setReviewVerifiedTradeId(null);setReviewFeedback('');
@@ -818,7 +818,7 @@ export function App(){
     if(blockMissing([...(newStop===null||!Number.isFinite(newStop)?[{id:'management.stop',label:'New stop price'}]:[]),...missingRequired([['management.reason',!!stopReason.trim()]])])){setStopFeedback('Complete the highlighted required stop fields.');return;}
     stopSavingRef.current=true;setStopSaving(true);setStopFeedback('Saving stop change…');
     try{
-      const detail=await localApi.moveTradeStop({trade_id:activeTrade.metrics.trade_id,stop_price:newStop,reason:stopReason||null});
+      const detail=await localApi.moveTradeStop({trade_id:activeTrade.metrics.trade_id,stop_price:newStop!,reason:stopReason||null});
       setActiveTrade(detail);setNewStop(null);setStopReason('');
       setMessage('Stop change saved as a new immutable risk snapshot.');
       setStopFeedback('Stop change saved.');
