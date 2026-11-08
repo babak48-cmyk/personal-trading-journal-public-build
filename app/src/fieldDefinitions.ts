@@ -1,5 +1,5 @@
 export type RequirementDefault = 'SYSTEM_REQUIRED'|'OPTIONAL'|'CONDITIONAL';
-export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview';
+export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview'|'Attachment';
 
 export type FieldDefinition = {
   id:string;
@@ -78,6 +78,9 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
     helpShort:'Number of contracts/shares in the initial entry fill.',helpExample:'3 contracts if the trade begins with three contracts.'},
   {id:'trade.plannedTarget',group:'Trade',label:'Planned target',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'The target you intended at entry, if you use a predefined target.',helpExample:'6463.00 for a long from 6451.00.',helpLong:'Leave it optional when the setup legitimately uses discretionary or structure-based exits.'},
+
+  {id:'attachment.caption',group:'Attachment',label:'Screenshot caption',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Optional explanation attached to a newly imported screenshot; make it Required only if every new screenshot should carry context.',helpExample:'Before entry: ES bid absorption at the level. Older screenshots keep their original captions.'},
 
   {id:'fill.reason',group:'Trade',label:'Fill reason',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Reason for this additional entry or exit fill, captured with its execution event rather than as a retrospective review.',helpExample:'Partial exit at first target; leave empty unless useful or explicitly configured Required.'},
