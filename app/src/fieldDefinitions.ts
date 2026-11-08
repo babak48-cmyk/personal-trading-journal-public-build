@@ -79,6 +79,11 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'trade.plannedTarget',group:'Trade',label:'Planned target',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'The target you intended at entry, if you use a predefined target.',helpExample:'6463.00 for a long from 6451.00.',helpLong:'Leave it optional when the setup legitimately uses discretionary or structure-based exits.'},
 
+  {id:'fill.reason',group:'Trade',label:'Fill reason',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Reason for this additional entry or exit fill, captured with its execution event rather than as a retrospective review.',helpExample:'Partial exit at first target; leave empty unless useful or explicitly configured Required.'},
+  {id:'management.reason',group:'Trade',label:'Stop management reason',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Why the stop was revised, separately from original stop price and thesis invalidation.',helpExample:'Moved to breakeven after structure changed; this does not overwrite the original risk snapshot.'},
+
   {id:'review.exitReason',group:'Review',label:'Exit reason',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Why the position was closed; record an observed reason, not a planned target.',helpExample:'STOP or TARGET, only when that describes the actual exit.'},
   {id:'review.exitNote',group:'Review',label:'Exit note',defaultRequirement:'OPTIONAL',systemLocked:false,
