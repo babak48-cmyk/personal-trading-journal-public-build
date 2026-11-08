@@ -5,7 +5,7 @@ import { attachmentCaptionIssue } from './attachmentCaptionValidation';
 import { planRevisionEvidenceIssues } from './planRevisionValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
-import { eligibleCustomFields, customFieldFocusId } from './customFieldStage';
+import { eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
 import { missingRequiredCustomValues } from './customFieldRequired';
 import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -832,7 +832,8 @@ export function App(){
         const customMissing=await missingRequiredCustomValues(localApi,'post-trade-review',activeTrade.metrics.trade_id);
         if(customMissing.length){
           setMessage('Save required Post-trade review custom fields before completing: '+customMissing.map(x=>x.label).join(', ')+'.');
-          focusRequiredCustomField(customMissing[0].fieldId,'post-trade-review',activeTrade.metrics.trade_id);
+          setNotebookPage('EXECUTION');
+          window.setTimeout(()=>focusRequiredCustomField(customMissing[0].fieldId,'post-trade-review',activeTrade.metrics.trade_id),120);
           return;
         }
       }catch(e){setMessage('Review not completed: required custom fields could not be verified. '+String(e));return;}
@@ -1124,9 +1125,9 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   </div></div>;
 }
 
-function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'premarket-plan'|'zone',ownerId:string){
-  // Switching Quick notebook pages and loading saved field definitions are asynchronous.
-  // Wait briefly for the correct owner-specific control instead of silently missing focus.
+function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStage,ownerId:string){
+  // Required values are checked against the canonical owner, including post-trade-review.
+  // The correct Quick notebook page must be visible before an editor can receive focus.
   const targetId=customFieldFocusId(ownerStage,ownerId,fieldId);
   function focusWhenReady(attempt:number){
     const target=document.getElementById(targetId);
@@ -1135,7 +1136,11 @@ function focusRequiredCustomField(fieldId:string,ownerStage:'session'|'premarket
       return;
     }
     const disclosure=target.closest('details');
-    if(disclosure&&!disclosure.open)disclosure.open=true;
+    if(disclosure&&!disclosure.open && disclosure.getClientRects().length>0)disclosure.open=true;
+    if(target.getClientRects().length===0){
+      if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
+      return;
+    }
     target.scrollIntoView({behavior:'smooth',block:'center'});
     target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
   }
