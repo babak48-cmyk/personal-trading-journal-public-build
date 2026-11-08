@@ -225,7 +225,7 @@ describe('All-input connection audit and mandatory presentation invariants', () 
     expect(summary.CONNECTED+summary.VISIBILITY_ONLY+summary.PROTECTED+summary.PENDING).toBe(report.length);
     expect(report.find(x=>x.id==='candidate.trendRelationship')?.status).toBe('PROTECTED');
     expect(report.find(x=>x.id==='review.decisionQuality')?.status).toBe('CONNECTED');
-    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('VISIBILITY_ONLY');
+    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('CONNECTED');
   });
 
   it('never conceals user-required, system-required or active conditional fields in Quick or Detailed', () => {
