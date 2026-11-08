@@ -1409,7 +1409,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
       </label>
       {f.help_text&&<p className="subtle">{f.help_text}</p>}
       <button type="button" disabled={busy||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??''))} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
-      {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}}
+      {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}
     </div>)}
     {message&&<p role="status" className="subtle">{message}</p>}
   </details>;
