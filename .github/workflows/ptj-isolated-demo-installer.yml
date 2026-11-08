@@ -6,6 +6,8 @@ on:
       - build/package-a-cohesive-windows-demo-2026-11-08
     paths:
       - '.github/workflows/ptj-isolated-demo-installer.yml'
+      - 'app/src/fieldInventory.test.ts'
+      - 'app/src/fieldManagerSafety.test.ts'
 permissions:
   contents: read
 concurrency:
