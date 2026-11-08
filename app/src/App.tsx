@@ -122,6 +122,7 @@ export function App(){
   const [draftZonePage,setDraftZonePage]=useState(0);
   const [draftPlanPage,setDraftPlanPage]=useState(0);
   const [draftBusy,setDraftBusy]=useState(false);
+  const draftSaveInFlightRef=useRef(false);
   const confirmingPlanRef=useRef(false);
   const [confirmingPlan,setConfirmingPlan]=useState(false);
   const [draftSaveFeedback,setDraftSaveFeedback]=useState('');
@@ -230,6 +231,8 @@ export function App(){
   const [tradeReview,setTradeReview]=useState<TradeReview|null>(null);
   const [reviewOwnerTradeId,setReviewOwnerTradeId]=useState<string|null>(null);
   const reviewSelectionRequestRef=useRef(0);
+  // Review status is trusted only after the relevant trade's persisted state was read.
+  const [reviewVerifiedTradeId,setReviewVerifiedTradeId]=useState<string|null>(null);
   const reviewSavingRef=useRef(false);
   const [reviewSaving,setReviewSaving]=useState(false);
   const [reviewFeedback,setReviewFeedback]=useState('');
@@ -420,8 +423,8 @@ export function App(){
   }
 
   async function saveAndAdvanceDraft(nextStep:number){
-    if(!active||active.status!=='DRAFT'||draftBusy)return;
-    setDraftBusy(true);
+    if(!active||active.status!=='DRAFT'||draftSaveInFlightRef.current)return;
+    draftSaveInFlightRef.current=true;setDraftBusy(true);
     setDraftSaveFeedback('');
     try {
       await localApi.saveInitialPlanDraft(active.session_id,{
@@ -431,7 +434,7 @@ export function App(){
       setMessage('Draft saved to local database.');
       setDraftSaveFeedback('Draft saved successfully. You can safely continue; the initial plan is not yet confirmed.');
     }catch(e){setMessage('Draft not saved: '+String(e));setDraftSaveFeedback('Draft was NOT saved. Review the error in the header before retrying.');}
-    finally{setDraftBusy(false);}
+    finally{draftSaveInFlightRef.current=false;setDraftBusy(false);}
   }
 
   async function saveDraftSessionSetup(){
@@ -511,6 +514,7 @@ export function App(){
     setStopReason('');
 
     reviewSelectionRequestRef.current++;
+    setReviewVerifiedTradeId(null);
     setReviewOwnerTradeId(null);setReviewFeedback('');
     setTradeReview(null);
     setReviewDecisionQuality('');
@@ -777,7 +781,7 @@ export function App(){
     try{
       const detail=await localApi.createTradeWithEntry({decision_id:pendingTradeDecision.decision_id,entry_price:entryPrice,stop_price:stopPrice,quantity:tradeQty,order_type:'MARKET',planned_target_price:plannedTarget});
       reviewSelectionRequestRef.current++;
-      setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);setReviewFeedback('');
+      setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);setReviewVerifiedTradeId(detail.metrics.trade_id);setReviewFeedback('');
       setPendingTradeDecision(null);setReviewQueue(null);
       setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
@@ -793,12 +797,12 @@ export function App(){
       const detail=await localApi.addTradeFill({trade_id:activeTrade.metrics.trade_id,action:fillAction,price:fillPrice,quantity:fillQty,order_type:'MARKET',note:fillReason||null});
       setActiveTrade(detail);setReviewQueue(null);setFillPrice(null);setFillQty(1);setFillReason('');
       const request=++reviewSelectionRequestRef.current;
-      applyReview(null,detail.metrics.trade_id);setReviewFeedback('');
+      applyReview(null,detail.metrics.trade_id);setReviewVerifiedTradeId(null);setReviewFeedback('');
       if(detail.metrics.status==='CLOSED'){
         try{const review=await localApi.getTradeReview(detail.metrics.trade_id);
-          if(reviewSelectionRequestRef.current===request)applyReview(review,detail.metrics.trade_id);
+          if(reviewSelectionRequestRef.current===request){applyReview(review,detail.metrics.trade_id);setReviewVerifiedTradeId(detail.metrics.trade_id);}
         }catch(e){if(reviewSelectionRequestRef.current===request)setReviewFeedback('Review status could not be refreshed. Reopen trade before completing. '+String(e));}
-      }
+      }else if(reviewSelectionRequestRef.current===request){setReviewVerifiedTradeId(detail.metrics.trade_id);}
       const success=fillAction==='EXIT'?'Exit fill recorded.':'Additional entry fill recorded.';
       setMessage(success);setFillFeedback(success);
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
@@ -846,21 +850,21 @@ export function App(){
     if(!zone){setMessage('The original Zone is not in the current plan. Check its history before a new decision.');return;}
     if(pendingTradeDecision){setMessage('A saved TRADE decision is awaiting execution. Finish or inspect it before creating another.');return;}
     reviewSelectionRequestRef.current++;
-    setActiveTrade(null);applyReview(null,null);setReviewFeedback('');
+    setActiveTrade(null);applyReview(null,null);setReviewVerifiedTradeId(null);setReviewFeedback('');
     setQuickZoneId(zone.candidate_id);
     void openDecision(zone,'TRADE');
   }
   async function openTradeDetail(t:TradeMetrics){
     const request=++reviewSelectionRequestRef.current;
     setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
-    setActiveTrade(null);applyReview(null,t.trade_id);setReviewFeedback('');
+    setActiveTrade(null);applyReview(null,t.trade_id);setReviewVerifiedTradeId(null);setReviewFeedback('');
     try{
       const detail=await localApi.getTradeDetail(t.trade_id);
       if(reviewSelectionRequestRef.current!==request)return;
       setActiveTrade(detail);
       const [review,ruleCheck]=await Promise.all([localApi.getTradeReview(t.trade_id),localApi.getTradeRuleCheck(t.trade_id)]);
       if(reviewSelectionRequestRef.current!==request)return;
-      applyReview(review,t.trade_id);applyRuleCheck(ruleCheck);
+      applyReview(review,t.trade_id);setReviewVerifiedTradeId(t.trade_id);applyRuleCheck(ruleCheck);
     }catch(e){if(reviewSelectionRequestRef.current===request){setReviewFeedback('Review state could not be verified. Reopen trade before saving.');setMessage(String(e));}}
   }
   function toggleReviewMistake(id:string){setReviewMistakes(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
@@ -900,7 +904,7 @@ export function App(){
   }
   async function saveReview(finalize=false){
     if(!activeTrade||reviewSavingRef.current)return;
-    if(reviewOwnerTradeId!==activeTrade.metrics.trade_id){setReviewFeedback('Review state is refreshing; reopen this trade before saving.');return;}
+    if(reviewOwnerTradeId!==activeTrade.metrics.trade_id||reviewVerifiedTradeId!==activeTrade.metrics.trade_id){setReviewFeedback('Review status is not verified. Reopen this trade before saving.');return;}
     if(isCompletedReviewForTrade(tradeReview,reviewOwnerTradeId,activeTrade.metrics.trade_id)){setReviewFeedback('Review already completed and locked.');return;}
     const savingTradeId=activeTrade.metrics.trade_id;
     const reviewRequestAtStart=reviewSelectionRequestRef.current;
