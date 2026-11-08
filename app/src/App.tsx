@@ -210,6 +210,19 @@ export function App(){
   const planRevisionSavingRef=useRef(false);
   const [planRevisionSaving,setPlanRevisionSaving]=useState(false);
   const [planRevisionFeedback,setPlanRevisionFeedback]=useState('');
+  // Async mutation guards prevent double-clicks from writing duplicate audit events.
+  const draftSetupSavingRef=useRef(false);
+  const [draftSetupSaving,setDraftSetupSaving]=useState(false);
+  const [draftSetupFeedback,setDraftSetupFeedback]=useState('');
+  const zoneRevisionSavingRef=useRef(false);
+  const [zoneRevisionSaving,setZoneRevisionSaving]=useState(false);
+  const [zoneRevisionFeedback,setZoneRevisionFeedback]=useState('');
+  const liveZoneSavingRef=useRef(false);
+  const [liveZoneSaving,setLiveZoneSaving]=useState(false);
+  const [liveZoneFeedback,setLiveZoneFeedback]=useState('');
+  const zoneStatusSavingRef=useRef(false);
+  const [zoneStatusSavingId,setZoneStatusSavingId]=useState<string|null>(null);
+  const [zoneStatusFeedback,setZoneStatusFeedback]=useState('');
   const [newStop,setNewStop]=useState<number|null>(null);
   const [stopReason,setStopReason]=useState('');
   const [mistakeTypes,setMistakeTypes]=useState<MistakeType[]>([]);
@@ -421,11 +434,15 @@ export function App(){
   }
 
   async function saveDraftSessionSetup(){
-    if(!active||active.status!=='DRAFT')return;
+    if(!active||active.status!=='DRAFT'||draftSetupSavingRef.current)return;
+    draftSetupSavingRef.current=true;setDraftSetupSaving(true);setDraftSetupFeedback('Saving session settings…');
     try{
-      const s=await localApi.updateDraftSession({session_id:active.session_id,session_date:date,instrument_symbol:instrument,environment});
-      setActive(s);setShowDraftSetup(false);setDraftStep(1);setMessage('Draft session setup updated.');await refresh();
-    }catch(e){setMessage(String(e));}
+      const saved=await localApi.updateDraftSession({session_id:active.session_id,session_date:date,instrument_symbol:instrument,environment});
+      setActive(saved);setShowDraftSetup(false);setDraftStep(1);setMessage('Draft session setup updated.');
+      setDraftSetupFeedback('Session settings saved.');
+      try{await refresh();}catch(e){setMessage('Settings saved, but list refresh failed: '+String(e));}
+    }catch(e){setMessage(String(e));setDraftSetupFeedback('Save not confirmed. Inspect session settings before retrying.');}
+    finally{draftSetupSavingRef.current=false;setDraftSetupSaving(false);}
   }
 
   function beginEditDraftSetup(){
@@ -614,29 +631,42 @@ export function App(){
   function beginCandidateEdit(c:CurrentCandidate){setEditing(c);setEditIntent(c.directional_intent);setEditFrom(c.price_from??null);setEditTo(c.price_to??null);setEditSingle(c.reference_price??null);setEditReason('');setEditSourceIds(c.source_type_ids);}
   function toggleEditSource(id:string){setEditSourceIds(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);}
   async function saveCandidateRevision(){
-    if(!editing)return;
+    if(!editing||zoneRevisionSavingRef.current)return;
+    if(!editReason.trim()){setZoneRevisionFeedback('Reason for revision is required.');return;}
+    zoneRevisionSavingRef.current=true;setZoneRevisionSaving(true);setZoneRevisionFeedback('Saving zone revision…');
     try{
       await localApi.reviseCandidate({candidate_id:editing.candidate_id,directional_intent:editIntent,trend_relationship:editing.trend_relationship??null,price_mode:editing.price_mode,price_from:editFrom,price_to:editTo,reference_price:editSingle,required_conditions:editing.required_conditions,invalidation_conditions:editing.invalidation_conditions,notes:editing.notes??null,change_type:'UPDATE',change_reason:editReason,sources:editSourceIds.map(source_type_id=>({source_type_id}))});
-      setEditing(null);setMessage('Zone revision saved without overwriting the original.');await refreshPlan();
-    }catch(e){setMessage(String(e));}
+      setEditing(null);setMessage('Zone revision saved without overwriting the original.');setZoneRevisionFeedback('Zone revision saved.');
+      try{await refreshPlan();}catch(e){setMessage('Revision saved, but plan refresh failed: '+String(e));}
+    }catch(e){setMessage(String(e));setZoneRevisionFeedback('Revision not confirmed. Inspect zone history before retrying.');}
+    finally{zoneRevisionSavingRef.current=false;setZoneRevisionSaving(false);}
   }
 
   async function setStatus(c:CurrentCandidate,status:string){
+    if(zoneStatusSavingRef.current)return;
+    let reason:string|null=null;
+    if(['INVALIDATED','CANCELLED','EXPIRED'].includes(status))reason=window.prompt('Reason (optional)')||null;
+    zoneStatusSavingRef.current=true;setZoneStatusSavingId(c.candidate_id);setZoneStatusFeedback('Saving zone status…');
     try{
-      let reason:string|null=null;
-      if(['INVALIDATED','CANCELLED','EXPIRED'].includes(status))reason=window.prompt('Reason (optional)')||null;
-      await localApi.addCandidateStatus(c.candidate_id,status,reason);setMessage(`${c.label||'Zone'} → ${status}`);await refreshPlan();
-    }catch(e){setMessage(String(e));}
+      await localApi.addCandidateStatus(c.candidate_id,status,reason);
+      setMessage(`${c.label||'Zone'} → ${status}`);setZoneStatusFeedback('Zone status saved: '+status+'.');
+      try{await refreshPlan();}catch(e){setMessage('Status saved, but plan refresh failed: '+String(e));}
+    }catch(e){setMessage(String(e));setZoneStatusFeedback('Status not confirmed. Inspect zone timeline before retrying.');}
+    finally{zoneStatusSavingRef.current=false;setZoneStatusSavingId(null);}
   }
 
   async function addLiveZone(){
-    if(!active)return;
-    if(blockMissing(planRevisionEvidenceIssues(requirementOverrides,liveCandidateEvidence)))return;
+    if(!active||liveZoneSavingRef.current)return;
+    if(blockMissing(planRevisionEvidenceIssues(requirementOverrides,liveCandidateEvidence))){setLiveZoneFeedback('Complete highlighted required fields.');return;}
+    if(!liveCandidateReason.trim()){setLiveZoneFeedback('Reason for adding this zone is required.');return;}
+    liveZoneSavingRef.current=true;setLiveZoneSaving(true);setLiveZoneFeedback('Adding new zone…');
     try{
       await localApi.addLiveCandidate({session_id:active.session_id,why_changed:liveCandidateReason,new_evidence_summary:liveCandidateEvidence||null,candidate:cleanCandidate(liveCandidate)});
       setLiveCandidate(emptyCandidate('DURING_SESSION'));setLiveCandidateReason('');setLiveCandidateEvidence('');setShowLiveCandidate(false);
-      setMessage('New live zone added through a new immutable plan revision.');await refreshPlan();
-    }catch(e){setMessage(String(e));}
+      setMessage('New live zone added through a new immutable plan revision.');setLiveZoneFeedback('New zone saved.');
+      try{await refreshPlan();}catch(e){setMessage('Zone saved, but plan refresh failed: '+String(e));}
+    }catch(e){setMessage(String(e));setLiveZoneFeedback('Zone not confirmed. Inspect plan timeline before retrying.');}
+    finally{liveZoneSavingRef.current=false;setLiveZoneSaving(false);}
   }
 
   async function openEvidence(c:CurrentCandidate){
@@ -1011,7 +1041,7 @@ export function App(){
         {active && active.status==='DRAFT' && !plan && <>
           <div className="stageNav"><strong>Planning: {['','Initial Plan','Zones','Review & Confirm'][draftStep]}</strong><button onClick={beginEditDraftSetup}>Edit session setup</button><button onClick={newSession}>Start another session</button><span>Draft: Save & Continue persists changes locally.</span></div>
           {!quickMode&&<div className="rowActions"><button onClick={()=>saveAndAdvanceDraft(1)} disabled={draftBusy}>1. Plan</button><button onClick={()=>saveAndAdvanceDraft(2)} disabled={draftBusy}>2. Zones</button><button onClick={()=>saveAndAdvanceDraft(3)} disabled={draftBusy}>3. Review</button></div>}
-          {showDraftSetup&&<div className="panel"><div className="panelTitle"><div><h2>Edit session setup</h2><p className="subtle">Available only while the session is still a draft.</p></div><button onClick={()=>setShowDraftSetup(false)}>Close</button></div><div className="formGrid"><label>Date <FieldHelp id="session.date"/><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Instrument <FieldHelp id="session.instrument" value={instrument}/><select value={instrument} onChange={e=>setInstrument(e.target.value)}>{instruments.map(x=><option key={x.instrument_id} value={x.symbol}>{x.symbol}{x.display_name?` — ${x.display_name}`:''}</option>)}</select></label><label>Environment <FieldHelp id="session.environment" value={environment}/><select value={environment} onChange={e=>setEnvironment(e.target.value as any)}><option value="DEMO">Demo</option><option value="FORWARD_TEST">Forward test</option><option value="REAL">Real</option></select></label></div><div className="rowActions"><button onClick={()=>setShowDraftSetup(false)}>Cancel</button><button className="primary" onClick={saveDraftSessionSetup}>Save changes & return to plan</button></div></div>}
+          {showDraftSetup&&<div className="panel"><div className="panelTitle"><div><h2>Edit session setup</h2><p className="subtle">Available only while the session is still a draft.</p></div><button onClick={()=>setShowDraftSetup(false)}>Close</button></div><div className="formGrid"><label>Date <FieldHelp id="session.date"/><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Instrument <FieldHelp id="session.instrument" value={instrument}/><select value={instrument} onChange={e=>setInstrument(e.target.value)}>{instruments.map(x=><option key={x.instrument_id} value={x.symbol}>{x.symbol}{x.display_name?` — ${x.display_name}`:''}</option>)}</select></label><label>Environment <FieldHelp id="session.environment" value={environment}/><select value={environment} onChange={e=>setEnvironment(e.target.value as any)}><option value="DEMO">Demo</option><option value="FORWARD_TEST">Forward test</option><option value="REAL">Real</option></select></label></div><div className="rowActions"><button onClick={()=>setShowDraftSetup(false)}>Cancel</button><button className="primary" disabled={draftSetupSaving} aria-busy={draftSetupSaving} onClick={saveDraftSessionSetup}>{draftSetupSaving?'Saving…':'Save changes & return to plan'}</button><span role="status" aria-live="polite">{draftSetupFeedback}</span></div></div>}
           <div onChangeCapture={()=>{setDraftDirty(true);setDraftSaveFeedback('')}}>
           {draftSaveFeedback&&<p role="status" aria-live="polite" className="draftSaveFeedback">{draftSaveFeedback}</p>}
           {validationErrors.some(id=>id.startsWith('candidate-'))&&draftStep===2&&<p role="alert" className="validationSummary">Required Zone fields are missing or invalid. Check the highlighted price/conditions below before confirming the plan.</p>}
@@ -1050,18 +1080,18 @@ export function App(){
 
             {showPlanUpdate&&<div className="inlineEditor"><h3>New plan revision</h3><div className="formGrid"><label>Bias change<select value={newBias} onChange={e=>setNewBias(e.target.value)}><option value="">Keep current</option>{['LONG','SHORT','NEUTRAL','MIXED','UNKNOWN'].map(x=><option key={x}>{x}</option>)}</select></label><label>Why did the plan change? <textarea value={planReason} onChange={e=>setPlanReason(e.target.value)} placeholder="Required"/></label>{isFieldPresented('planRevision.evidence',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="planRevision.evidence" className={invalidClass('planRevision.evidence')}>{fieldText['planRevision.evidence']?.label?.trim()||'New evidence summary'} <small>{requirementLabel('planRevision.evidence',requirementOverrides)}</small><textarea value={planEvidence} onChange={e=>{setPlanEvidence(e.target.value);clearValidation('planRevision.evidence')}} placeholder="Observed context for this revision"/></label>}</div><div className="rowActions"><button onClick={()=>setShowPlanUpdate(false)}>Cancel</button><button className="primary" disabled={planRevisionSaving||!planReason.trim()} aria-busy={planRevisionSaving} onClick={savePlanUpdate}>{planRevisionSaving?'Saving…':'Create revision'}</button><span role="status" aria-live="polite">{planRevisionFeedback}</span></div></div>}
 
-            {showLiveCandidate&&<div className="inlineEditor"><h3>Add a new zone during the live session</h3><CandidateEditor candidate={liveCandidate} patch={p=>setLiveCandidate(c=>({...c,...p}))} groupedSources={groupedSources} selected={liveCandidate.sources.map(s=>s.source_type_id)} toggleSource={toggleLiveSource} tickStep={tickStep} requirementOverrides={requirementOverrides} fieldVisibility={fieldVisibility} fieldPlacements={fieldPlacements} fieldText={fieldText} fieldOrder={fieldOrder} quickMode={quickMode} validationPrefix="liveCandidate" validationErrors={validationErrors} clearValidation={clearValidation}/><div className="formGrid"><label>Why is this new zone being added?<textarea value={liveCandidateReason} onChange={e=>setLiveCandidateReason(e.target.value)} placeholder="Required — e.g. new structure / new liquidity information"/></label>{isFieldPresented('planRevision.evidence',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="planRevision.evidence" className={invalidClass('planRevision.evidence')}>{fieldText['planRevision.evidence']?.label?.trim()||'New evidence summary'} <small>{requirementLabel('planRevision.evidence',requirementOverrides)}</small><textarea value={liveCandidateEvidence} onChange={e=>{setLiveCandidateEvidence(e.target.value);clearValidation('planRevision.evidence')}} placeholder="Observed context for adding this Zone"/></label>}</div><div className="rowActions"><button onClick={()=>setShowLiveCandidate(false)}>Cancel</button><button className="primary" disabled={!liveCandidateReason.trim()} onClick={addLiveZone}>Add through new plan revision</button></div></div>}
+            {showLiveCandidate&&<div className="inlineEditor"><h3>Add a new zone during the live session</h3><CandidateEditor candidate={liveCandidate} patch={p=>setLiveCandidate(c=>({...c,...p}))} groupedSources={groupedSources} selected={liveCandidate.sources.map(s=>s.source_type_id)} toggleSource={toggleLiveSource} tickStep={tickStep} requirementOverrides={requirementOverrides} fieldVisibility={fieldVisibility} fieldPlacements={fieldPlacements} fieldText={fieldText} fieldOrder={fieldOrder} quickMode={quickMode} validationPrefix="liveCandidate" validationErrors={validationErrors} clearValidation={clearValidation}/><div className="formGrid"><label>Why is this new zone being added?<textarea value={liveCandidateReason} onChange={e=>setLiveCandidateReason(e.target.value)} placeholder="Required — e.g. new structure / new liquidity information"/></label>{isFieldPresented('planRevision.evidence',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="planRevision.evidence" className={invalidClass('planRevision.evidence')}>{fieldText['planRevision.evidence']?.label?.trim()||'New evidence summary'} <small>{requirementLabel('planRevision.evidence',requirementOverrides)}</small><textarea value={liveCandidateEvidence} onChange={e=>{setLiveCandidateEvidence(e.target.value);clearValidation('planRevision.evidence')}} placeholder="Observed context for adding this Zone"/></label>}</div><div className="rowActions"><button onClick={()=>setShowLiveCandidate(false)}>Cancel</button><button className="primary" disabled={liveZoneSaving} aria-busy={liveZoneSaving} onClick={addLiveZone}>{liveZoneSaving?'Adding…':'Add through new plan revision'}</button><span role="status" aria-live="polite">{liveZoneFeedback}</span></div></div>}
 
             <div id="journal-zone-actions">{quickMode&&plan.candidates.length>1&&<div className="rowActions"><label htmlFor="notebook-zone">Zone on this page</label><select id="notebook-zone" value={quickZoneId||plan.candidates[0]?.candidate_id||""} onChange={e=>setQuickZoneId(e.target.value)}>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||"Unnamed zone"} · {c.directional_intent}</option>)}</select></div>}<div className="planCards">{plan.candidates.filter(c=>!quickMode||c.candidate_id===(quickZoneId||plan.candidates[0]?.candidate_id)).map(c=><article className={`zoneSummary intent-${c.directional_intent.toLowerCase()}`} key={c.candidate_id}><div className="zoneHead"><strong>{c.directional_intent} · {c.label||'Unnamed zone'}</strong><span className={`statusPill status-${c.current_status.toLowerCase()}`}>{c.current_status}</span></div><span>{c.price_mode==='RANGE'?`${c.price_from} – ${c.price_to}`:c.price_mode==='SINGLE'?c.reference_price:'Price not fixed'}</span><p>{c.sources.join(' · ')||'No source recorded'}</p>{c.required_conditions.length>0&&<small>Need: {c.required_conditions.join(' · ')}</small>}
               <OwnerCustomSelections key={'candidate-options-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="candidate" quickMode={quickMode}/>
               <OwnerTypedCustomFields key={'candidate-typed-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="candidate" quickMode={quickMode}/>
               <OwnerCustomSelections key={'zone-options-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="zone" quickMode={quickMode}/>
               <OwnerTypedCustomFields key={'zone-typed-'+c.candidate_id} ownerId={c.candidate_id} ownerStage="zone" quickMode={quickMode}/>
-              <div className="quickStatus"><button onClick={()=>setStatus(c,'WATCHING')}>Watching</button><button onClick={()=>setStatus(c,'REACHED')}>Reached</button><button onClick={()=>setStatus(c,'VALID')}>Valid</button><button onClick={()=>setStatus(c,'INVALIDATED')}>Invalid</button><button onClick={()=>setStatus(c,'CANCELLED')}>Cancel</button>{['INVALIDATED','CANCELLED','EXPIRED'].includes(c.current_status)&&<button onClick={()=>setStatus(c,'PLANNED')}>Reactivate</button>}</div><div className="zoneActions"><button onClick={()=>openDecision(c,'TRADE')} className="decisionTrade">Trade</button><button onClick={()=>openDecision(c,'NO_TRADE')}>No-trade</button><button onClick={()=>openDecision(c,'MISSED')}>Missed</button><button onClick={()=>openEvidence(c)}>+ Evidence</button>{!quickMode&&<button onClick={()=>beginCandidateEdit(c)}>Revise zone</button>}</div>{(candidateDecisions[c.candidate_id]?.length??0)>0&&<small className="decisionCount">{candidateDecisions[c.candidate_id].length} decision(s) recorded</small>}</article>)}</div></div>
+              <div className="quickStatus"><button disabled={zoneStatusSavingId!==null} aria-busy={zoneStatusSavingId===c.candidate_id} onClick={()=>setStatus(c,'WATCHING')}>Watching</button><button disabled={zoneStatusSavingId!==null} onClick={()=>setStatus(c,'REACHED')}>Reached</button><button disabled={zoneStatusSavingId!==null} onClick={()=>setStatus(c,'VALID')}>Valid</button><button disabled={zoneStatusSavingId!==null} onClick={()=>setStatus(c,'INVALIDATED')}>Invalid</button><button disabled={zoneStatusSavingId!==null} onClick={()=>setStatus(c,'CANCELLED')}>Cancel</button>{['INVALIDATED','CANCELLED','EXPIRED'].includes(c.current_status)&&<button disabled={zoneStatusSavingId!==null} onClick={()=>setStatus(c,'PLANNED')}>Reactivate</button>}{zoneStatusSavingId===c.candidate_id&&<span role="status" aria-live="polite">{zoneStatusFeedback}</span>}</div><div className="zoneActions"><button onClick={()=>openDecision(c,'TRADE')} className="decisionTrade">Trade</button><button onClick={()=>openDecision(c,'NO_TRADE')}>No-trade</button><button onClick={()=>openDecision(c,'MISSED')}>Missed</button><button onClick={()=>openEvidence(c)}>+ Evidence</button>{!quickMode&&<button onClick={()=>beginCandidateEdit(c)}>Revise zone</button>}</div>{(candidateDecisions[c.candidate_id]?.length??0)>0&&<small className="decisionCount">{candidateDecisions[c.candidate_id].length} decision(s) recorded</small>}</article>)}</div></div>
             <p className="locked">Confirmed records are never overwritten. Updates create new immutable revisions or timestamped events.</p>
           </div>
 
-          {editing&&<div className="panel"><div className="panelTitle"><h2>Revise {editing.label||'zone'}</h2><button onClick={()=>setEditing(null)}>Close</button></div><div className="formGrid"><label>Intent<select value={editIntent} onChange={e=>setEditIntent(e.target.value)}>{['LONG','SHORT','CONDITIONAL','WATCH','UNKNOWN'].map(x=><option key={x}>{x}</option>)}</select></label>{editing.price_mode==='RANGE'&&<><label>From<input type="number" step={tickStep} value={editFrom??''} onChange={e=>setEditFrom(e.target.value?Number(e.target.value):null)}/></label><label>To<input type="number" step={tickStep} value={editTo??''} onChange={e=>setEditTo(e.target.value?Number(e.target.value):null)}/></label></>}{editing.price_mode==='SINGLE'&&<label>Price<input type="number" step={tickStep} value={editSingle??''} onChange={e=>setEditSingle(e.target.value?Number(e.target.value):null)}/></label>}<label>Reason for revision<textarea value={editReason} onChange={e=>setEditReason(e.target.value)} placeholder="Required"/></label></div><SourcePicker grouped={groupedSources} selected={editSourceIds} toggle={toggleEditSource}/><button className="primary" disabled={!editReason.trim()} onClick={saveCandidateRevision}>Save new zone revision</button></div>}
+          {editing&&<div className="panel"><div className="panelTitle"><h2>Revise {editing.label||'zone'}</h2><button onClick={()=>setEditing(null)}>Close</button></div><div className="formGrid"><label>Intent<select value={editIntent} onChange={e=>setEditIntent(e.target.value)}>{['LONG','SHORT','CONDITIONAL','WATCH','UNKNOWN'].map(x=><option key={x}>{x}</option>)}</select></label>{editing.price_mode==='RANGE'&&<><label>From<input type="number" step={tickStep} value={editFrom??''} onChange={e=>setEditFrom(e.target.value?Number(e.target.value):null)}/></label><label>To<input type="number" step={tickStep} value={editTo??''} onChange={e=>setEditTo(e.target.value?Number(e.target.value):null)}/></label></>}{editing.price_mode==='SINGLE'&&<label>Price<input type="number" step={tickStep} value={editSingle??''} onChange={e=>setEditSingle(e.target.value?Number(e.target.value):null)}/></label>}<label>Reason for revision<textarea value={editReason} onChange={e=>setEditReason(e.target.value)} placeholder="Required"/></label></div><SourcePicker grouped={groupedSources} selected={editSourceIds} toggle={toggleEditSource}/><button className="primary" disabled={zoneRevisionSaving} aria-busy={zoneRevisionSaving} onClick={saveCandidateRevision}>{zoneRevisionSaving?'Saving…':'Save new zone revision'}</button><span role="status" aria-live="polite">{zoneRevisionFeedback}</span></div>}
 
           </div>
           <div style={{display:!quickMode||notebookPage==='DECISION'?'block':'none'}}>
