@@ -15,6 +15,18 @@ export function quickValidationRoute(
   hasConfirmedPlan:boolean,
 ):QuickValidationRoute {
   const empty:QuickValidationRoute={notebookPage:null,draftStep:null,draftPlanPage:null,draftZonePage:null};
+  // Custom field errors contain stage + immutable owner/field identifiers.
+  // Stage routing remains separate from the stored values and history.
+  if(validationId.startsWith('custom-required-premarket-plan-')){
+    return isDraftSession?{...empty,draftStep:1,draftPlanPage:0}
+      :hasConfirmedPlan?{...empty,notebookPage:'PLAN'}:empty;
+  }
+  if(validationId.startsWith('custom-required-candidate-')||validationId.startsWith('custom-required-zone-')){
+    return hasConfirmedPlan?{...empty,notebookPage:'PLAN'}:empty;
+  }
+  if(validationId.startsWith('custom-required-trade-')||validationId.startsWith('custom-required-post-trade-review-')){
+    return hasConfirmedPlan?{...empty,notebookPage:'EXECUTION'}:empty;
+  }
   const candidate=validationId.match(/^candidate-(\d+)\./);
   if(isDraftSession && candidate){
     const index=Number(candidate[1]);
