@@ -307,16 +307,45 @@ pub fn ensure_default_workspace(conn: &Connection) -> Result<String, AppError> {
     Ok(workspace_id)
 }
 
+// Built-in catalog only. A symbol is inserted at most once; existing edits,
+// user-defined symbols, disabled instruments, and historical Session snapshots
+// are never rewritten. For an existing installation new presets append after
+// the trader's current instrument ordering, rather than renumbering it.
+const DEFAULT_INSTRUMENT_PROFILES: &[(&str,&str,&str,f64,f64,&str,&str)] = &[
+    ("instrument-ES","ES","E-mini S&P 500 Futures",0.25,50.0,"USD","FUTURES"),
+    ("instrument-GC","GC","Gold Futures (COMEX)",0.10,100.0,"USD","FUTURES"),
+    ("instrument-NQ","NQ","E-mini Nasdaq-100 Futures",0.25,20.0,"USD","FUTURES"),
+    ("instrument-RTY","RTY","E-mini Russell 2000 Futures",0.10,50.0,"USD","FUTURES"),
+    ("instrument-YM","YM","E-mini Dow Jones Futures",1.0,5.0,"USD","FUTURES"),
+    ("instrument-SI","SI","Silver Futures (COMEX, 5,000 oz)",0.005,5000.0,"USD","FUTURES"),
+    ("instrument-CL","CL","WTI Crude Oil Futures (NYMEX, 1,000 bbl)",0.01,1000.0,"USD","FUTURES"),
+    ("instrument-AAPL","AAPL","Apple Inc. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-MSFT","MSFT","Microsoft Corp. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-NVDA","NVDA","NVIDIA Corp. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-AMZN","AMZN","Amazon.com Inc. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-GOOGL","GOOGL","Alphabet Inc. Class A — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-META","META","Meta Platforms Inc. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-TSLA","TSLA","Tesla Inc. — US stock",0.01,1.0,"USD","STOCK"),
+];
+
 fn seed_default_instruments(conn: &Connection, workspace_id: &str) -> Result<(), AppError> {
-    let items = [
-        ("instrument-ES","ES","E-mini S&P 500",0.25,50.0,"USD","FUTURES",1_i64),
-        ("instrument-GC","GC","Gold Futures",0.10,100.0,"USD","FUTURES",2_i64),
-    ];
-    for (id,symbol,name,tick,point,currency,market_type,order) in items {
-        conn.execute(
-            "INSERT OR IGNORE INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES(?1,?2,?3,?4,?5,?6,?7,1,?8,?9,0)",
-            params![id,workspace_id,symbol,name,tick,point,currency,market_type,order],
+    // This is additive reference data, not a schema migration. The previous
+    // defaults and every user-created instrument keep their original identity.
+    let mut next_order:i64=conn.query_row(
+        "SELECT COALESCE(MAX(display_order),0)+1 FROM instruments WHERE workspace_id=?1",
+        [workspace_id],|row|row.get(0)
+    )?;
+    for &(id,symbol,name,tick,point,currency,market_type) in DEFAULT_INSTRUMENT_PROFILES {
+        let exists:bool=conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM instruments WHERE workspace_id=?1 AND (instrument_id=?2 OR symbol=?3))",
+            params![workspace_id,id,symbol],|row|row.get(0)
         )?;
+        if exists {continue;}
+        let created=conn.execute(
+            "INSERT OR IGNORE INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES(?1,?2,?3,?4,?5,?6,?7,1,?8,?9,0)",
+            params![id,workspace_id,symbol,name,tick,point,currency,market_type,next_order],
+        )?;
+        if created==1 {next_order+=1;}
     }
     Ok(())
 }
