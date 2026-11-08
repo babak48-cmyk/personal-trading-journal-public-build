@@ -6,6 +6,7 @@ const def=(id:string,stage:string,type:string,required=true,active=true):CustomF
  field_id:id,label:id,stage,field_type:type,required,active,help_text:'',display_order:0,
 });
 const all=[def('s-zero','session','NUMBER'),def('s-false','session','BOOLEAN'),def('s-empty','session','TEXT'),
+ def('c-context','candidate','TEXT'),def('t-context','trade','TEXT'),
  def('z-pick','zone','SINGLE_SELECT'),def('z-date','zone','DATE'),def('z-unused','zone','TEXT',false),
  def('z-inactive','zone','NUMBER',true,false),
  def('p-required','premarket-plan','TEXT'),
@@ -22,6 +23,26 @@ const reader:CustomValueReader={
 describe('custom field semantic boundary required check',()=>{
  it('accepts persisted numeric zero and boolean false, reports only missing session text',async()=>{
   expect((await missingRequiredCustomValues(reader,'session','s1')).map(x=>x.id)).toEqual(['s-empty']);
+ });
+ it('keeps Candidate and Zone independently required although they refer to the same immutable candidate ID',async()=>{
+  expect((await missingRequiredCustomValues(reader,'candidate','candidate-1')).map(x=>x.id)).toEqual(['c-context']);
+  expect((await missingRequiredCustomValues(reader,'zone','candidate-1')).map(x=>x.id)).toEqual(['z-date','z-pick']);
+ });
+ it('checks Trade and Post-trade Review against the same trade ID without conflating their stage histories',async()=>{
+  expect((await missingRequiredCustomValues(reader,'trade','trade-1')).map(x=>x.id)).toEqual(['t-context']);
+  expect((await missingRequiredCustomValues(reader,'post-trade-review','trade-1')).map(x=>x.id)).toEqual(['r-text','r-choice']);
+  const observed:string[]=[];
+  const stageReader:CustomValueReader={...reader,
+   currentCustomFieldTypedValue:async(stage,owner,id)=>{
+    observed.push(`${stage}:${owner}:${id}`);
+    return stage==='trade'&&owner==='trade-1'&&id==='t-context'
+      ? {event_id:'saved',value_type:'TEXT',text_value:'Initial risk context',number_value:null,date_value:null,boolean_value:null}
+      : null;
+   },
+  };
+  expect(await missingRequiredCustomValues(stageReader,'trade','trade-1')).toEqual([]);
+  expect((await missingRequiredCustomValues(stageReader,'trade','trade-2')).map(x=>x.id)).toEqual(['t-context']);
+  expect(observed).toEqual(['trade:trade-1:t-context','trade:trade-2:t-context']);
  });
  it('checks actual Zone owner and excludes optional/inactive fields',async()=>{
   expect((await missingRequiredCustomValues(reader,'zone','z1')).map(x=>x.id)).toEqual(['z-date','z-pick']);
