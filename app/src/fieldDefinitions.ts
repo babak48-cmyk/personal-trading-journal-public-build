@@ -112,6 +112,9 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'sessionReview.discipline',group:'SessionReview',label:'Discipline',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Assess adherence to planned rules and risk limits independently of profit.',helpExample:'NEEDS_IMPROVEMENT if a trade broke your pre-committed risk cap.'},
 
+  {id:'rule.note',group:'Review',label:'Rule violation note',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'A concise explanation only if a rule violation was reported. The absence of a violation never requires a note.',helpExample:'Entered before the planned confirmation despite the original rule.'},
+
   {id:'psychology.emotionAffected',group:'Psychology',label:'Did emotion affect the trade?',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Only mark Yes when emotion materially changed entry, management or exit.',helpExample:'Yes if FOMO made you chase; No if you felt nervous but still followed the plan.'},
   {id:'psychology.intensity',group:'Psychology',label:'Emotion intensity',defaultRequirement:'OPTIONAL',systemLocked:false,
