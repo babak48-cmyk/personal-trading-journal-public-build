@@ -296,10 +296,16 @@ export function App(){
     // Quick pages and Zones remain mounted but are display:none until the state update.
     // Wait for a visible control; never focus an invisible field or create another record.
     const focusVisible=(attempt:number)=>{
-      const target=Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]'))
-        .find(el=>el.dataset.validationId===firstId && el.getClientRects().length>0);
+      const candidates=Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]'))
+        .filter(el=>el.dataset.validationId===firstId);
+      // A collapsed optional details panel can make its child invisible even on
+      // the correct Quick page. Open it only after the relevant page is visible.
+      for(const el of candidates){
+        const disclosure=el.closest('details');
+        if(disclosure&&!disclosure.open&&disclosure.getClientRects().length>0)disclosure.open=true;
+      }
+      const target=candidates.find(el=>el.getClientRects().length>0);
       if(!target){if(attempt<12)window.setTimeout(()=>focusVisible(attempt+1),90);return;}
-      const disclosure=target.closest('details');if(disclosure&&!disclosure.open)disclosure.open=true;
       target.scrollIntoView({behavior:'smooth',block:'center'});
       target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled)')?.focus({preventScroll:true});
     };
