@@ -1336,7 +1336,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
             {o.label}{o.active?'':' (inactive)'}
           </label>)}</div>}
         <button type="button" disabled={busy||(same&&values.length>0)||(!valid&&values.length>0)} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
-        {fieldFeedback[field.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[field.field_id]}</small>
+        {fieldFeedback[field.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[field.field_id]}</small>}
       </div>;
     })}
     {notice&&<p role="status" className="subtle">{notice}</p>}
@@ -1409,7 +1409,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
       </label>
       {f.help_text&&<p className="subtle">{f.help_text}</p>}
       <button type="button" disabled={busy||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??''))} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
-      {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}
+      {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}}
     </div>)}
     {message&&<p role="status" className="subtle">{message}</p>}
   </details>;
