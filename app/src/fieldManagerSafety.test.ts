@@ -27,7 +27,7 @@ describe('Field Manager integration safety', () => {
     const report = fieldConnectionReport();
     expect(report.find(x => x.id === 'evidence.note')?.status).toBe('CONNECTED');
     expect(report.find(x => x.id === 'evidence.price')?.status).toBe('CONNECTED');
-    expect(report.find(x => x.id === 'evidence.direction')?.status).toBe('VISIBILITY_ONLY');
+    expect(report.find(x => x.id === 'evidence.direction')?.status).toBe('CONNECTED');
     expect(report.find(x => x.id === 'review.note')?.status).toBe('CONNECTED');
     expect(fieldConnectionSummary().VISIBILITY_ONLY).toBeGreaterThan(0);
   });
@@ -194,6 +194,16 @@ describe('Screenshot metadata Field Manager integration', () => {
     expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('CONNECTED');
     expect(isUserRequired(id,{})).toBe(false);
     expect(isUserRequired(id,{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
+describe('Observed evidence direction connection',()=>{
+  it('connects an explicit optional observation direction without concealing Required in Quick',()=>{
+    const id='evidence.direction';
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.formalFieldId).toBe(id);
+    expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{})).toBe(false);
     expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
   });
 });
