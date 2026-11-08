@@ -64,14 +64,16 @@ describe('All-input coverage regression boundaries', () => {
     expect(requiredPresentationIssues(overrides, visibility, placements)).toEqual([]);
   });
 
-  it('does not treat an unregistered preference key as a formal Required rule', () => {
+  it('keeps newly connected Evidence direction visible when user-required, despite hide preferences', () => {
     const id = 'evidence.direction';
     const overrides = { [id]: true };
     const visibility = { [id]: false };
     const placements = { [id]: 'DETAILED_ONLY' as const };
-    expect(FIELD_DEFINITION_BY_ID[id]).toBeUndefined();
-    expect(isFieldPresented(id, true, visibility, placements, overrides)).toBe(false);
-    expect(isFieldPresented(id, false, visibility, placements, overrides)).toBe(false);
+    expect(FIELD_DEFINITION_BY_ID[id]?.group).toBe('Evidence');
+    expect(isUserRequired(id, overrides)).toBe(true);
+    expect(isFieldPresented(id, true, visibility, placements, overrides)).toBe(true);
+    expect(isFieldPresented(id, false, visibility, placements, overrides)).toBe(true);
+    expect(isFieldPresented(id, true, visibility, placements, {})).toBe(false);
   });
 
   it.each(['evidence.price','evidence.note'])('required %s is protected from Quick/Detailed hiding', id => {
