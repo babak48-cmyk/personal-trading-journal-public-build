@@ -1275,9 +1275,12 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
   const [notice,setNotice]=useState('');
   const [original,setOriginal]=useState<Record<string,string[]>>({});
   const [busy,setBusy]=useState(false);
+  const busyRef=useRef(false);
+  const [fieldFeedback,setFieldFeedback]=useState<Record<string,string>>({});
+  const [localErrors,setLocalErrors]=useState<string[]>([]);
   useEffect(()=>{
     let live=true;
-    setFields([]);setOptions({});setSelected({});setOriginal({});setNotice('');
+    setFields([]);setOptions({});setSelected({});setOriginal({});setNotice('');setFieldFeedback({});setLocalErrors([]);
     localApi.listCustomFieldDefinitions().then(async defs=>{
       const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
@@ -1289,17 +1292,26 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
     return ()=>{live=false;};
   },[ownerId,ownerStage]);
   async function save(fieldId:string){
-    const values=selected[fieldId]||[];if(values.length===0||busy){setNotice('Choose at least one valid option before saving.');return;}
-    if(values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setNotice('No change to save.');return;}
-    setBusy(true);
+    if(busyRef.current)return;
+    const values=selected[fieldId]||[];
+    const available=options[fieldId]||[];
+    if(values.length===0||values.length>100||!values.every(id=>available.some(o=>o.option_id===id&&o.active))){
+      setLocalErrors(v=>v.includes(fieldId)?v:[...v,fieldId]);
+      setFieldFeedback(v=>({...v,[fieldId]:'Select at least one active option before saving.'}));
+      return;
+    }
+    if(values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
+    busyRef.current=true;setBusy(true);setFieldFeedback(v=>({...v,[fieldId]:'Saving selection…'}));
     try {
       await localApi.recordCustomFieldSelection({event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:ownerStage,owner_id:ownerId,option_ids:values});
       setOriginal(v=>({...v,[fieldId]:values}));
       onSaved(customFieldFocusId(ownerStage,ownerId,fieldId));
+      setLocalErrors(v=>v.filter(x=>x!==fieldId));
+      setFieldFeedback(v=>({...v,[fieldId]:'Selection saved.'}));
       try{const current=await localApi.currentCustomFieldSelection(ownerStage,ownerId,fieldId);setNotice('Saved: '+(current?.options.map(o=>o.label_at_selection).join(', ')||''));}
       catch(e){setNotice('Selection saved, but could not refresh display: '+String(e));}
-    }catch(e){setNotice('Not saved: '+String(e));}
-    finally{setBusy(false);}
+    }catch(e){setNotice('Not saved: '+String(e));setFieldFeedback(v=>({...v,[fieldId]:'Selection not confirmed. Check the saved field before retrying.'}));}
+    finally{busyRef.current=false;setBusy(false);}
   }
   if(!fields.length&&!notice)return null;
   const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
@@ -1311,19 +1323,20 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       const available=options[field.field_id]||[];
       const same=values.length===(original[field.field_id]||[]).length&&values.every(v=>(original[field.field_id]||[]).includes(v));
       const valid=!same&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
-      return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))?'validationFieldError':'')}>
+      return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))||localErrors.includes(field.field_id)?'validationFieldError':'')}>
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
         {field.field_type==='SINGLE_SELECT'
-          ? <select aria-label={field.label} value={values[0]||''} onChange={e=>setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}))}>
+          ? <select aria-label={field.label} value={values[0]||''} onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}>
             <option value="">Select an option</option>
             {available.filter(o=>o.active||values.includes(o.option_id)).map(o=><option value={o.option_id} key={o.option_id}>{o.label}{o.active?'':' (inactive)'}</option>)}
           </select>
           : <div>{available.filter(o=>o.active||values.includes(o.option_id)).map(o=><label key={o.option_id}>
             <input type="checkbox" checked={values.includes(o.option_id)} disabled={!o.active&&!values.includes(o.option_id)}
-              onChange={e=>setSelected(v=>({...v,[field.field_id]:e.target.checked?[...values,o.option_id]:values.filter(id=>id!==o.option_id)}))}/>
+              onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.checked?[...values,o.option_id]:values.filter(id=>id!==o.option_id)}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}/>
             {o.label}{o.active?'':' (inactive)'}
           </label>)}</div>}
-        <button type="button" disabled={busy||!valid} onClick={()=>save(field.field_id)}>Save selection</button>
+        <button type="button" disabled={busy||(same&&values.length>0)||(!valid&&values.length>0)} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
+        {fieldFeedback[field.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[field.field_id]}</small>
       </div>;
     })}
     {notice&&<p role="status" className="subtle">{notice}</p>}
@@ -1336,10 +1349,13 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
   const [values,setValues]=useState<Record<string,string>>({});
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState(false);
+  const busyRef=useRef(false);
+  const [localErrors,setLocalErrors]=useState<string[]>([]);
+  const [fieldFeedback,setFieldFeedback]=useState<Record<string,string>>({});
   const [original,setOriginal]=useState<Record<string,string>>({});
   useEffect(()=>{
     let current=true;
-    setFields([]);setValues({});setOriginal({});setMessage('');
+    setFields([]);setValues({});setOriginal({});setMessage('');setLocalErrors([]);setFieldFeedback({});
     localApi.listCustomFieldDefinitions().then(async all=>{
       const eligible=eligibleCustomFields(all,ownerStage,'typed');
       const entries=await Promise.all(eligible.map(async f=>{
@@ -1354,11 +1370,16 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
     return ()=>{current=false;};
   },[ownerId,ownerStage]);
   async function save(field:import('./services/localApi').CustomFieldDefinition){
+    if(busyRef.current)return;
     const raw=values[field.field_id]??'';
-    if(raw===original[field.field_id]){setMessage('No change to save.');return;}
+    if(raw===original[field.field_id]&&raw.trim()){setFieldFeedback(v=>({...v,[field.field_id]:'No change to save.'}));return;}
     const number=field.field_type==='NUMBER'?Number(raw):null;
-    if(!raw.trim()||(field.field_type==='NUMBER'&&!Number.isFinite(number)))return;
-    setBusy(true);
+    if(!raw.trim()||(field.field_type==='NUMBER'&&!Number.isFinite(number))){
+      setLocalErrors(v=>v.includes(field.field_id)?v:[...v,field.field_id]);
+      setFieldFeedback(v=>({...v,[field.field_id]:'Enter a valid value before saving.'}));
+      return;
+    }
+    busyRef.current=true;setBusy(true);setFieldFeedback(v=>({...v,[field.field_id]:'Saving value…'}));
     try{
       await localApi.recordCustomFieldTypedValue({
         event_id:crypto.randomUUID(),field_id:field.field_id,owner_stage:ownerStage,owner_id:ownerId,
@@ -1369,23 +1390,26 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
       });
       setOriginal(v=>({...v,[field.field_id]:raw}));
       onSaved(customFieldFocusId(ownerStage,ownerId,field.field_id));
+      setLocalErrors(v=>v.filter(x=>x!==field.field_id));
+      setFieldFeedback(v=>({...v,[field.field_id]:'Value saved.'}));
       setMessage(field.label+' saved; earlier values remain in history.');
-    }catch(e){setMessage('Not saved: '+String(e));}
-    finally{setBusy(false);}
+    }catch(e){setMessage('Not saved: '+String(e));setFieldFeedback(v=>({...v,[field.field_id]:'Save not confirmed. Inspect existing values before retrying.'}));}
+    finally{busyRef.current=false;setBusy(false);}
   }
   if(!fields.length&&!message)return null;
   const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
   return <details className="guidedMore" open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
-    {fields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id))?'validationFieldError':'')} key={f.field_id}>
+    {fields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id))||localErrors.includes(f.field_id)?'validationFieldError':'')} key={f.field_id}>
       <label>{f.label}{f.required?' · Required':''}
         {f.field_type==='BOOLEAN'
-          ?<select value={values[f.field_id]??''} onChange={e=>setValues(v=>({...v,[f.field_id]:e.target.value}))}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
-          :<input type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} value={values[f.field_id]??''} onChange={e=>setValues(v=>({...v,[f.field_id]:e.target.value}))}/>}
+          ?<select value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
+          :<input type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}/>}
       </label>
       {f.help_text&&<p className="subtle">{f.help_text}</p>}
-      <button type="button" disabled={busy||!(values[f.field_id]??'').trim()||(values[f.field_id]??'')===(original[f.field_id]??'')||(f.field_type==='NUMBER'&&!Number.isFinite(Number(values[f.field_id])))} onClick={()=>save(f)}>Save value</button>
+      <button type="button" disabled={busy||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??''))} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
+      {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}
     </div>)}
     {message&&<p role="status" className="subtle">{message}</p>}
   </details>;
