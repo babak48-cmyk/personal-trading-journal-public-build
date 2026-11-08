@@ -15,7 +15,7 @@ export function quickValidationRoute(
   hasConfirmedPlan:boolean,
 ):QuickValidationRoute {
   const empty:QuickValidationRoute={notebookPage:null,draftStep:null,draftPlanPage:null,draftZonePage:null};
-  const candidate=validationId.match(/^candidate-(\\d+)\\./);
+  const candidate=validationId.match(/^candidate-(\d+)\./);
   if(isDraftSession && candidate){
     const index=Number(candidate[1]);
     return {...empty,draftStep:2,draftZonePage:Number.isSafeInteger(index)?index:0};
