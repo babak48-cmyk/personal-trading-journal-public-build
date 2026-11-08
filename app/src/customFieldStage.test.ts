@@ -16,6 +16,8 @@ describe('canonical owner-stage custom-field capture',()=>{
     entry('z-text','zone','TEXT',1),
     entry('z-retired','zone','DATE',3,false),
     entry('different','candidate','TEXT',0),
+    entry('review-comment','post-trade-review','TEXT',0),
+    entry('review-select','post-trade-review','SINGLE_SELECT',1),
   ];
   it('uses only active fields for the exact canonical owner and input kind',()=>{
     expect(eligibleCustomFields(fields,'zone','typed').map(f=>f.field_id)).toEqual(['z-text','z-number']);
@@ -23,10 +25,14 @@ describe('canonical owner-stage custom-field capture',()=>{
     expect(eligibleCustomFields(fields,'session','typed').map(f=>f.field_id)).toEqual(['s-text']);
     expect(eligibleCustomFields(fields,'premarket-plan','typed').map(f=>f.field_id)).toEqual(['p-text']);
     expect(eligibleCustomFields(fields,'premarket-plan','select').map(f=>f.field_id)).toEqual(['p-select']);
+    expect(eligibleCustomFields(fields,'post-trade-review','typed').map(f=>f.field_id)).toEqual(['review-comment']);
+    expect(eligibleCustomFields(fields,'post-trade-review','select').map(f=>f.field_id)).toEqual(['review-select']);
   });
   it('gives separate Zone records separate focus targets even for one field definition',()=>{
     expect(customFieldFocusId('zone','zone-A','field-X')).not.toBe(customFieldFocusId('zone','zone-B','field-X'));
     expect(customFieldFocusId('session','zone-A','field-X')).not.toBe(customFieldFocusId('zone','zone-A','field-X'));
     expect(customFieldFocusId('session','same-owner','field-X')).not.toBe(customFieldFocusId('premarket-plan','same-owner','field-X'));
+    expect(customFieldFocusId('post-trade-review','trade-A','field-X')).not.toBe(customFieldFocusId('post-trade-review','trade-B','field-X'));
+    expect(customFieldFocusId('post-trade-review','same-owner','field-X')).not.toBe(customFieldFocusId('zone','same-owner','field-X'));
   });
 });
