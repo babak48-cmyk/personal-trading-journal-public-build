@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reviewCompletionIssues, type ReviewCompletionInput } from './reviewCompletion';
 const blank:ReviewCompletionInput={
-  decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',emotionAffected:true,
+  decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',ruleNote:'',ruleViolationReported:null,emotionAffected:true,
   psychologyState:'',psychologyStage:'',psychologyIntensity:null,
 };
 
@@ -40,6 +40,16 @@ describe('Review Pending and finalization boundaries',()=>{
     expect(reviewCompletionIssues(false,{'psychology.intensity':true},opts)).toEqual([]);
     expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...opts,psychologyIntensity:3})).toEqual([]);
     expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...opts,emotionAffected:false})).toEqual([]);
+  });
+  it('Rule note is Required only on finalization when a rule violation is reported',()=>{
+    const overrides={'rule.note':true};
+    const values={...blank,emotionAffected:false,ruleViolationReported:true};
+    expect(reviewCompletionIssues(false,overrides,values)).toEqual([]);
+    expect(reviewCompletionIssues(true,overrides,values).map(x=>x.id)).toEqual(['rule.note']);
+    expect(reviewCompletionIssues(true,overrides,{...values,ruleNote:'  '})).toHaveLength(1);
+    expect(reviewCompletionIssues(true,overrides,{...values,ruleNote:'Moved stop outside plan'})).toEqual([]);
+    expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:false})).toEqual([]);
+    expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:null})).toEqual([]);
   });
   it('does not invent a requirement when emotion flag is optional',()=>{
     expect(reviewCompletionIssues(true,{}, {...blank,emotionAffected:null})).toEqual([]);
