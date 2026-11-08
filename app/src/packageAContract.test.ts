@@ -75,10 +75,12 @@ describe('Package A cross-stage delivery gate',()=>{
   });
 
   it('supports only custom capture stages with an actual owner editor, and preserves trade-specific focus identity',()=>{
-    expect(CAPTURABLE_CUSTOM_FIELD_STAGES).toEqual(['session','premarket-plan','zone','post-trade-review']);
-    for(const stage of ['evidence','decision','execution','trade','candidate','session-review']){
+    expect(CAPTURABLE_CUSTOM_FIELD_STAGES).toEqual(['session','premarket-plan','candidate','zone','trade','post-trade-review']);
+    for(const stage of ['evidence','decision','execution','session-review']){
       expect(canCaptureCustomFieldStage(stage)).toBe(false);
     }
+    expect(customFieldFocusId('candidate','candidate-1','context')).not.toBe(customFieldFocusId('zone','candidate-1','context'));
+    expect(customFieldFocusId('trade','trade-1','context')).not.toBe(customFieldFocusId('post-trade-review','trade-1','context'));
     expect(customFieldFocusId('post-trade-review','trade-1','context'))
       .not.toBe(customFieldFocusId('post-trade-review','trade-2','context'));
   });
