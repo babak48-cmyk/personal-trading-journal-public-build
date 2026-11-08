@@ -8,7 +8,8 @@ const def=(id:string,stage:string,type:string,required=true,active=true):CustomF
 const all=[def('s-zero','session','NUMBER'),def('s-false','session','BOOLEAN'),def('s-empty','session','TEXT'),
  def('z-pick','zone','SINGLE_SELECT'),def('z-date','zone','DATE'),def('z-unused','zone','TEXT',false),
  def('z-inactive','zone','NUMBER',true,false),
- def('p-required','premarket-plan','TEXT')];
+ def('p-required','premarket-plan','TEXT'),
+ def('r-choice','post-trade-review','SINGLE_SELECT'),def('r-text','post-trade-review','TEXT')];
 const values:Record<string,CustomTypedValue>={
  's-zero':{event_id:'a',value_type:'NUMBER',number_value:0,text_value:null,boolean_value:null,date_value:null},
  's-false':{event_id:'b',value_type:'BOOLEAN',number_value:null,text_value:null,boolean_value:false,date_value:null},
@@ -36,6 +37,16 @@ describe('custom field semantic boundary required check',()=>{
  it('keeps required pre-market plan distinct from Session even on the same canonical owner',async()=>{
   expect((await missingRequiredCustomValues(reader,'session','session-1')).map(x=>x.id)).toEqual(['s-empty']);
   expect((await missingRequiredCustomValues(reader,'premarket-plan','session-1')).map(x=>x.id)).toEqual(['p-required']);
+ });
+ it('checks the selected trade as the canonical post-trade review owner',async()=>{
+  expect((await missingRequiredCustomValues(reader,'post-trade-review','trade-1')).map(x=>x.id)).toEqual(['r-text','r-choice']);
+  const seen:string[]=[];
+  const complete:CustomValueReader={...reader,
+   currentCustomFieldTypedValue:async(stage,owner,id)=>{seen.push(`${stage}:${owner}:${id}`);return {event_id:'x',value_type:'TEXT',text_value:'Reviewed',number_value:null,date_value:null,boolean_value:null};},
+   currentCustomFieldSelection:async(stage,owner,id)=>{seen.push(`${stage}:${owner}:${id}`);return {event_id:'y',options:[{option_id:'1',label_at_selection:'Original label',ordinal:0}]};},
+  };
+  expect(await missingRequiredCustomValues(complete,'post-trade-review','trade-2')).toEqual([]);
+  expect(seen).toEqual(expect.arrayContaining(['post-trade-review:trade-2:r-text','post-trade-review:trade-2:r-choice']));
  });
  it('propagates unavailable persistence errors rather than confirming without checking',async()=>{
   await expect(missingRequiredCustomValues({...reader,listCustomFieldDefinitions:async()=>{throw Error('database unavailable')}},'zone','z1')).rejects.toThrow('database unavailable');
