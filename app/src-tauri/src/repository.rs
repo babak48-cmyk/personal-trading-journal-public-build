@@ -1104,6 +1104,24 @@ fn price_tick_aligned(price: f64, tick_size: f64) -> bool {
     (units - units.round()).abs() <= 1e-8
 }
 
+fn validate_execution_quantity(quantity: f64) -> Result<(), AppError> {
+    if !quantity.is_finite() || quantity <= 0.0 || quantity.fract() != 0.0 {
+        return Err(AppError::Validation("fill quantity must be a finite positive whole number".into()));
+    }
+    Ok(())
+}
+
+fn validate_execution_costs(commission: Option<f64>, fees: Option<f64>) -> Result<(), AppError> {
+    for (name,value) in [("commission",commission),("fees",fees)] {
+        if let Some(amount)=value {
+            if !amount.is_finite() || amount<0.0 {
+                return Err(AppError::Validation(format!("{name} must be a finite non-negative total per fill")));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_order_type(order_type: &Option<String>) -> Result<(), AppError> {
     if let Some(v) = order_type {
         if !matches!(v.as_str(), "MARKET"|"LIMIT"|"STOP"|"OTHER") {
@@ -1148,7 +1166,8 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
 }
 
 pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionInput)->Result<TradeDetailDto,AppError>{
-    if input.quantity<=0.0 {return Err(AppError::Validation("quantity must be greater than zero".into()));}
+    validate_execution_quantity(input.quantity)?;
+    validate_execution_costs(input.commission,input.fees)?;
     validate_order_type(&input.order_type)?;
     let tx=conn.transaction()?;
     let (session_id,candidate_id,decision_type,direction):(String,Option<String>,String,Option<String>)=tx.query_row(
@@ -1161,6 +1180,9 @@ pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionIn
     if existing.is_some(){return Err(AppError::Validation("this decision already has a trade".into()));}
     let (tick_size,point_value)=instrument_spec_for_session(&tx,&session_id)?;
     if !price_tick_aligned(input.entry_price,tick_size) || !price_tick_aligned(input.stop_price,tick_size) {return Err(AppError::Validation(format!("entry and stop must align to tick size {tick_size}")));}
+    if let Some(target)=input.planned_target_price {
+        if !price_tick_aligned(target,tick_size) {return Err(AppError::Validation(format!("planned target must align to tick size {tick_size}")));}
+    }
     if direction=="LONG" && input.stop_price>=input.entry_price {return Err(AppError::Validation("for a LONG trade, stop must be below entry".into()));}
     if direction=="SHORT" && input.stop_price<=input.entry_price {return Err(AppError::Validation("for a SHORT trade, stop must be above entry".into()));}
     let now=Utc::now().to_rfc3339(); let trade_id=Uuid::new_v4().to_string(); let fill_id=Uuid::new_v4().to_string(); let risk_id=Uuid::new_v4().to_string();
@@ -1177,7 +1199,8 @@ pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionIn
 }
 
 pub fn add_trade_fill(conn:&mut Connection,input:AddTradeFillInput)->Result<TradeDetailDto,AppError>{
-    if input.quantity<=0.0{return Err(AppError::Validation("quantity must be greater than zero".into()));}
+    validate_execution_quantity(input.quantity)?;
+    validate_execution_costs(input.commission,input.fees)?;
     if !matches!(input.action.as_str(),"ENTRY"|"EXIT"){return Err(AppError::Validation("action must be ENTRY or EXIT".into()));}
     validate_order_type(&input.order_type)?;
     let tx=conn.transaction()?;
@@ -2027,4 +2050,36 @@ mod expanded_instrument_catalog_tests {
         }
     }
 
+}
+
+#[cfg(test)]
+mod execution_input_safety_regressions {
+    use super::*;
+
+    #[test]
+    fn backend_rejects_fractional_zero_negative_nonfinite_quantities() {
+        for quantity in [0.0,-1.0,1.5,f64::NAN,f64::INFINITY,f64::NEG_INFINITY] {
+            assert!(validate_execution_quantity(quantity).is_err(),"unexpected acceptance: {quantity:?}");
+        }
+        for quantity in [1.0,2.0,100.0] {
+            assert!(validate_execution_quantity(quantity).is_ok());
+        }
+    }
+
+    #[test]
+    fn backend_distinguishes_confirmed_zero_cost_from_unknown_and_rejects_negative() {
+        assert!(validate_execution_costs(None,None).is_ok());
+        assert!(validate_execution_costs(Some(0.0),Some(0.0)).is_ok());
+        assert!(validate_execution_costs(Some(2.75),Some(0.35)).is_ok());
+        for amount in [-1.0,f64::NAN,f64::INFINITY,f64::NEG_INFINITY] {
+            assert!(validate_execution_costs(Some(amount),None).is_err());
+            assert!(validate_execution_costs(None,Some(amount)).is_err());
+        }
+    }
+
+    #[test]
+    fn backend_validates_optional_planned_target_price_grid() {
+        assert!(price_tick_aligned(6025.25,0.25));
+        assert!(!price_tick_aligned(6025.3,0.25));
+    }
 }
