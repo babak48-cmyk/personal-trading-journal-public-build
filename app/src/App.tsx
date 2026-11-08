@@ -1,6 +1,7 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { quickValidationRoute } from './quickValidationRoute';
+import { tradeEntryIssues } from './tradeEntryValidation';
 import { attachmentCaptionIssue } from './attachmentCaptionValidation';
 import { planRevisionEvidenceIssues } from './planRevisionValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
@@ -777,11 +778,7 @@ export function App(){
 
   async function createExecutedTrade(){
     if(!pendingTradeDecision||tradeOpeningRef.current)return;
-    const missing:ValidationIssue[]=[];
-    if(entryPrice==null||!Number.isFinite(entryPrice))missing.push({id:'trade.entryPrice',label:'Entry price'});
-    if(stopPrice==null||!Number.isFinite(stopPrice))missing.push({id:'trade.stopPrice',label:'Stop price'});
-    if(!Number.isFinite(tradeQty)||tradeQty<=0||!Number.isInteger(tradeQty))missing.push({id:'trade.quantity',label:'Positive whole-number quantity'});
-    if(isUserRequired('trade.plannedTarget',requirementOverrides)&&(plannedTarget==null||!Number.isFinite(plannedTarget)))missing.push({id:'trade.plannedTarget',label:'Planned target'});
+    const missing=tradeEntryIssues(entryPrice,stopPrice,tradeQty,plannedTarget,isUserRequired('trade.plannedTarget',requirementOverrides));
     if(blockMissing(missing)){setTradeOpeningFeedback('Complete the highlighted trade-entry fields.');return;}
     if(entryPrice==null||stopPrice==null)return;
     tradeOpeningRef.current=true;setTradeOpening(true);setTradeOpeningFeedback('Recording entry and initial risk…');
