@@ -2288,3 +2288,82 @@ mod execution_sqlite_reconciliation_tests {
         assert_eq!(count,4);
     }
 }
+
+#[cfg(test)]
+mod unknown_cost_accounting_integrity_tests {
+    use super::*;
+
+    #[test]
+    fn persisted_unknown_cost_keeps_gross_but_excludes_net_and_analytics_r() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        let session=create_draft_session(&db,CreateSessionInput{
+            session_date:"2026-11-09".into(),instrument_symbol:"ES".into(),
+            environment:"DEMO".into(),session_label:None,
+        }).unwrap();
+        db.execute(
+            "INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('unknown-cost-decision',?1,'2026-11-09T08:00:00Z','TRADE','LONG')",
+            [&session.session_id],
+        ).unwrap();
+        let first=create_trade_with_entry(&mut db,CreateTradeExecutionInput {
+            decision_id:"unknown-cost-decision".into(),entry_price:100.0,stop_price:95.0,
+            quantity:1.0,order_type:None,planned_target_price:None,
+            commission:None,fees:Some(0.0),
+        }).unwrap();
+        let id=first.metrics.trade_id;
+        let closed=add_trade_fill(&mut db,AddTradeFillInput {
+            trade_id:id.clone(),action:"EXIT".into(),price:110.0,
+            quantity:1.0,order_type:None,commission:Some(1.5),fees:Some(0.25),note:None,
+        }).unwrap();
+        assert_eq!(closed.metrics.status,"CLOSED");
+        assert_eq!(closed.metrics.gross_realized_pnl,Some(500.0));
+        assert_eq!(closed.metrics.net_realized_pnl,None);
+        assert_eq!(closed.metrics.realized_r,None);
+        assert_eq!(closed.fills[0].commission,None);
+        assert_eq!(closed.fills[0].fees,Some(0.0));
+
+        let filtered=JournalFilterInput::default();
+        let summary=get_analytics_summary(&db,filtered.clone()).unwrap();
+        assert_eq!(summary.trade_count,1);
+        assert_eq!(summary.eligible_r_count,0);
+        assert_eq!(summary.net_r,None);
+        assert_eq!(summary.net_pnl,None);
+        assert_eq!(summary.win_rate,None);
+        let journal=list_journal_trades(&db,filtered).unwrap();
+        assert_eq!(journal.len(),1);
+        assert_eq!(journal[0].realized_r,None);
+        assert_eq!(journal[0].net_realized_pnl,None);
+        let persisted_count:i64=db.query_row(
+            "SELECT COUNT(*) FROM execution_fills WHERE trade_id=?1",[&id],|row|row.get(0)
+        ).unwrap();
+        assert_eq!(persisted_count,2);
+    }
+
+    #[test]
+    fn confirmed_zero_costs_are_eligible_for_net_r() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        let session=create_draft_session(&db,CreateSessionInput{
+            session_date:"2026-11-09".into(),instrument_symbol:"NQ".into(),
+            environment:"DEMO".into(),session_label:None,
+        }).unwrap();
+        db.execute("INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('confirmed-zero',?1,'2026-11-09T08:00:00Z','TRADE','SHORT')",
+            [&session.session_id]).unwrap();
+        let created=create_trade_with_entry(&mut db,CreateTradeExecutionInput{
+            decision_id:"confirmed-zero".into(),entry_price:20000.0,
+            stop_price:20001.0,quantity:1.0,order_type:None,
+            planned_target_price:None,commission:Some(0.0),fees:Some(0.0),
+        }).unwrap();
+        let closed=add_trade_fill(&mut db,AddTradeFillInput{
+            trade_id:created.metrics.trade_id,action:"EXIT".into(),price:19999.0,
+            quantity:1.0,order_type:None,commission:Some(0.0),fees:Some(0.0),note:None
+        }).unwrap();
+        assert_eq!(closed.metrics.gross_realized_pnl,Some(20.0));
+        assert_eq!(closed.metrics.net_realized_pnl,Some(20.0));
+        assert_eq!(closed.metrics.realized_r,Some(1.0));
+        let summary=get_analytics_summary(&db,JournalFilterInput::default()).unwrap();
+        assert_eq!(summary.eligible_r_count,1);
+        assert_eq!(summary.net_r,Some(1.0));
+        assert_eq!(summary.net_pnl,Some(20.0));
+    }
+}
