@@ -1,6 +1,10 @@
 import type { CustomFieldDefinition } from './services/localApi';
 
-export type CustomFieldOwnerStage = 'session'|'premarket-plan'|'zone'|'post-trade-review';
+export const CAPTURABLE_CUSTOM_FIELD_STAGES = ['session','premarket-plan','zone','post-trade-review'] as const;
+export type CustomFieldOwnerStage = typeof CAPTURABLE_CUSTOM_FIELD_STAGES[number];
+export function canCaptureCustomFieldStage(stage:string):stage is CustomFieldOwnerStage {
+  return (CAPTURABLE_CUSTOM_FIELD_STAGES as readonly string[]).includes(stage);
+}
 export type CustomFieldInputKind = 'typed'|'select';
 
 const TYPED = new Set(['TEXT','NUMBER','DATE','BOOLEAN']);
