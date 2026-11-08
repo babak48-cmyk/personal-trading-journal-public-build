@@ -19,6 +19,21 @@ pub struct SelectionSnapshot {
 fn invalid(message:&str)->AppError { AppError::Validation(message.into()) }
 fn valid_key(s:&str)->bool { !s.is_empty() && s.len()<=128 && !s.chars().any(char::is_control) }
 
+// Do not append a custom review answer after the corresponding review was finalized.
+// The check runs in the same transaction as the new immutable value event.
+fn ensure_review_writable(conn:&Connection,stage:&str,trade_id:&str)->Result<(),AppError>{
+    if stage!="post-trade-review" {return Ok(());}
+    let status:Option<String>=conn.query_row(
+        "SELECT status FROM trade_reviews WHERE trade_id=?1",
+        [trade_id],|row|row.get(0)
+    ).optional()?;
+    if status.as_deref()==Some("COMPLETED") {
+        return Err(invalid("completed post-trade review custom fields are locked"));
+    }
+    Ok(())
+}
+
+
 /// Creates one immutable event and its complete option snapshots in one transaction.
 /// Owner existence is validated within the same transaction before event insertion.
 pub fn record_select(conn:&mut Connection, input:&RecordSelectInput)->Result<(),AppError> {
@@ -49,6 +64,7 @@ pub fn record_select(conn:&mut Connection, input:&RecordSelectInput)->Result<(),
     if owner_exists.is_none() {
         return Err(invalid("custom-field owner does not exist"));
     }
+    ensure_review_writable(&tx,&input.owner_stage,&input.owner_id)?;
     let mut snapshots=Vec::new();
     for (index,id) in input.option_ids.iter().enumerate() {
         if !valid_key(id) || snapshots.iter().any(|(other,_,_) : &(String,String,i64)|other==id) {
@@ -344,6 +360,7 @@ pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(
     let owner_sql=canonical_owner_query(&input.owner_stage).ok_or_else(||invalid("unsupported owner stage"))?;
     let owner:Option<i64>=tx.query_row(owner_sql,[&input.owner_id],|r|r.get(0)).optional()?;
     if owner.is_none(){return Err(invalid("custom-field owner does not exist"));}
+    ensure_review_writable(&tx,&input.owner_stage,&input.owner_id)?;
     let text_value=if kind=="TEXT" {input.text_value.as_deref()} else {None};
     let number_value=if kind=="NUMBER" {input.number_value} else {None};
     let boolean_value=if kind=="BOOLEAN" {input.boolean_value.map(i64::from)} else {None};
@@ -565,5 +582,23 @@ mod cleanup_safety_tests {
             assert_eq!(count,1,"preserve {table}");
         }
         assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
+
+#[cfg(test)]
+mod custom_review_lock_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn post_trade_custom_values_are_writable_before_review_completion_but_locked_after() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE trade_reviews (trade_id TEXT PRIMARY KEY,status TEXT NOT NULL);
+          INSERT INTO trade_reviews(trade_id,status) VALUES('trade-a','DRAFT'),('trade-b','COMPLETED');").unwrap();
+        assert!(ensure_review_writable(&db,"post-trade-review","trade-a").is_ok());
+        assert!(ensure_review_writable(&db,"post-trade-review","trade-new").is_ok());
+        assert!(ensure_review_writable(&db,"post-trade-review","trade-b").is_err());
+        // Existing Session, Pre-market, Zone and Execution semantics are not changed.
+        assert!(ensure_review_writable(&db,"zone","trade-b").is_ok());
     }
 }
