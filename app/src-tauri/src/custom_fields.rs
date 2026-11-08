@@ -22,6 +22,16 @@ fn valid_key(s:&str)->bool { !s.is_empty() && s.len()<=128 && !s.chars().any(cha
 // Do not append a custom review answer after the corresponding review was finalized.
 // The check runs in the same transaction as the new immutable value event.
 fn ensure_review_writable(conn:&Connection,stage:&str,trade_id:&str)->Result<(),AppError>{
+    if stage=="session-review" {
+        let status:Option<String>=conn.query_row(
+            "SELECT status FROM session_reviews WHERE review_id=?1",
+            [trade_id],|row|row.get(0)
+        ).optional()?;
+        if status.as_deref()==Some("COMPLETED") {
+            return Err(invalid("completed session-review custom fields are locked"));
+        }
+        return Ok(());
+    }
     if !matches!(stage,"post-trade-review"|"trade") {return Ok(());}
     let status:Option<String>=conn.query_row(
         "SELECT status FROM trade_reviews WHERE trade_id=?1",
@@ -601,6 +611,11 @@ mod custom_review_lock_tests {
         assert!(ensure_review_writable(&db,"trade","trade-a").is_ok());
         assert!(ensure_review_writable(&db,"trade","trade-new").is_ok());
         assert!(ensure_review_writable(&db,"trade","trade-b").is_err());
+        // Session Review custom events remain writable in draft, but are locked at completion.
+        db.execute_batch("CREATE TABLE session_reviews (review_id TEXT PRIMARY KEY,status TEXT NOT NULL);
+          INSERT INTO session_reviews(review_id,status) VALUES('review-draft','DRAFT'),('review-locked','COMPLETED');").unwrap();
+        assert!(ensure_review_writable(&db,"session-review","review-draft").is_ok());
+        assert!(ensure_review_writable(&db,"session-review","review-locked").is_err());
         // Existing Session, Pre-market, Zone and Execution semantics are not changed.
         assert!(ensure_review_writable(&db,"zone","trade-b").is_ok());
     }
