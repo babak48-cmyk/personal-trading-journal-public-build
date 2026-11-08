@@ -60,7 +60,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('candidateRevision.reason','Zone revision reason','plan-revision','journal-field',false,undefined,'Zone history audit'),
   entry('evidence.type','Observed evidence type','live-evidence','journal-field',false,undefined,'Evidence provenance'),
   entry('evidence.role','Evidence role','live-evidence','journal-field',false,undefined,'Evidence classification semantics'),
-  entry('evidence.direction','Evidence direction','live-evidence','journal-field',true),
+  entry('evidence.direction','Evidence direction','live-evidence','journal-field',true,'evidence.direction'),
   entry('evidence.price','Evidence price','live-evidence','journal-field',true,'evidence.price'),
   entry('evidence.note','Evidence note','live-evidence','journal-field',true,'evidence.note'),
   entry('decision.direction','Intended trade direction','decision','conditional-journal-field',false,undefined,'Protected trade direction semantics'),
