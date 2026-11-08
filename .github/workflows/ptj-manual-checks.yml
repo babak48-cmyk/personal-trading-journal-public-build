@@ -7,6 +7,11 @@ on:
     paths:
       - 'app/**'
       - '.github/workflows/ptj-manual-checks.yml'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'app/**'
+      - '.github/workflows/ptj-manual-checks.yml'
 concurrency:
   group: ptj-manual-${{ github.ref }}
   cancel-in-progress: true
