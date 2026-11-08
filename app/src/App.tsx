@@ -5,7 +5,7 @@ import { attachmentCaptionIssue } from './attachmentCaptionValidation';
 import { planRevisionEvidenceIssues } from './planRevisionValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
-import { eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
 import { missingRequiredCustomValues } from './customFieldRequired';
 import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -1298,11 +1298,13 @@ function CustomFieldDiscovery(){
     <p className="subtle" role="status">{notice}</p>
     <div className="requirementGroup">
       <h3>Create custom field</h3>
+      <p className="subtle">New fields can be created in stages with a working input editor: Session, Pre-market Plan, Zone or Post-trade Review. Existing definitions for other stages remain visible and retain their history; those stages are not yet available for new capture.</p>
       <label>Label<input value={newField.label} maxLength={240} onChange={e=>setNewField(v=>({...v,label:e.target.value}))}/></label>
-      <label>Stage<select value={newField.stage} onChange={e=>setNewField(v=>({...v,stage:e.target.value}))}>{['session','premarket-plan','candidate','zone','trade','execution','post-trade-review','session-review'].map(x=><option key={x} value={x}>{x}</option>)}</select></label>
+      <label>Stage<select value={newField.stage} onChange={e=>setNewField(v=>({...v,stage:e.target.value}))}>{CAPTURABLE_CUSTOM_FIELD_STAGES.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
       <label>Type<select value={newField.field_type} onChange={e=>setNewField(v=>({...v,field_type:e.target.value}))}>{['TEXT','NUMBER','DATE','BOOLEAN','SINGLE_SELECT','MULTI_SELECT'].map(x=><option key={x}>{x}</option>)}</select></label>
       <label>Help text<input value={newField.help_text} maxLength={240} onChange={e=>setNewField(v=>({...v,help_text:e.target.value}))}/></label>
-      <button type="button" disabled={busy||!newField.label.trim()} onClick={()=>runChange(async()=>{
+      <button type="button" disabled={busy||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>runChange(async()=>{
+        if(!canCaptureCustomFieldStage(newField.stage))throw Error('Stage has no supported capture editor');
         await localApi.createCustomFieldDefinition({field_id:newId(),stage:newField.stage,field_type:newField.field_type,label:newField.label,help_text:newField.help_text,required:false,display_order:fields.length});
         setNewField(v=>({...v,label:'',help_text:''}));
       })}>Create field</button>
@@ -1311,9 +1313,9 @@ function CustomFieldDiscovery(){
     <label><input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)}/> Show inactive</label>
     {visibleFields.map(field=><div className="requirementGroup" key={field.field_id}>
       <b>{field.label}</b> <small>({field.field_type} · {field.stage} · {field.active?'Active':'Inactive'})</small>
-      <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}</p>
-      <label><input type="checkbox" checked={field.required} disabled={busy||!field.active} onChange={e=>{void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,e.target.checked,field.active,field.display_order));}}/> Required at this stage</label>
-      <button type="button" disabled={busy} onClick={()=>runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,!field.active,field.display_order))}>{field.active?'Deactivate':'Reactivate'}</button>
+      <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}{!canCaptureCustomFieldStage(field.stage)?' · No capture editor for this legacy stage; cannot newly require it':''}</p>
+      <label><input type="checkbox" checked={field.required} disabled={busy||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,e.target.checked,field.active,field.display_order));}}/> Required at this stage</label>
+      <button type="button" disabled={busy||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,!field.active,field.display_order))}>{field.active?'Deactivate':'Reactivate'}</button>
       <button type="button" disabled={busy} onClick={async()=>{
         if(busy)return;
         setBusy(true);
