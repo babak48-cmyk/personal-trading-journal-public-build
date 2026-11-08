@@ -2145,3 +2145,65 @@ mod execution_input_safety_regressions {
         assert!(!price_tick_aligned(6025.3,0.25));
     }
 }
+
+#[cfg(test)]
+mod chronological_trade_accounting_tests {
+    use super::*;
+
+    fn events(rows:&[(&str,f64,f64,f64,f64)]) -> Vec<(String,f64,f64,f64,f64)> {
+        rows.iter().map(|(action,price,qty,commission,fees)|
+            (action.to_string(),*price,*qty,*commission,*fees)).collect()
+    }
+
+    #[test]
+    fn later_entry_does_not_rewrite_prior_realized_long_profit() {
+        let first=events(&[("ENTRY",100.0,2.0,1.0,0.5),("EXIT",110.0,1.0,1.0,0.5)]);
+        let before=execution_ledger(&first,"LONG",50.0).unwrap();
+        assert_eq!(before.gross_realized,Some(500.0));
+        assert_eq!(before.open_average_entry,Some(100.0));
+        let after=events(&[
+            ("ENTRY",100.0,2.0,1.0,0.5),
+            ("EXIT",110.0,1.0,1.0,0.5),
+            ("ENTRY",120.0,1.0,1.0,0.5),
+            ("EXIT",130.0,1.0,1.0,0.5),
+        ]);
+        let ledger=execution_ledger(&after,"LONG",50.0).unwrap();
+        // second exit uses average of remaining 100 + new 120 = 110.
+        assert_eq!(ledger.gross_realized,Some(1500.0));
+        assert_eq!(ledger.open_qty,1.0);
+        assert_eq!(ledger.open_average_entry,Some(110.0));
+        assert_eq!(ledger.entry_qty,3.0);
+        assert_eq!(ledger.exit_qty,2.0);
+        assert_eq!(ledger.costs,6.0);
+        assert_eq!(ledger.gross_realized.map(|n|n-ledger.costs),Some(1494.0));
+    }
+
+    #[test]
+    fn short_partial_exit_then_scale_in_keeps_chronological_realized_pnl() {
+        let fills=events(&[
+            ("ENTRY",100.0,2.0,0.0,0.0),
+            ("EXIT",90.0,1.0,0.0,0.0),
+            ("ENTRY",80.0,1.0,0.0,0.0),
+            ("EXIT",70.0,2.0,0.0,0.0),
+        ]);
+        let ledger=execution_ledger(&fills,"SHORT",5.0).unwrap();
+        // 1 at 100 -> 90 = +10; 2 at avg 90 -> 70 = +40, * 5 = 250.
+        assert_eq!(ledger.gross_realized,Some(250.0));
+        assert_eq!(ledger.open_qty,0.0);
+        assert_eq!(ledger.last_average_entry,Some(90.0));
+    }
+
+    #[test]
+    fn open_trade_without_exit_has_no_realized_pnl_even_with_entry_cost() {
+        let ledger=execution_ledger(&events(&[("ENTRY",100.0,2.0,4.0,0.0)]),"LONG",50.0).unwrap();
+        assert_eq!(ledger.gross_realized,None);
+        assert_eq!(ledger.costs,4.0);
+    }
+
+    #[test]
+    fn invalid_historical_fill_sequence_fails_closed_without_modifying_records() {
+        let bad=events(&[("ENTRY",100.0,1.0,0.0,0.0),("EXIT",110.0,2.0,0.0,0.0)]);
+        assert!(execution_ledger(&bad,"LONG",50.0).is_err());
+        assert!(execution_ledger(&events(&[("ENTRY",f64::NAN,1.0,0.0,0.0)]),"LONG",50.0).is_err());
+    }
+}
