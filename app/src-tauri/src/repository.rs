@@ -1148,6 +1148,7 @@ struct ExecutionLedger {
     last_average_entry: Option<f64>,
     gross_realized: Option<f64>,
     costs: f64,
+    unknown_cost_fields: usize,
     fill_count: i64,
 }
 
@@ -1200,10 +1201,23 @@ fn execution_ledger(events: &[(String,f64,f64,f64,f64)],direction:&str,point_val
 fn trade_execution_ledger(conn:&Connection,trade_id:&str,direction:&str,point_value:f64)
     -> Result<ExecutionLedger,AppError>
 {
-    let mut stmt=conn.prepare("SELECT action,price,quantity,COALESCE(commission,0),COALESCE(fees,0) FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
-    let rows=stmt.query_map([trade_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,r.get::<_,f64>(3)?,r.get::<_,f64>(4)?)))?;
-    let events=rows.collect::<Result<Vec<_>,_>>()?;
-    execution_ledger(&events,direction,point_value)
+    // Keep NULL distinct from confirmed zero. Old/manual/imported execution rows
+    // with unknown charges must not appear as cost-accurate net P&L or R.
+    let mut stmt=conn.prepare("SELECT action,price,quantity,commission,fees FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
+    let rows=stmt.query_map([trade_id],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,
+        r.get::<_,Option<f64>>(3)?,r.get::<_,Option<f64>>(4)?
+    )))?;
+    let persisted=rows.collect::<Result<Vec<_>,_>>()?;
+    let unknown_cost_fields=persisted.iter()
+        .map(|(_,_,_,commission,fees)|usize::from(commission.is_none())+usize::from(fees.is_none()))
+        .sum();
+    let events=persisted.into_iter().map(|(action,price,quantity,commission,fees)|
+        (action,price,quantity,commission.unwrap_or(0.0),fees.unwrap_or(0.0))
+    ).collect::<Vec<_>>();
+    let mut ledger=execution_ledger(&events,direction,point_value)?;
+    ledger.unknown_cost_fields=unknown_cost_fields;
+    Ok(ledger)
 }
 fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,AppError> {
     let (session_id,candidate_id,direction,status):(String,Option<String>,String,String)=conn.query_row(
@@ -1214,7 +1228,7 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
 
     let state=trade_execution_ledger(conn,trade_id,&direction,point_value)?;
     let gross=state.gross_realized;
-    let net=gross.map(|g|g-state.costs);
+    let net=if state.unknown_cost_fields==0 {gross.map(|g|g-state.costs)} else {None};
     let initial_risk:Option<f64>=conn.query_row(
         "SELECT risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
         [trade_id], |r| r.get(0)
