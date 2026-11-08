@@ -1281,9 +1281,11 @@ pub fn add_trade_fill(conn:&mut Connection,input:AddTradeFillInput)->Result<Trad
     if input.action=="ENTRY" {
         let latest_stop:Option<f64>=tx.query_row("SELECT stop_price FROM risk_snapshots WHERE trade_id=?1 AND stop_price IS NOT NULL ORDER BY occurred_at DESC,rowid DESC LIMIT 1",[&input.trade_id],|r|r.get(0)).optional()?;
         if let Some(stop)=latest_stop {
-            let avg_entry:f64=tx.query_row("SELECT SUM(price*quantity)/SUM(quantity) FROM execution_fills WHERE trade_id=?1 AND action='ENTRY'",[&input.trade_id],|r|r.get(0))?;
-            let rid=Uuid::new_v4().to_string(); let risk=(avg_entry-stop).abs()*point_value*new_entry;
-            tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,change_reason,provenance) VALUES(?1,?2,?3,'MODIFIED',?4,?5,?6,'Position size changed','NATIVE')",params![rid,input.trade_id,now,stop,new_entry,risk])?;
+            let ledger=trade_execution_ledger(&tx,&input.trade_id,&direction,point_value)?;
+            let avg_entry=ledger.open_average_entry.ok_or_else(||AppError::Validation("no open position for risk snapshot".into()))?;
+            let rid=Uuid::new_v4().to_string();
+            let risk=(avg_entry-stop).abs()*point_value*ledger.open_qty;
+            tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,change_reason,provenance) VALUES(?1,?2,?3,'MODIFIED',?4,?5,?6,'Position size changed','NATIVE')",params![rid,input.trade_id,now,stop,ledger.open_qty,risk])?;
         }
     }
     tx.commit()?; get_trade_detail(conn,&input.trade_id)
@@ -1294,10 +1296,13 @@ pub fn move_trade_stop(conn:&mut Connection,input:MoveStopInput)->Result<TradeDe
     let (session_id,direction,status):(String,String,String)=tx.query_row("SELECT session_id,direction,status FROM trades WHERE trade_id=?1",[&input.trade_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
     if matches!(status.as_str(),"CLOSED"|"CANCELLED"){return Err(AppError::Validation("cannot move stop on a closed/cancelled trade".into()));}
     let (tick_size,point_value)=instrument_spec_for_session(&tx,&session_id)?; if !price_tick_aligned(input.stop_price,tick_size){return Err(AppError::Validation(format!("stop must align to tick size {tick_size}")));}
-    let (entry_qty,exit_qty,avg_entry):(f64,f64,f64)=tx.query_row("SELECT COALESCE(SUM(CASE WHEN action='ENTRY' THEN quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN action='EXIT' THEN quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN action='ENTRY' THEN price*quantity ELSE 0 END)/NULLIF(SUM(CASE WHEN action='ENTRY' THEN quantity ELSE 0 END),0),0) FROM execution_fills WHERE trade_id=?1",[&input.trade_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-    if direction=="LONG" && input.stop_price>=avg_entry { /* BE/profit stops are valid; no rejection */ }
-    if direction=="SHORT" && input.stop_price<=avg_entry { /* BE/profit stops are valid; no rejection */ }
-    let open=(entry_qty-exit_qty).max(0.0); let risk=(avg_entry-input.stop_price).abs()*point_value*open; let now=Utc::now().to_rfc3339(); let id=Uuid::new_v4().to_string();
+    let ledger=trade_execution_ledger(&tx,&input.trade_id,&direction,point_value)?;
+    let avg_entry=ledger.open_average_entry.ok_or_else(||AppError::Validation("cannot move stop without an open position".into()))?;
+    // A stop at breakeven or in profit remains permitted. Snapshot captures
+    // the actual OPEN quantity and contemporary average cost, not lifetime entries.
+    let open=ledger.open_qty;
+    let risk=(avg_entry-input.stop_price).abs()*point_value*open;
+    let now=Utc::now().to_rfc3339(); let id=Uuid::new_v4().to_string();
     tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,change_reason,was_rule_compliant,provenance) VALUES(?1,?2,?3,'MODIFIED',?4,?5,?6,?7,?8,'NATIVE')",params![id,input.trade_id,now,input.stop_price,open,risk,input.reason,input.was_rule_compliant.map(|x|if x{1}else{0})])?;
     tx.commit()?; get_trade_detail(conn,&input.trade_id)
 }
