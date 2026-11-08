@@ -326,3 +326,19 @@
 @media (prefers-reduced-motion:reduce){
   .appShell button{transition:none !important}
 }
+
+/* One navigation surface for existing required-field validation across all stages. */
+.requiredNavigator{margin-block:.75rem;border:1px solid rgba(198,40,40,.38)}
+.requiredNavigator .panelTitle{align-items:center}
+.requiredNavigator .requiredJump{
+  border:1px solid #b3261e;
+  border-radius:8px;
+  color:inherit;
+  background:rgba(198,40,40,.07);
+  text-align:left;
+  font-weight:650;
+  max-width:100%;
+  white-space:normal;
+}
+.requiredNavigator .requiredJump:focus-visible{outline:3px solid #b3261e;outline-offset:3px}
+.appShell[data-theme="dark"] .requiredNavigator .requiredJump{border-color:#ff8a80;background:rgba(255,138,128,.11)}
