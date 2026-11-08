@@ -14,7 +14,10 @@ describe('session-snapshot entry risk preview',()=>{
   });
   it('identifies off-tick prices before committing anything',()=>{
     expect(previewEntryRisk({...baseline,entry:6025.3}).problems.map(p=>p.id)).toContain('trade.entryPrice');
-    expect(previewEntryRisk({...baseline,target:6031.3}).problems.map(p=>p.id)).toContain('trade.plannedTarget');
+    const badTarget=previewEntryRisk({...baseline,target:6031.3});
+    expect(badTarget.problems.map(p=>p.id)).toContain('trade.plannedTarget');
+    expect(badTarget.riskDollars).toBe(300);
+    expect(badTarget.targetGrossR).toBeNull();
   });
   it('rejects invalid stop sides and prevents a misleading negative-risk preview',()=>{
     const p=previewEntryRisk({...baseline,stop:6026});
