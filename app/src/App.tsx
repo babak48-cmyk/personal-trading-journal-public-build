@@ -1,5 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
+import { attachmentCaptionIssue } from './attachmentCaptionValidation';
 import { planRevisionEvidenceIssues } from './planRevisionValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
@@ -1651,6 +1652,7 @@ function AttachmentPanel({ownerType,ownerId,defaultStage,title,compact=false,qui
   const [items,setItems]=useState<Attachment[]>([]);
   const [stage,setStage]=useState<typeof ATTACHMENT_STAGES[number]>(defaultStage);
   const [caption,setCaption]=useState('');
+  const captionInputRef=useRef<HTMLInputElement>(null);
   const [preview,setPreview]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const [msg,setMsg]=useState('');
@@ -1668,8 +1670,11 @@ function AttachmentPanel({ownerType,ownerId,defaultStage,title,compact=false,qui
   },[lightboxId,items]);
   async function add(){
     // A screenshot has no required caption until the trader actually chooses to add one.
-    if(isUserRequired('attachment.caption',requirementOverrides)&&!caption.trim()){
-      setMsg('Screenshot caption is required before adding a screenshot.');
+    const captionIssue=attachmentCaptionIssue(requirementOverrides,caption);
+    if(captionIssue){
+      setMsg('Missing required field: '+captionIssue.label+'.');
+      captionInputRef.current?.scrollIntoView({behavior:'smooth',block:'center'});
+      captionInputRef.current?.focus({preventScroll:true});
       return;
     }
     try{
@@ -1720,7 +1725,7 @@ function AttachmentPanel({ownerType,ownerId,defaultStage,title,compact=false,qui
   const lightboxItem=items.find(x=>x.attachment_id===lightboxId)??null;
   return <div className={compact?'attachmentBox compact':'panel attachmentBox'}>
     <div className="panelTitle"><div><h3>{title}</h3><p className="subtle">Optional · stored locally and included in full backup.</p></div><button disabled={busy} onClick={add}>{busy?'Saving…':'+ Screenshot'}</button></div>
-    <div className="attachmentControls"><label>Stage<select value={stage} onChange={e=>setStage(e.target.value as typeof ATTACHMENT_STAGES[number])}>{ATTACHMENT_STAGES.map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>{isFieldPresented("attachment.caption",quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="attachment.caption">{fieldText["attachment.caption"]?.label?.trim()||"Caption"} <small>{requirementLabel("attachment.caption",requirementOverrides)}</small>{fieldText["attachment.caption"]?.help&&<small title={fieldText["attachment.caption"].help}>ⓘ</small>}<input value={caption} onChange={e=>{setCaption(e.target.value);setMsg("")}} placeholder="Only if useful"/></label>}</div>
+    <div className="attachmentControls"><label>Stage<select value={stage} onChange={e=>setStage(e.target.value as typeof ATTACHMENT_STAGES[number])}>{ATTACHMENT_STAGES.map(x=><option key={x} value={x}>{x.replaceAll('_',' ')}</option>)}</select></label>{isFieldPresented("attachment.caption",quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="attachment.caption">{fieldText["attachment.caption"]?.label?.trim()||"Caption"} <small>{requirementLabel("attachment.caption",requirementOverrides)}</small>{fieldText["attachment.caption"]?.help&&<small title={fieldText["attachment.caption"].help}>ⓘ</small>}<input ref={captionInputRef} value={caption} onChange={e=>{setCaption(e.target.value);setMsg("")}} placeholder="Only if useful"/></label>}</div>
     {msg&&<p className="subtle">{msg}</p>}
     {items.length>0&&<div className="attachmentGrid">{items.map(a=><div className="attachmentCard" key={a.attachment_id}>
       {preview[a.attachment_id]?<button className="thumbButton" onClick={()=>show(a)}><img src={preview[a.attachment_id]} alt={a.caption||a.original_filename||'Trading screenshot'}/></button>:<button className="previewButton" onClick={()=>show(a)}>Preview</button>}
