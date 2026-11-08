@@ -416,7 +416,7 @@ export function App(){
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
-      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});
+      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
     setReviewQueue(null);setActive(s);rememberOpenedSession(s.session_id);
     if(s.status==='DRAFT'){
@@ -822,7 +822,7 @@ export function App(){
       }
       try { setTimeline(await localApi.listPlanTimeline(active.session_id)); }
       catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
-      if(isTrade){ setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
+      if(isTrade){ setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
     }catch(e){setDecisionSaveFeedback('Decision not saved: '+String(e));}
