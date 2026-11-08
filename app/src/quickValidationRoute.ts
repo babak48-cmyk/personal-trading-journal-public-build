@@ -29,7 +29,7 @@ export function quickValidationRoute(
   if(validationId.startsWith('decision.'))return {...empty,notebookPage:'DECISION'};
   if(['trade.','fill.','management.','review.','rule.','psychology.'].some(prefix=>validationId.startsWith(prefix)))
     return {...empty,notebookPage:'EXECUTION'};
-  if(['plan.','planRevision.','candidate-','candidate.'].some(prefix=>validationId.startsWith(prefix)))
+  if(['plan.','planRevision.','liveZone.','zoneRevision.','candidate-','candidate.'].some(prefix=>validationId.startsWith(prefix)))
     return {...empty,notebookPage:'PLAN'};
   return empty;
 }
