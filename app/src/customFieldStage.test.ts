@@ -8,9 +8,9 @@ const entry=(field_id:string,stage:string,field_type:string,display_order:number
 
 describe('canonical owner-stage custom-field capture',()=>{
   it('only offers creation in stages with end-to-end value editors and real owner IDs',()=>{
-    expect(CAPTURABLE_CUSTOM_FIELD_STAGES).toEqual(['session','premarket-plan','zone','post-trade-review']);
+    expect(CAPTURABLE_CUSTOM_FIELD_STAGES).toEqual(['session','premarket-plan','candidate','zone','trade','post-trade-review']);
     for(const stage of CAPTURABLE_CUSTOM_FIELD_STAGES)expect(canCaptureCustomFieldStage(stage)).toBe(true);
-    for(const stage of ['candidate','trade','execution','session-review','evidence','decision'])
+    for(const stage of ['execution','session-review','evidence','decision'])
       expect(canCaptureCustomFieldStage(stage)).toBe(false);
   });
   const fields=[
@@ -22,11 +22,14 @@ describe('canonical owner-stage custom-field capture',()=>{
     entry('z-text','zone','TEXT',1),
     entry('z-retired','zone','DATE',3,false),
     entry('different','candidate','TEXT',0),
+    entry('trade-detail','trade','NUMBER',0),
     entry('review-comment','post-trade-review','TEXT',0),
     entry('review-select','post-trade-review','SINGLE_SELECT',1),
   ];
   it('uses only active fields for the exact canonical owner and input kind',()=>{
     expect(eligibleCustomFields(fields,'zone','typed').map(f=>f.field_id)).toEqual(['z-text','z-number']);
+    expect(eligibleCustomFields(fields,'candidate','typed').map(f=>f.field_id)).toEqual(['different']);
+    expect(eligibleCustomFields(fields,'trade','typed').map(f=>f.field_id)).toEqual(['trade-detail']);
     expect(eligibleCustomFields(fields,'zone','select').map(f=>f.field_id)).toEqual(['z-choice']);
     expect(eligibleCustomFields(fields,'session','typed').map(f=>f.field_id)).toEqual(['s-text']);
     expect(eligibleCustomFields(fields,'premarket-plan','typed').map(f=>f.field_id)).toEqual(['p-text']);
