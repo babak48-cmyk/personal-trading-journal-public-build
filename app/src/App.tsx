@@ -1506,53 +1506,55 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const [draft,setDraft]=useState<RequirementOverrides>(overrides);
   const [msg,setMsg]=useState('');
   const [fieldSearch,setFieldSearch]=useState('');
+  const settingsSaveRef=useRef(false);
+  const [settingsSaving,setSettingsSaving]=useState(false);
+  async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>):Promise<boolean>{
+    if(settingsSaveRef.current){setMsg('A Field Manager change is already being saved.');return false;}
+    settingsSaveRef.current=true;setSettingsSaving(true);setMsg('Saving '+label+'…');
+    try {
+      await write();
+      setMsg(label+' saved. Existing journal history is unchanged.');
+      try{await refresh();}catch(e){setMsg(label+' saved, but settings display could not refresh: '+String(e));}
+      return true;
+    }catch(e){
+      setMsg(label+' save not confirmed. Reload settings and inspect the current value before retrying: '+String(e));
+      return false;
+    }finally{settingsSaveRef.current=false;setSettingsSaving(false);}
+  }
   const [textDraft,setTextDraft]=useState<Record<string,{label?:string;help?:string}>>(fieldText);
   useEffect(()=>setTextDraft(fieldText),[fieldText]);
   useEffect(()=>setDraft(overrides),[overrides]);
 
   async function save(next:RequirementOverrides):Promise<boolean>{
-    try{
-      await localApi.saveFieldRequirementOverrides(next);
-      await onChanged();
-      setDraft(next);
-      setMsg('Field requirements saved.');
-      return true;
-    }catch(e){
-      setMsg('Field requirement change was not confirmed. Reload settings before retrying: '+String(e));
-      return false;
-    }
+    const saved=await persistSetting('Field requirements',()=>localApi.saveFieldRequirementOverrides(next),onChanged);
+    if(saved)setDraft(next);
+    return saved;
   }
   async function toggle(id:string){
+    if(settingsSaveRef.current)return;
     const def=FIELD_DEFINITION_BY_ID[id];
     if(!def||def.systemLocked)return;
     const next={...draft,[id]:!draft[id]};
     if(!next[id])delete next[id];
     await save(next);
   }
-  async function reset(){if(await save({}))setMsg('Field requirements reset to lightweight defaults.');}
+  async function reset(){if(settingsSaveRef.current)return;if(await save({}))setMsg('Field requirements reset to lightweight defaults.');}
   function effectivePlacement(id:string):FieldPlacement {
     // Keep the pre-existing Decision quality Quick default (Detailed-only).
     return placements[id]??(id==='decision.quality'?'DETAILED_ONLY':'QUICK_AND_DETAILED');
   }
   async function togglePlacement(id:string){
-    if(!isActiveVisibilityControl(id)||isUserRequired(id,draft))return;
+    if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
     const next:Record<string,FieldPlacement>={...placements,[id]:effectivePlacement(id)==='DETAILED_ONLY'?'QUICK_AND_DETAILED':'DETAILED_ONLY'};
-    try{await localApi.saveFieldPlacementPreferences(next);await onPlacementChanged();setMsg('Quick/Detailed placement saved. Existing journal values are unchanged.');}
-    catch(e){setMsg(String(e));}
+    await persistSetting('Quick/Detailed placement',()=>localApi.saveFieldPlacementPreferences(next),onPlacementChanged);
   }
   async function toggleVisible(id:string){
-    // Mandatory fields must never disappear from Quick, regardless of UI entry point.
-    if(!isActiveVisibilityControl(id)||isUserRequired(id,draft))return;
+    if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
     const next={...visibility,[id]:!isFieldShown(id,visibility,draft)};
-    try{await localApi.saveFieldVisibilityPreferences(next);await onVisibilityChanged();setMsg('Visibility preference saved. Existing values retained.');}
-    catch(e){setMsg('Visibility update was not confirmed; reload settings before retrying: '+String(e));}
+    await persistSetting('Field visibility',()=>localApi.saveFieldVisibilityPreferences(next),onVisibilityChanged);
   }
   async function saveTextSettings(){
-    try{
-      await localApi.saveFieldTextPreferences(textDraft);
-      await onFieldTextChanged();
-      setMsg('Field labels/help saved. Field IDs and existing records remain unchanged.');
-    }catch(e){setMsg(String(e));}
+    await persistSetting('Field labels and help',()=>localApi.saveFieldTextPreferences(textDraft),onFieldTextChanged);
   }
   async function moveSessionReflection(id:string,direction:-1|1){
     const section=id==='sessionReview.wentWell'||id==='sessionReview.nextImprovement' ? ['sessionReview.wentWell','sessionReview.nextImprovement'] : ['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'];
@@ -1600,7 +1602,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const coverageSummary=fieldConnectionSummary();
   return <div className="guideOverlay" onClick={onClose}><div className="guideCard sourceManagerCard" onClick={e=>e.stopPropagation()}>
     <div className="panelTitle"><div><h2>Field Requirements</h2><p className="subtle">Choose which optional fields must be completed. System and conditional requirements are locked to protect workflow integrity.</p></div><div className="headerActions"><button onClick={onAppearance}>Appearance</button><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onClose}>Close</button></div></div>
-    {msg&&<p className="subtle">{msg}</p>}
+    {msg&&<p role="status" aria-live="polite" className="subtle">{msg}</p>}
     <CustomFieldDiscovery/>
     <details className="guidedMore"><summary>All-input inventory and connection status ({FIELD_CONTROL_INVENTORY.length} controls)</summary>
       <p className="subtle">Every inventoried input is listed here. Only connected controls have live visibility/placement settings below; inventory-only entries are not falsely presented as configurable. Protected system, lifecycle and reporting controls remain visible and cannot be disabled here.</p>
@@ -1608,17 +1610,17 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
       <div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(item=>!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase())).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage} · {item.id}</span></div><div className="requirementControl"><span>{coverageReport.find(row=>row.id===item.id)?.status.replaceAll('_',' ')??'UNKNOWN'}</span></div></div>)}</div>
       <p className="subtle">Full requirement + visibility connection: {coverageSummary.CONNECTED} · Visibility only: {coverageSummary.VISIBILITY_ONLY} · Protected: {coverageSummary.PROTECTED} · Pending: {coverageSummary.PENDING}. This inventory does not change saved trading data.</p>
     </details>
-    <details className="guidedMore"><summary>Field visibility and Quick/Detailed placement</summary><p className="subtle">Only connected controls can be changed. Required fields always remain visible. Hidden fields retain saved journal values.</p><label>Find a connected field<input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Search by field name or stage"/></label><div className="requirementGroup"><h3>Plan scenario order</h3><p className="subtle">Change the position of the existing main and alternative scenario prompts.</p>{orderFieldIdsWithinSection(['plan.mainScenario','plan.alternativeScenario'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='plan.mainScenario'?'Main scenario':'Alternative scenario'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>movePlanScenario(id,-1)}>Up</button><button disabled={index===1} onClick={()=>movePlanScenario(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Zone condition order</h3><p className="subtle">Reorder only the two connected planned-condition prompts.</p>{orderFieldIdsWithinSection(['candidate.requiredConditions','candidate.invalidationConditions'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='candidate.requiredConditions'?'Entry conditions':'Abandon conditions'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveZoneCondition(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveZoneCondition(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Live Evidence field order</h3><p className="subtle">Move optional observation details without changing historical Evidence records.</p>{orderFieldIdsWithinSection(['evidence.price','evidence.note'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_DEFINITION_BY_ID[id]?.label??id}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveEvidenceField(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveEvidenceField(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Session Review field order</h3><p className="subtle">Move the two connected main reflection fields without editing recorded answers. Order persists across restarts.</p>{orderFieldIdsWithinSection(['sessionReview.wentWell','sessionReview.nextImprovement'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='sessionReview.wentWell'?'What went well?':'One thing to improve next session'}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={index===1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Detailed Session Review field order</h3>{orderFieldIdsWithinSection(['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'],order).map((id,index,ids)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id}</span><div className="requirementControl"><button disabled={index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={index===ids.length-1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Field labels and help</h3><p className="subtle">Optional wording only. Original field IDs and saved answers do not change.</p>{(['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning','sessionReview.overall','sessionReview.planQuality','sessionReview.discipline','plan.mainScenario','plan.alternativeScenario','planRevision.evidence','candidate.label','evidence.direction','evidence.price','evidence.note','decision.note','decision.quality','trade.plannedTarget','fill.reason','management.reason','rule.note','attachment.caption'] as const).map(id=><div className="requirementRow" key={id}><label>{FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} — label<input maxLength={100} value={textDraft[id]?.label??''} placeholder={FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],label:e.target.value}}))}/></label><label>Help text<input maxLength={240} value={textDraft[id]?.help??''} placeholder="Optional short explanation" onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],help:e.target.value}}))}/></label></div>)}<button onClick={saveTextSettings}>Save labels and help</button></div><p className="subtle">{ACTIVE_VISIBILITY_FIELD_IDS.length} connected field controls. Other inventory controls remain protected or pending integration.</p><div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(x=>ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===x.id)&&isActiveVisibilityControl(x.id)&&(!fieldSearch.trim()||`${x.label} ${x.stage} ${x.id}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()))).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage}</span></div><div className="requirementControl"><button disabled={isUserRequired(item.id,draft)} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button><button disabled={!ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===item.id)||isUserRequired(item.id,draft)} onClick={()=>togglePlacement(item.id)}>{effectivePlacement(item.id)==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button></div></div>)}</div></details>
+    <details className="guidedMore"><summary>Field visibility and Quick/Detailed placement</summary><p className="subtle">Only connected controls can be changed. Required fields always remain visible. Hidden fields retain saved journal values.</p><label>Find a connected field<input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Search by field name or stage"/></label><div className="requirementGroup"><h3>Plan scenario order</h3><p className="subtle">Change the position of the existing main and alternative scenario prompts.</p>{orderFieldIdsWithinSection(['plan.mainScenario','plan.alternativeScenario'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='plan.mainScenario'?'Main scenario':'Alternative scenario'}</span><div className="requirementControl"><button disabled={settingsSaving||index===0} onClick={()=>movePlanScenario(id,-1)}>Up</button><button disabled={settingsSaving||index===1} onClick={()=>movePlanScenario(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Zone condition order</h3><p className="subtle">Reorder only the two connected planned-condition prompts.</p>{orderFieldIdsWithinSection(['candidate.requiredConditions','candidate.invalidationConditions'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='candidate.requiredConditions'?'Entry conditions':'Abandon conditions'}</span><div className="requirementControl"><button disabled={settingsSaving||index===0} onClick={()=>moveZoneCondition(id,-1)}>Up</button><button disabled={settingsSaving||index===1} onClick={()=>moveZoneCondition(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Live Evidence field order</h3><p className="subtle">Move optional observation details without changing historical Evidence records.</p>{orderFieldIdsWithinSection(['evidence.price','evidence.note'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_DEFINITION_BY_ID[id]?.label??id}</span><div className="requirementControl"><button disabled={settingsSaving||index===0} onClick={()=>moveEvidenceField(id,-1)}>Up</button><button disabled={settingsSaving||index===1} onClick={()=>moveEvidenceField(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Session Review field order</h3><p className="subtle">Move the two connected main reflection fields without editing recorded answers. Order persists across restarts.</p>{orderFieldIdsWithinSection(['sessionReview.wentWell','sessionReview.nextImprovement'],order).map((id,index)=><div className="requirementRow" key={id}><span>{index+1}. {id==='sessionReview.wentWell'?'What went well?':'One thing to improve next session'}</span><div className="requirementControl"><button disabled={settingsSaving||index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={settingsSaving||index===1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Detailed Session Review field order</h3>{orderFieldIdsWithinSection(['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning'],order).map((id,index,ids)=><div className="requirementRow" key={id}><span>{index+1}. {FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id}</span><div className="requirementControl"><button disabled={settingsSaving||index===0} onClick={()=>moveSessionReflection(id,-1)}>Up</button><button disabled={settingsSaving||index===ids.length-1} onClick={()=>moveSessionReflection(id,1)}>Down</button></div></div>)}</div><div className="requirementGroup"><h3>Field labels and help</h3><p className="subtle">Optional wording only. Original field IDs and saved answers do not change.</p>{(['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning','sessionReview.overall','sessionReview.planQuality','sessionReview.discipline','plan.mainScenario','plan.alternativeScenario','planRevision.evidence','candidate.label','evidence.direction','evidence.price','evidence.note','decision.note','decision.quality','trade.plannedTarget','fill.reason','management.reason','rule.note','attachment.caption'] as const).map(id=><div className="requirementRow" key={id}><label>{FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} — label<input maxLength={100} value={textDraft[id]?.label??''} placeholder={FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.label??id} onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],label:e.target.value}}))}/></label><label>Help text<input maxLength={240} value={textDraft[id]?.help??''} placeholder="Optional short explanation" onChange={e=>setTextDraft(d=>({...d,[id]:{...d[id],help:e.target.value}}))}/></label></div>)}<button disabled={settingsSaving} aria-busy={settingsSaving} onClick={saveTextSettings}>{settingsSaving?'Saving settings…':'Save labels and help'}</button></div><p className="subtle">{ACTIVE_VISIBILITY_FIELD_IDS.length} connected field controls. Other inventory controls remain protected or pending integration.</p><div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(x=>ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===x.id)&&isActiveVisibilityControl(x.id)&&(!fieldSearch.trim()||`${x.label} ${x.stage} ${x.id}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()))).map(item=><div className="requirementRow" key={item.id}><div><b>{item.label}</b><span>{item.stage}</span></div><div className="requirementControl"><button disabled={settingsSaving||isUserRequired(item.id,draft)} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button><button disabled={settingsSaving||!ACTIVE_VISIBILITY_FIELD_IDS.some(id=>id===item.id)||isUserRequired(item.id,draft)} onClick={()=>togglePlacement(item.id)}>{effectivePlacement(item.id)==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button></div></div>)}</div></details>
     <div className="requirementGroups">{groups.map(group=><section className="requirementGroup" key={group}><h3>{group}</h3>
       {FIELD_DEFINITIONS.filter(x=>x.group===group&&x.requirementManaged!==false).map(def=><div className="requirementRow" key={def.id}>
         <div><b>{def.label}</b>{def.conditionalText&&<span>{def.conditionalText}</span>}</div>
         <div className="requirementControl">
           <RequirementBadge id={def.id} overrides={draft}/>
-          {def.systemLocked?<button disabled>Locked</button>:<button className={draft[def.id]?'selectedButton':''} onClick={()=>toggle(def.id)}>{draft[def.id]?'Required':'Optional'}</button>}
+          {def.systemLocked?<button disabled>Locked</button>:<button disabled={settingsSaving} className={draft[def.id]?'selectedButton':''} onClick={()=>toggle(def.id)}>{draft[def.id]?'Required':'Optional'}</button>}
         </div>
       </div>)}
     </section>)}</div>
-    <div className="rowActions"><button onClick={reset}>Reset to defaults</button></div>
+    <div className="rowActions"><button disabled={settingsSaving} aria-busy={settingsSaving} onClick={reset}>Reset to defaults</button></div>
     <p className="guideTip">These settings affect future saves and edits only. Existing historical records are never invalidated retroactively.</p>
   </div></div>;
 }
