@@ -56,6 +56,9 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'planRevision.evidence',group:'Plan',label:'New evidence summary for plan revision',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Summarize observed information behind a timestamped change to the market plan, without replacing the original plan.',helpExample:'A sustained acceptance above the previously watched resistance prompted a new plan revision.'},
 
+  {id:'evidence.direction',group:'Evidence',label:'Observed direction',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Direction of this actual observation, not the planned Zone direction. Neutral remains the existing fallback when you leave this optional field unanswered.',helpExample:'BUY for observed buy-side activity, SELL for sell-side, or NEUTRAL if no directional interpretation is justified.'},
+
   {id:'evidence.price',group:'Evidence',label:'Observed price',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Market price where the evidence was actually observed, if known.',helpExample:'ES 6025.25 for a contemporaneous absorption observation; do not invent a price.'},
   {id:'evidence.note',group:'Evidence',label:'Evidence note',defaultRequirement:'OPTIONAL',systemLocked:false,
