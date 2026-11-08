@@ -168,6 +168,15 @@ describe('Existing Plan Revision evidence summary integration', () => {
   });
 });
 
+describe('Rule note conditional Field Manager policy', () => {
+  it('marks Rule note as formally connected but optional by default',()=>{
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id==='rule.note')?.formalFieldId).toBe('rule.note');
+    expect(fieldConnectionReport().find(x=>x.id==='rule.note')?.status).toBe('CONNECTED');
+    expect(isUserRequired('rule.note',{})).toBe(false);
+    expect(isFieldPresented('rule.note',true,{'rule.note':false},{'rule.note':'DETAILED_ONLY'},{'rule.note':true})).toBe(true);
+  });
+});
+
 describe('Session Review select field management', () => {
   it.each(['sessionReview.overall','sessionReview.planQuality','sessionReview.discipline'])('%s is connected and cannot be hidden when Required', id => {
     const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
