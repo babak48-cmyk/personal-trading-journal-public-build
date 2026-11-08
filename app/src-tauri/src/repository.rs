@@ -1138,6 +1138,73 @@ fn instrument_spec_for_session(conn: &Connection, session_id: &str) -> Result<(f
     )?)
 }
 
+
+#[derive(Debug, Clone, Default)]
+struct ExecutionLedger {
+    entry_qty: f64,
+    exit_qty: f64,
+    open_qty: f64,
+    open_average_entry: Option<f64>,
+    last_average_entry: Option<f64>,
+    gross_realized: Option<f64>,
+    costs: f64,
+    fill_count: i64,
+}
+
+/// Chronological moving-average cost basis. Exit prices are evaluated using the
+/// cost basis that existed at the time of that exit; future entries must not
+/// retrospectively change realized P&L. Does not modify stored execution events.
+fn execution_ledger(events: &[(String,f64,f64,f64,f64)],direction:&str,point_value:f64)
+    -> Result<ExecutionLedger,AppError>
+{
+    if !matches!(direction,"LONG"|"SHORT") || !point_value.is_finite() || point_value<=0.0 {
+        return Err(AppError::Validation("invalid direction or instrument point value".into()));
+    }
+    let sign=if direction=="LONG"{1.0}else{-1.0};
+    let mut state=ExecutionLedger::default();
+    let mut avg=0.0_f64;
+    let mut gross=0.0_f64;
+    for (action,price,quantity,commission,fees) in events {
+        if !price.is_finite() || !quantity.is_finite() || *quantity<=0.0 ||
+           !commission.is_finite() || !fees.is_finite() {
+            return Err(AppError::Validation("invalid historical execution event; no derived P&L calculated".into()));
+        }
+        state.fill_count+=1;
+        state.costs+=commission+fees;
+        if action=="ENTRY" {
+            let next_qty=state.open_qty+quantity;
+            avg=(avg*state.open_qty+price*quantity)/next_qty;
+            state.open_qty=next_qty;
+            state.entry_qty+=quantity;
+            state.last_average_entry=Some(avg);
+        } else if action=="EXIT" {
+            if *quantity>state.open_qty+1e-9 {
+                return Err(AppError::Validation("historical exit exceeds quantity open".into()));
+            }
+            gross+=(price-avg)*sign*quantity*point_value;
+            state.open_qty=(state.open_qty-quantity).max(0.0);
+            state.exit_qty+=quantity;
+            state.gross_realized=Some(gross);
+            if state.open_qty<=1e-9 {
+                state.open_qty=0.0;
+                avg=0.0;
+            }
+        } else {
+            return Err(AppError::Validation("unknown historical fill action".into()));
+        }
+    }
+    state.open_average_entry=if state.open_qty>0.0{Some(avg)}else{None};
+    Ok(state)
+}
+
+fn trade_execution_ledger(conn:&Connection,trade_id:&str,direction:&str,point_value:f64)
+    -> Result<ExecutionLedger,AppError>
+{
+    let mut stmt=conn.prepare("SELECT action,price,quantity,COALESCE(commission,0),COALESCE(fees,0) FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
+    let rows=stmt.query_map([trade_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,r.get::<_,f64>(3)?,r.get::<_,f64>(4)?)))?;
+    let events=rows.collect::<Result<Vec<_>,_>>()?;
+    execution_ledger(&events,direction,point_value)
+}
 fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,AppError> {
     let (session_id,candidate_id,direction,status):(String,Option<String>,String,String)=conn.query_row(
         "SELECT session_id,candidate_id,direction,status FROM trades WHERE trade_id=?1",
@@ -1145,14 +1212,9 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
     )?;
     let (_tick_size,point_value)=instrument_spec_for_session(conn,&session_id)?;
 
-    let mut stmt=conn.prepare("SELECT action,price,quantity,COALESCE(commission,0),COALESCE(fees,0) FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
-    let rows=stmt.query_map([trade_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,r.get::<_,f64>(3)?,r.get::<_,f64>(4)?)))?;
-    let mut entries:Vec<(f64,f64)>=Vec::new(); let mut exits:Vec<(f64,f64)>=Vec::new(); let mut costs=0.0; let mut fill_count=0_i64;
-    for row in rows { let (action,price,qty,comm,fees)=row?; fill_count+=1; costs += comm + fees; if action=="ENTRY" {entries.push((price,qty));} else {exits.push((price,qty));} }
-    let entry_qty: f64=entries.iter().map(|x|x.1).sum(); let exit_qty:f64=exits.iter().map(|x|x.1).sum();
-    let avg_entry=if entry_qty>0.0 {Some(entries.iter().map(|(p,q)|p*q).sum::<f64>()/entry_qty)} else {None};
-    let gross=if let Some(avg)=avg_entry { if exit_qty>0.0 { let sign=if direction=="LONG"{1.0}else{-1.0}; Some(exits.iter().map(|(p,q)|(p-avg)*sign*q*point_value).sum()) } else {None} } else {None};
-    let net=gross.map(|g|g-costs);
+    let state=trade_execution_ledger(conn,trade_id,&direction,point_value)?;
+    let gross=state.gross_realized;
+    let net=gross.map(|g|g-state.costs);
     let initial_risk:Option<f64>=conn.query_row(
         "SELECT risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
         [trade_id], |r| r.get(0)
@@ -1162,7 +1224,7 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
         [trade_id], |r| r.get(0)
     ).optional()?;
     let rr=match(net,initial_risk){(Some(n),Some(r)) if r>0.0=>Some(n/r),_=>None};
-    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,direction,status,average_entry:avg_entry,total_entry_quantity:entry_qty,total_exit_quantity:exit_qty,open_quantity:(entry_qty-exit_qty).max(0.0),latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count})
+    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,direction,status,average_entry:state.open_average_entry.or(state.last_average_entry),total_entry_quantity:state.entry_qty,total_exit_quantity:state.exit_qty,open_quantity:state.open_qty,latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count:state.fill_count})
 }
 
 pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionInput)->Result<TradeDetailDto,AppError>{
