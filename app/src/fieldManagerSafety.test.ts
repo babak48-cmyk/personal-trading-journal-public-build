@@ -177,6 +177,16 @@ describe('Rule note conditional Field Manager policy', () => {
   });
 });
 
+describe('Execution event reason field management', () => {
+  it.each(['fill.reason','management.reason'])('%s is a real optional field that remains on Quick when Required',id=>{
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)?.formalFieldId).toBe(id);
+    expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{})).toBe(false);
+    expect(isUserRequired(id,{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
 describe('Session Review select field management', () => {
   it.each(['sessionReview.overall','sessionReview.planQuality','sessionReview.discipline'])('%s is connected and cannot be hidden when Required', id => {
     const entry = FIELD_CONTROL_INVENTORY.find(item=>item.id===id);
