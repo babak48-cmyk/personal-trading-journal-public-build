@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { quickValidationRoute } from './quickValidationRoute';
 import { tradeEntryIssues } from './tradeEntryValidation';
+import { previewEntryRisk } from './entryRiskPreview';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
 import { pendingReviewTrades } from './reviewPending';
 import { attachmentCaptionIssue } from './attachmentCaptionValidation';
@@ -834,8 +835,12 @@ export function App(){
     if(!pendingTradeDecision||tradeOpeningRef.current)return;
     const entryCommission=parseOptionalFillCost(entryCommissionInput);
     const entryFees=parseOptionalFillCost(entryFeesInput);
+    const preflight=previewEntryRisk({entry:entryPrice,stop:stopPrice,quantity:tradeQty,
+      tickSize:active?.instrument_tick_size??NaN,pointValue:active?.instrument_point_value??NaN,
+      direction:pendingTradeDecision.intended_direction,target:plannedTarget});
     const missing:ValidationIssue[]=[
       ...tradeEntryIssues(entryPrice,stopPrice,tradeQty,plannedTarget,isUserRequired('trade.plannedTarget',requirementOverrides)),
+      ...preflight.problems,
       ...(!entryCommission.valid?[{id:'trade.entryCommission',label:'Entry commission (non-negative total)'}]:[]),
       ...(!entryFees.valid?[{id:'trade.entryFees',label:'Entry fees (non-negative total)'}]:[]),
     ];
@@ -1027,6 +1032,9 @@ export function App(){
   }
 
   const tickStep=active?.instrument_tick_size??instruments.find(x=>x.symbol===instrument)?.tick_size??0.01;
+  const entryRiskPreview=previewEntryRisk({entry:entryPrice,stop:stopPrice,quantity:tradeQty,
+    tickSize:active?.instrument_tick_size??NaN,pointValue:active?.instrument_point_value??NaN,
+    direction:pendingTradeDecision?.intended_direction,target:plannedTarget});
 
   const groupedSources=useMemo(()=>Object.entries(sources.reduce<Record<string,LevelSourceType[]>>((a,s)=>((a[s.source_group]??=[]).push(s),a),{})),[sources]);
   const groupedEvidence=useMemo(()=>Object.entries(evidenceTypes.reduce<Record<string,EvidenceType[]>>((a,s)=>((a[s.family]??=[]).push(s),a),{})),[evidenceTypes]);
@@ -1196,7 +1204,14 @@ export function App(){
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
           {quickMode&&!pendingTradeDecision&&!activeTrade&&sessionTrades.length===0&&<div className="panel"><h2>Trade entry</h2><p className="subtle">No trade entry yet. Record a TRADE decision first; a decision alone does not create a fill.</p></div>}
-          {pendingTradeDecision&&<div className="panel executionPanel" id="journal-quick-entry"><div className="panelTitle"><div><h2>Quick trade entry</h2><p className="subtle">Only the essentials now. Review can be completed later.</p></div><button onClick={()=>setPendingTradeDecision(null)}>Close</button></div><div className="formGrid"><label data-validation-id="trade.entryPrice" className={invalidClass('trade.entryPrice')}>Entry price <FieldHelp id="trade.entryPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={entryPrice??''} onChange={e=>{setEntryPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.entryPrice')}} placeholder="e.g. 6025.25"/></label><label data-validation-id="trade.stopPrice" className={invalidClass('trade.stopPrice')}>Initial stop price <FieldHelp id="trade.stopPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={stopPrice??''} onChange={e=>{setStopPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.stopPrice')}} placeholder="e.g. 6022.25"/></label><label data-validation-id="trade.quantity" className={invalidClass('trade.quantity')}>Quantity <FieldHelp id="trade.quantity"/><input type="number" min="1" step="1" value={tradeQty} onChange={e=>{setTradeQty(e.target.value===''?0:Number(e.target.value));clearValidation('trade.quantity')}}/></label>{isFieldPresented('trade.plannedTarget',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="trade.plannedTarget" className={invalidClass('trade.plannedTarget')}>{fieldText['trade.plannedTarget']?.label?.trim()||'Planned target'} <RequirementBadge id="trade.plannedTarget" overrides={requirementOverrides}/>{fieldText['trade.plannedTarget']?.help&&<small title={fieldText['trade.plannedTarget'].help}>ⓘ</small>} <FieldHelp id="trade.plannedTarget"/><input type="number" step={tickStep} value={plannedTarget??''} onChange={e=>{setPlannedTarget(e.target.value?Number(e.target.value):null);clearValidation('trade.plannedTarget')}}/></label>}</div><details className="guidedMore"><summary>Entry commission and fees (optional)</summary>
+          {pendingTradeDecision&&<div className="panel executionPanel" id="journal-quick-entry"><div className="panelTitle"><div><h2>Quick trade entry</h2><p className="subtle">Only the essentials now. Review can be completed later.</p></div><button onClick={()=>setPendingTradeDecision(null)}>Close</button></div><div className="formGrid"><label data-validation-id="trade.entryPrice" className={invalidClass('trade.entryPrice')}>Entry price <FieldHelp id="trade.entryPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={entryPrice??''} onChange={e=>{setEntryPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.entryPrice')}} placeholder="e.g. 6025.25"/></label><label data-validation-id="trade.stopPrice" className={invalidClass('trade.stopPrice')}>Initial stop price <FieldHelp id="trade.stopPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={stopPrice??''} onChange={e=>{setStopPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.stopPrice')}} placeholder="e.g. 6022.25"/></label><label data-validation-id="trade.quantity" className={invalidClass('trade.quantity')}>Quantity <FieldHelp id="trade.quantity"/><input type="number" min="1" step="1" value={tradeQty} onChange={e=>{setTradeQty(e.target.value===''?0:Number(e.target.value));clearValidation('trade.quantity')}}/></label>{isFieldPresented('trade.plannedTarget',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="trade.plannedTarget" className={invalidClass('trade.plannedTarget')}>{fieldText['trade.plannedTarget']?.label?.trim()||'Planned target'} <RequirementBadge id="trade.plannedTarget" overrides={requirementOverrides}/>{fieldText['trade.plannedTarget']?.help&&<small title={fieldText['trade.plannedTarget'].help}>ⓘ</small>} <FieldHelp id="trade.plannedTarget"/><input type="number" step={tickStep} value={plannedTarget??''} onChange={e=>{setPlannedTarget(e.target.value?Number(e.target.value):null);clearValidation('trade.plannedTarget')}}/></label>}</div><div className="summaryStrip" role="status" aria-live="polite">
+            <span><b>Initial risk (gross)</b>{entryRiskPreview.riskDollars===null?'Enter valid entry, stop and quantity':`${entryRiskPreview.riskDollars.toFixed(2)} ${active?.instrument_currency??''}`}</span>
+            <span><b>Stop distance</b>{entryRiskPreview.riskTicks===null?'—':`${entryRiskPreview.riskTicks.toFixed(0)} ticks`}</span>
+            <span><b>Planned reward (gross)</b>{entryRiskPreview.targetRewardDollars===null?'Not entered':`${entryRiskPreview.targetRewardDollars.toFixed(2)} ${active?.instrument_currency??''}`}</span>
+            <span><b>Planned gross R</b>{entryRiskPreview.targetGrossR===null?'—':`${entryRiskPreview.targetGrossR.toFixed(2)}R`}</span>
+          </div>{entryRiskPreview.problems.length>0&&<p className="warningBox" role="alert">{entryRiskPreview.problems.map(x=>x.label).join(' · ')}</p>}
+          <p className="subtle">Calculated from this Session's saved tick size and point value. This is planned price risk before commissions, fees, slippage or a future outcome; it is not a proven trade edge.</p>
+          <details className="guidedMore"><summary>Entry commission and fees (optional)</summary>
             <p className="subtle">Total amounts for this entry fill in the instrument currency, not per contract. Blank means unknown; enter 0 only when confirmed zero. Recorded values cannot be silently edited.</p>
             <div className="formGrid"><label data-validation-id="trade.entryCommission" className={invalidClass('trade.entryCommission')}>Commission (total)<input type="number" min="0" step="any" value={entryCommissionInput} onChange={e=>{setEntryCommissionInput(e.target.value);clearValidation('trade.entryCommission')}} placeholder="Unknown"/></label><label data-validation-id="trade.entryFees" className={invalidClass('trade.entryFees')}>Other fees (total)<input type="number" min="0" step="any" value={entryFeesInput} onChange={e=>{setEntryFeesInput(e.target.value);clearValidation('trade.entryFees')}} placeholder="Unknown"/></label></div>
           </details><button className="primary" disabled={tradeOpening} aria-busy={tradeOpening} onClick={createExecutedTrade}>{tradeOpening?'Opening…':'Open trade'}</button><span role="status" aria-live="polite">{tradeOpeningFeedback}</span></div>}
