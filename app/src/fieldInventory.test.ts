@@ -176,9 +176,10 @@ describe('Field Manager inventory safety', () => {
     expect(isFieldPresented('session.instrument',true,{'session.instrument':false},{},{})).toBe(true);
   });
 
-  it('does not treat unmapped session reflections as formally user-required', () => {
+  it('requires newly connected Session Review answers to remain visible in Quick when user-required', () => {
     for (const id of ['sessionReview.wentWell','sessionReview.nextImprovement']) {
-      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(false);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+      expect(isFieldPresented(id,false,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
       expect(isFieldPresented(id,true,{[id]:false},{},{})).toBe(false);
     }
   });
