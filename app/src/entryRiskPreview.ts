@@ -31,16 +31,17 @@ export function previewEntryRisk(input:{
     else if(direction==='SHORT'&&stop<=entry)problems.push({id:'trade.stopPrice',label:'Short trade stop must be above entry'});
     else if(direction!=='LONG'&&direction!=='SHORT')problems.push({id:'trade.stopPrice',label:'A saved long or short decision is required'});
   }
-  if(target!==null&&target!==undefined&&Number.isFinite(target)&&!aligned(target))
-    problems.push({id:'trade.plannedTarget',label:'Planned target must align with the session tick size'});
+  const entryProblems=problems.length;
+  if(target!==null&&target!==undefined&&(!Number.isFinite(target)||!aligned(target)))
+    problems.push({id:'trade.plannedTarget',label:'Planned target must be finite and align with the session tick size'});
   if(entry===null||stop===null||!Number.isFinite(entry)||!Number.isFinite(stop)
     ||!Number.isFinite(quantity)||quantity<=0||!Number.isInteger(quantity)
-    ||(direction!=='LONG'&&direction!=='SHORT')||problems.length){
+    ||(direction!=='LONG'&&direction!=='SHORT')||entryProblems>0){
     return {riskDollars:null,riskTicks:null,targetRewardDollars:null,targetGrossR:null,problems};
   }
   const riskDollars=Math.abs(entry-stop)*pointValue*quantity;
   const riskTicks=Math.abs(entry-stop)/tickSize;
-  const targetOK=target!==null&&target!==undefined&&Number.isFinite(target);
+  const targetOK=target!==null&&target!==undefined&&Number.isFinite(target)&&aligned(target);
   const targetRewardDollars=targetOK
     ?(direction==='LONG'?(target!-entry):(entry-target!))*pointValue*quantity:null;
   const targetGrossR=targetRewardDollars!==null&&riskDollars>0?targetRewardDollars/riskDollars:null;
