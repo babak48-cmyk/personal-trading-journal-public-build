@@ -1945,7 +1945,7 @@ mod expanded_instrument_catalog_tests {
         let db=test_db();
         let first=list_all_instruments(&db).unwrap();
         let nq=first.iter().find(|i|i.symbol=="NQ").unwrap().clone();
-        let mut changed=UpdateInstrumentInput {
+        let changed=UpdateInstrumentInput {
             instrument_id:nq.instrument_id.clone(),
             symbol:nq.symbol.clone(),display_name:Some("MY CUSTOM NQ LABEL".into()),
             tick_size:0.5,point_value:22.0,currency:"USD".into(),
@@ -1960,7 +1960,6 @@ mod expanded_instrument_catalog_tests {
         assert_eq!(preserved.point_value,22.0);
         assert_eq!(preserved.display_name.as_deref(),Some("MY CUSTOM NQ LABEL"));
         assert_eq!(preserved.display_order,321);
-        changed.active=true; // activating remains an explicit trader action
         assert!(!list_instruments(&db).unwrap().iter().any(|i|i.symbol=="NQ"));
     }
 
