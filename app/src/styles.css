@@ -455,3 +455,7 @@
    border-inline-start-width:5px;
  }
 }
+
+/* Weekly learning is a read-only analytics aid; keep copy text selectable. */
+.appShell .weeklyLearningCopy{display:flex;flex-direction:column;gap:.35rem;font-weight:600;font-size:.84rem;margin-top:.8rem}
+.appShell .weeklyLearningCopy textarea{display:block;width:100%;min-height:11rem;padding:.8rem;border:1px solid var(--border);border-radius:.65rem;background:var(--surface-soft);color:var(--text);resize:vertical;white-space:pre-wrap;font:inherit;line-height:1.5}
