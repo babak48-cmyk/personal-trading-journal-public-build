@@ -366,3 +366,89 @@
   outline:2px solid var(--user-accent);
   outline-offset:2px;
 }
+
+
+/* PTJ workflow field relationships: functional orientation, not a decorative global palette.
+   Stable lifecycle families share their background and left rule even when fields are
+   nonadjacent or reordered by Field Manager. Colors never denote completed/confirmed. */
+.appShell {
+  --family-plan:#eef5fd;--family-plan-rule:#4979aa;
+  --family-zone:#eaf7f2;--family-zone-rule:#38846d;
+  --family-evidence:#f3f0fc;--family-evidence-rule:#8065ad;
+  --family-decision:#fff5e8;--family-decision-rule:#a97536;
+  --family-execution:#edf4fa;--family-execution-rule:#537e9c;
+  --family-review:#f7f0f5;--family-review-rule:#966786;
+  --family-session:#f0f3f6;--family-session-rule:#718497;
+}
+.appShell[data-theme="dark"] {
+  --family-plan:#223448;--family-plan-rule:#86afd6;
+  --family-zone:#203a31;--family-zone-rule:#83c9ac;
+  --family-evidence:#312b43;--family-evidence-rule:#b3a2e2;
+  --family-decision:#423321;--family-decision-rule:#dfb276;
+  --family-execution:#243847;--family-execution-rule:#99c0dd;
+  --family-review:#3d2c39;--family-review-rule:#d4a5c3;
+  --family-session:#29333d;--family-session-rule:#a1b0c2;
+}
+/* Every identified input has a boundary. The same family color connects related
+   values without implying the recorded business lifecycle is complete. */
+.appShell label[data-validation-id]:not(.validationFieldError),
+.appShell .formGrid > label:not([data-validation-id]),
+.appShell details[data-field-group] .customFieldValue {
+  border:1px solid var(--border);
+  border-inline-start:4px solid var(--field-family-rule,var(--family-session-rule));
+  border-radius:.65rem;
+  padding:.65rem .75rem;
+  background:var(--field-family-bg,var(--family-session));
+  min-width:0;
+}
+.appShell :is(label[data-validation-id^="plan."],label[data-validation-id^="planRevision."]){
+  --field-family-bg:var(--family-plan);--field-family-rule:var(--family-plan-rule);
+}
+.appShell :is(label[data-validation-id^="candidate"],label[data-validation-id^="zone"],label[data-validation-id^="liveZone."]){
+  --field-family-bg:var(--family-zone);--field-family-rule:var(--family-zone-rule);
+}
+.appShell label[data-validation-id^="evidence."]{
+  --field-family-bg:var(--family-evidence);--field-family-rule:var(--family-evidence-rule);
+}
+.appShell label[data-validation-id^="decision."]{
+  --field-family-bg:var(--family-decision);--field-family-rule:var(--family-decision-rule);
+}
+.appShell :is(label[data-validation-id^="trade."],label[data-validation-id^="fill."],label[data-validation-id^="management."]){
+  --field-family-bg:var(--family-execution);--field-family-rule:var(--family-execution-rule);
+}
+.appShell :is(label[data-validation-id^="review."],label[data-validation-id^="rule."],label[data-validation-id^="psychology."],label[data-validation-id^="sessionReview."]){
+  --field-family-bg:var(--family-review);--field-family-rule:var(--family-review-rule);
+}
+/* Custom fields use their *canonical owner stage*, never a guessed position.
+   Keep one consistent visual identity for candidate/zone and for review stages. */
+.appShell details[data-field-group="premarket-plan"]{--field-family-bg:var(--family-plan);--field-family-rule:var(--family-plan-rule)}
+.appShell details[data-field-group="candidate"],
+.appShell details[data-field-group="zone"]{--field-family-bg:var(--family-zone);--field-family-rule:var(--family-zone-rule)}
+.appShell details[data-field-group="execution"],
+.appShell details[data-field-group="trade"]{--field-family-bg:var(--family-execution);--field-family-rule:var(--family-execution-rule)}
+.appShell details[data-field-group="post-trade-review"],
+.appShell details[data-field-group="session-review"]{--field-family-bg:var(--family-review);--field-family-rule:var(--family-review-rule)}
+.appShell details[data-field-group="session"]{--field-family-bg:var(--family-session);--field-family-rule:var(--family-session-rule)}
+.appShell details[data-field-group]{
+  border-inline-start:4px solid var(--field-family-rule,var(--family-session-rule));
+  background:var(--field-family-bg,var(--family-session));
+}
+.appShell label[data-validation-id]:focus-within:not(.validationFieldError),
+.appShell .formGrid > label:focus-within:not(.validationFieldError){
+  box-shadow:0 0 0 2px var(--field-family-rule,var(--family-session-rule));
+}
+/* Existing required/error red remains the strongest signal. */
+.appShell label[data-validation-id].validationFieldError{
+  background:rgba(198,40,40,.08) !important;
+  border-color:#c62828 !important;
+}
+.appShell[data-theme="dark"] label[data-validation-id].validationFieldError{
+  background:rgba(229,57,53,.12) !important;
+  border-color:#ef5350 !important;
+}
+@media (prefers-contrast:more){
+ .appShell label[data-validation-id],.appShell .formGrid > label{
+   border-width:2px;
+   border-inline-start-width:5px;
+ }
+}
