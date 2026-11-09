@@ -1441,7 +1441,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
   }
   if(!fields.length&&!notice)return null;
   const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
-  return <details className="guidedMore" open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+  return <details className="guidedMore" data-field-group={ownerStage} open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {fields.map(field=>{
@@ -1524,7 +1524,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
   }
   if(!fields.length&&!message)return null;
   const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
-  return <details className="guidedMore" open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+  return <details className="guidedMore" data-field-group={ownerStage} open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {fields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id))||localErrors.includes(f.field_id)?'validationFieldError':'')} key={f.field_id}>
