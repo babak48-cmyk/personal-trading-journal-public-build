@@ -393,7 +393,7 @@
    values without implying the recorded business lifecycle is complete. */
 .appShell label[data-validation-id]:not(.validationFieldError),
 .appShell .formGrid > label:not([data-validation-id]),
-.appShell details[data-field-group] .customFieldValue {
+.appShell details[data-field-group] > .requirementGroup:not(.validationFieldError) {
   border:1px solid var(--border);
   border-inline-start:4px solid var(--field-family-rule,var(--family-session-rule));
   border-radius:.65rem;
@@ -433,6 +433,9 @@
   border-inline-start:4px solid var(--field-family-rule,var(--family-session-rule));
   background:var(--field-family-bg,var(--family-session));
 }
+.appShell details[data-field-group] > .requirementGroup{margin-block:.5rem;}
+.appShell details[data-field-group] > .requirementGroup.validationFieldError{border:2px solid #c62828 !important;background:rgba(198,40,40,.08) !important;}
+.appShell[data-theme="dark"] details[data-field-group] > .requirementGroup.validationFieldError{border-color:#ef5350 !important;background:rgba(229,57,53,.12) !important;}
 .appShell label[data-validation-id]:focus-within:not(.validationFieldError),
 .appShell .formGrid > label:focus-within:not(.validationFieldError){
   box-shadow:0 0 0 2px var(--field-family-rule,var(--family-session-rule));
