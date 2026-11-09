@@ -10,7 +10,8 @@ const all=[def('s-zero','session','NUMBER'),def('s-false','session','BOOLEAN'),d
  def('z-pick','zone','SINGLE_SELECT'),def('z-date','zone','DATE'),def('z-unused','zone','TEXT',false),
  def('z-inactive','zone','NUMBER',true,false),
  def('p-required','premarket-plan','TEXT'),
- def('r-choice','post-trade-review','SINGLE_SELECT'),def('r-text','post-trade-review','TEXT')];
+ def('r-choice','post-trade-review','SINGLE_SELECT'),def('r-text','post-trade-review','TEXT'),
+ def('sr-required','session-review','TEXT'),def('sr-zero','session-review','NUMBER')];
 const values:Record<string,CustomTypedValue>={
  's-zero':{event_id:'a',value_type:'NUMBER',number_value:0,text_value:null,boolean_value:null,date_value:null},
  's-false':{event_id:'b',value_type:'BOOLEAN',number_value:null,text_value:null,boolean_value:false,date_value:null},
@@ -68,6 +69,24 @@ describe('custom field semantic boundary required check',()=>{
   };
   expect(await missingRequiredCustomValues(complete,'post-trade-review','trade-2')).toEqual([]);
   expect(seen).toEqual(expect.arrayContaining(['post-trade-review:trade-2:r-text','post-trade-review:trade-2:r-choice']));
+ });
+ it('reads required Session Review values only from the persisted review ID, preserving valid zero',async()=>{
+  const visited:string[]=[];
+  const ownerReader:CustomValueReader={...reader,
+   currentCustomFieldTypedValue:async(stage,owner,id)=>{
+    visited.push(stage+':'+owner+':'+id);
+    if(stage==='session-review'&&owner==='review-A'&&id==='sr-zero')
+      return {event_id:'zero',value_type:'NUMBER',number_value:0,text_value:null,date_value:null,boolean_value:null};
+    if(stage==='session-review'&&owner==='review-A'&&id==='sr-required')
+      return {event_id:'text',value_type:'TEXT',text_value:'Session learning',number_value:null,date_value:null,boolean_value:null};
+    return null;
+   },
+  };
+  expect(await missingRequiredCustomValues(ownerReader,'session-review','review-A')).toEqual([]);
+  expect((await missingRequiredCustomValues(ownerReader,'session-review','session-A')).map(x=>x.id))
+    .toEqual(['sr-required','sr-zero']);
+  expect(visited).toContain('session-review:review-A:sr-required');
+  expect(visited).toContain('session-review:review-A:sr-zero');
  });
  it('propagates unavailable persistence errors rather than confirming without checking',async()=>{
   await expect(missingRequiredCustomValues({...reader,listCustomFieldDefinitions:async()=>{throw Error('database unavailable')}},'zone','z1')).rejects.toThrow('database unavailable');
