@@ -369,6 +369,11 @@ export function App(){
         if(active?.status==='DRAFT')setDraftStep(1);
         else setNotebookPage('PLAN');
       }
+      if(id.startsWith('custom-required-session-review-'))setNotebookPage('REVIEW');
+      if(id.startsWith('custom-required-session-')){
+        if(active?.status==='DRAFT'){setDraftStep(1);setDraftPlanPage(0);}
+        else setNotebookPage('PLAN');
+      }
     }
     const focusVisible=(attempt:number)=>{
       const candidates=[
