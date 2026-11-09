@@ -459,3 +459,8 @@
 /* Weekly learning is a read-only analytics aid; keep copy text selectable. */
 .appShell .weeklyLearningCopy{display:flex;flex-direction:column;gap:.35rem;font-weight:600;font-size:.84rem;margin-top:.8rem}
 .appShell .weeklyLearningCopy textarea{display:block;width:100%;min-height:11rem;padding:.8rem;border:1px solid var(--border);border-radius:.65rem;background:var(--surface-soft);color:var(--text);resize:vertical;white-space:pre-wrap;font:inherit;line-height:1.5}
+
+/* Read-only weekly breakdown panels remain legible without implying a profitable signal. */
+.appShell .weeklyBreakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem;margin:.7rem 0}
+.appShell .weeklyBreakdownRow{display:flex;flex-direction:column;gap:.35rem;padding:.75rem;border:1px solid var(--border);border-inline-start:4px solid var(--family-review-rule,var(--border));border-radius:.55rem;background:var(--surface-soft);color:var(--text);font-size:.84rem}
+.appShell .weeklyBreakdownRow small{color:var(--text-muted);line-height:1.45}
