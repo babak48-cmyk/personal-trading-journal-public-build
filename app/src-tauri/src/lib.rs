@@ -130,6 +130,7 @@ pub fn run() {
             commands::save_session_review,
             commands::get_session_review,
             commands::list_journal_trades,
+            commands::list_decision_only_analytics,
             commands::get_analytics_summary,
             commands::list_mistake_summary,
             commands::import_attachment,
