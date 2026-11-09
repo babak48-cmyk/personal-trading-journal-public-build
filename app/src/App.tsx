@@ -1199,6 +1199,7 @@ export function App(){
           <div id="journal-current-plan" className="panel"><div className="panelTitle"><div><h2>Current plan</h2><p className="subtle">Revision {plan.revision_number} · updated {timeLabel(plan.created_at)}</p></div><div className="headerActions"><button onClick={()=>setShowLiveCandidate(v=>!v)}>+ Add live zone</button><button className="primary" onClick={()=>setShowPlanUpdate(v=>!v)}>Revise plan</button></div></div>
             <div className="summaryStrip"><span><b>Bias</b>{plan.initial_bias}</span><span><b>Active zones</b>{consistency?.active_candidate_count??activeCandidates.length}</span><span><b>Inactive</b>{consistency?.cancelled_candidate_count??0}</span><span className={consistency?.warning_codes.length?'warningCell':'okCell'}><b>Consistency</b>{consistency?.warning_codes.length?`${consistency.warning_codes.length} warning(s)`:'OK'}</span></div>
             {plan.main_scenario&&<p><strong>Main:</strong> {plan.main_scenario}</p>}{plan.alternative_scenario&&<p><strong>Alternative:</strong> {plan.alternative_scenario}</p>}
+            <CompletedCustomFieldAnswers ownerId={active.session_id} scope="plan"/>
             {consistency&&consistency.warning_codes.length>0&&<details className="warningBox"><summary>Plan consistency warnings</summary>{consistency.warning_codes.map(x=><div key={x}>{x}</div>)}</details>}
 
             {showPlanUpdate&&<div className="inlineEditor"><h3>New plan revision</h3><div className="formGrid"><label>Bias change<select value={newBias} onChange={e=>setNewBias(e.target.value)}><option value="">Keep current</option>{['LONG','SHORT','NEUTRAL','MIXED','UNKNOWN'].map(x=><option key={x}>{x}</option>)}</select></label><label data-validation-id="planRevision.reason" className={invalidClass("planRevision.reason")}>Why did the plan change? <textarea value={planReason} onChange={e=>{setPlanReason(e.target.value);clearValidation("planRevision.reason")}} placeholder="Required"/></label>{isFieldPresented('planRevision.evidence',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="planRevision.evidence" className={invalidClass('planRevision.evidence')}>{fieldText['planRevision.evidence']?.label?.trim()||'New evidence summary'} <small>{requirementLabel('planRevision.evidence',requirementOverrides)}</small><textarea value={planEvidence} onChange={e=>{setPlanEvidence(e.target.value);clearValidation('planRevision.evidence')}} placeholder="Observed context for this revision"/></label>}</div><div className="rowActions"><button onClick={()=>setShowPlanUpdate(false)}>Cancel</button><button className="primary" disabled={planRevisionSaving} aria-busy={planRevisionSaving} onClick={savePlanUpdate}>{planRevisionSaving?'Saving…':'Create revision'}</button><span role="status" aria-live="polite">{planRevisionFeedback}</span></div></div>}
@@ -1545,14 +1546,14 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
 /** Completed reviews must remain readable without permitting a new custom value event.
  * Always retrieve persisted owner-scoped values, including retired definitions and stored
  * historical option labels. This is intentionally not a correction/edit interface. */
-function CompletedCustomFieldAnswers({ownerId,scope}:{ownerId:string;scope:'trade'|'session'}){
+function CompletedCustomFieldAnswers({ownerId,scope}:{ownerId:string;scope:'trade'|'session'|'plan'}){
   const [rows,setRows]=useState<ReadOnlyCustomRow[]>([]);
   const [error,setError]=useState('');
   const [loading,setLoading]=useState(true);
   useEffect(()=>{
     let live=true;
     setLoading(true);setError('');setRows([]);
-    const stages:readonly CustomFieldOwnerStage[]=scope==='trade'?['trade','post-trade-review']:['session-review'];
+    const stages:readonly CustomFieldOwnerStage[]=scope==='trade'?['trade','post-trade-review']:scope==='plan'?['session','premarket-plan']:['session-review'];
     localApi.listCustomFieldDefinitions().then(async definitions=>{
       const eligible=definitions.filter(f=>stages.includes(f.stage as CustomFieldOwnerStage));
       const items=await Promise.all(eligible.map(async field=>{
@@ -1569,7 +1570,7 @@ function CompletedCustomFieldAnswers({ownerId,scope}:{ownerId:string;scope:'trad
     return ()=>{live=false;};
   },[ownerId,scope]);
   if(!rows.length&&!error&&!loading)return null;
-  return <details className="guidedMore" data-field-group={scope==='trade'?'post-trade-review':'session-review'}>
+  return <details className="guidedMore" data-field-group={scope==='trade'?'post-trade-review':scope==='plan'?'premarket-plan':'session-review'}>
     <summary>Saved custom answers (read-only){rows.length?' · '+rows.length:''}</summary>
     {loading&&<p className="subtle">Reading saved answers…</p>}
     {error&&<p role="status" className="subtle">{error}</p>}
