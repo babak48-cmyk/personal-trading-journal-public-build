@@ -9,6 +9,42 @@ export function journalWeekStart(sessionDate:string):string|null{
   return day.toISOString().slice(0,10);
 }
 
+export type WeeklyTradeBreakdown=Readonly<{
+  label:string;
+  tradeCount:number;
+  closedCount:number;
+  eligibleRCount:number;
+  netR:number|null;
+  ruleViolationCount:number;
+}>;
+
+/** All groups are descriptive. Keep R unknown when none of the closed
+ * trades has a trusted denominator and complete known costs. */
+export function weeklyTradeBreakdown(
+  rows:readonly JournalTradeRow[],
+  weekStart:string,
+  groupBy:'instrument_symbol'|'decision_quality',
+):WeeklyTradeBreakdown[]{
+  const weekly=rows.filter(row=>journalWeekStart(row.session_date)===weekStart);
+  const groups=new Map<string,JournalTradeRow[]>();
+  for(const row of weekly){
+    const raw=groupBy==='instrument_symbol'?row.instrument_symbol:row.decision_quality;
+    const label=raw?.trim()||'Not recorded';
+    const group=groups.get(label)||[];
+    group.push(row);
+    groups.set(label,group);
+  }
+  return [...groups].map(([label,items])=>{
+    const closed=items.filter(item=>item.status==='CLOSED');
+    const eligible=closed.filter(item=>item.realized_r!=null&&Number.isFinite(item.realized_r));
+    return {
+      label,tradeCount:items.length,closedCount:closed.length,eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((sum,item)=>sum+(item.realized_r as number),0):null,
+      ruleViolationCount:items.filter(item=>item.rule_status==='VIOLATED').length,
+    };
+  }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
 export type WeeklyLearningSnapshot=Readonly<{
   weekStart:string;
   tradeCount:number;
