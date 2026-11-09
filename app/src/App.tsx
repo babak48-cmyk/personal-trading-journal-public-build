@@ -41,6 +41,7 @@ import {
   type JournalFilter,
   type JournalTradeRow,
   type DecisionOnlyAnalyticsRow,
+  type DecisionReasonAnalyticsRow,
   type AnalyticsSummary,
   type MistakeSummary,
   type Attachment,
@@ -311,6 +312,7 @@ export function App(){
   const [journalFilter,setJournalFilter]=useState<JournalFilter>({});
   const [journalRows,setJournalRows]=useState<JournalTradeRow[]>([]);
   const [decisionOnlyRows,setDecisionOnlyRows]=useState<DecisionOnlyAnalyticsRow[]>([]);
+  const [decisionReasonRows,setDecisionReasonRows]=useState<DecisionReasonAnalyticsRow[]>([]);
   const [decisionOnlyError,setDecisionOnlyError]=useState('');
   const [analytics,setAnalytics]=useState<AnalyticsSummary|null>(null);
   const [mistakeSummary,setMistakeSummary]=useState<MistakeSummary[]>([]);
@@ -421,8 +423,10 @@ export function App(){
     try{
       const [rows,summary,mistakes]=await Promise.all([localApi.listJournalTrades(filter),localApi.getAnalyticsSummary(filter),localApi.listMistakeSummary(filter)]);
       setJournalRows(rows);setAnalytics(summary);setMistakeSummary(mistakes);
-      try{setDecisionOnlyRows(await localApi.listDecisionOnlyAnalytics(filter));setDecisionOnlyError('');}
-      catch(error){setDecisionOnlyRows([]);setDecisionOnlyError('Decision-only records unavailable: '+String(error));}
+      try{
+        const [decisions,reasons]=await Promise.all([localApi.listDecisionOnlyAnalytics(filter),localApi.listDecisionReasonAnalytics(filter)]);
+        setDecisionOnlyRows(decisions);setDecisionReasonRows(reasons);setDecisionOnlyError('');
+      }catch(error){setDecisionOnlyRows([]);setDecisionReasonRows([]);setDecisionOnlyError('Decision-only records unavailable: '+String(error));}
     }catch(e){setMessage(String(e));}
   }
   async function openAnalysis(){setShowSafety(false);setShowSettings(false);setShowAnalysis(true);window.scrollTo(0,0);await refreshAnalytics();}
@@ -1161,7 +1165,7 @@ export function App(){
           <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
         </section>}
         {active&&<div className="sessionContextBar"><span><b>Session</b>{active.session_date}</span><span><b>Instrument</b>{active.instrument_symbol}</span><span><b>Environment</b>{active.environment.replaceAll('_',' ')}</span><small>{active.status==='DRAFT'?'Draft: session setup can still be edited before plan confirmation.':'Confirmed session: identity is preserved in history; plan changes use revisions.'}</small></div>}
-        {showRoadmap ? <FeatureRoadmapPanel onClose={()=>setShowRoadmap(false)}/> : showAnalysis ? <AnalyticsPanel filter={journalFilter} patchFilter={patchJournalFilter} apply={()=>refreshAnalytics()} rows={journalRows} decisionOnlyRows={decisionOnlyRows} decisionOnlyError={decisionOnlyError} summary={analytics} mistakes={mistakeSummary} sources={sources} evidenceTypes={evidenceTypes} openTrade={async(id)=>{try{const d=await localApi.getTradeDetail(id);setActiveTrade(d);setShowAnalysis(false);const sess=sessions.find(x=>x.session_id===d.metrics.session_id);if(sess)await loadActive(sess);}catch(e){setMessage(String(e));}}}/> : showSafety ? (runtimeReadiness ? <SafetyPanel readiness={runtimeReadiness} selfTest={betaSelfTest} selfTestBusy={betaSelfTestBusy} onSelfTest={runBetaSelfTest} onRefresh={refreshSafety} onBackup={createBackupWithFeedback} backupBusy={backupBusy}/> : <div className="panel"><h2>Local Safety Check</h2><p>Loading safety status…</p></div>) : <>
+        {showRoadmap ? <FeatureRoadmapPanel onClose={()=>setShowRoadmap(false)}/> : showAnalysis ? <AnalyticsPanel filter={journalFilter} patchFilter={patchJournalFilter} apply={()=>refreshAnalytics()} rows={journalRows} decisionOnlyRows={decisionOnlyRows} decisionReasonRows={decisionReasonRows} decisionOnlyError={decisionOnlyError} summary={analytics} mistakes={mistakeSummary} sources={sources} evidenceTypes={evidenceTypes} openTrade={async(id)=>{try{const d=await localApi.getTradeDetail(id);setActiveTrade(d);setShowAnalysis(false);const sess=sessions.find(x=>x.session_id===d.metrics.session_id);if(sess)await loadActive(sess);}catch(e){setMessage(String(e));}}}/> : showSafety ? (runtimeReadiness ? <SafetyPanel readiness={runtimeReadiness} selfTest={betaSelfTest} selfTestBusy={betaSelfTestBusy} onSelfTest={runBetaSelfTest} onRefresh={refreshSafety} onBackup={createBackupWithFeedback} backupBusy={backupBusy}/> : <div className="panel"><h2>Local Safety Check</h2><p>Loading safety status…</p></div>) : <>
         {backupResult&&<div role="status" aria-live="polite" className={backupResult.startsWith('Backup failed')?'warningBox':'okBox'} style={{position:'fixed',right:24,top:72,zIndex:1000,maxWidth:480,boxShadow:'0 8px 28px #0008'}}><strong>{backupResult.startsWith('Backup failed')?'Backup failed':'Backup created successfully'}</strong><p style={{overflowWrap:'anywhere'}}>{backupResult}</p><button onClick={()=>setBackupResult('')}>Dismiss</button></div>}
         {!active && runtimeReadiness && !runtimeReadiness.ready_for_live_data && <div className="warningBox"><strong>Local safety check needs attention.</strong> {runtimeReadiness.warnings[0]||'Create a verified backup before recording real-money data.'} <button onClick={()=>setShowSafety(true)}>Review</button></div>}
         {!active && <div className="panel"><h2>Start session</h2><div className="formGrid"><label>Date <FieldHelp id="session.date"/><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Instrument <FieldHelp id="session.instrument" value={instrument}/><select value={instrument} onChange={e=>setInstrument(e.target.value)}>{['FUTURES','STOCK','OTHER'].map(group=>{
@@ -1304,13 +1308,14 @@ export function App(){
 }
 
 
-function AnalyticsPanel({filter,patchFilter,apply,rows,decisionOnlyRows,decisionOnlyError,summary,mistakes,sources,evidenceTypes,openTrade}:{filter:JournalFilter;patchFilter:(p:Partial<JournalFilter>)=>void;apply:()=>void;rows:JournalTradeRow[];decisionOnlyRows:DecisionOnlyAnalyticsRow[];decisionOnlyError:string;summary:AnalyticsSummary|null;mistakes:MistakeSummary[];sources:LevelSourceType[];evidenceTypes:EvidenceType[];openTrade:(id:string)=>void}){
+function AnalyticsPanel({filter,patchFilter,apply,rows,decisionOnlyRows,decisionReasonRows,decisionOnlyError,summary,mistakes,sources,evidenceTypes,openTrade}:{filter:JournalFilter;patchFilter:(p:Partial<JournalFilter>)=>void;apply:()=>void;rows:JournalTradeRow[];decisionOnlyRows:DecisionOnlyAnalyticsRow[];decisionReasonRows:DecisionReasonAnalyticsRow[];decisionOnlyError:string;summary:AnalyticsSummary|null;mistakes:MistakeSummary[];sources:LevelSourceType[];evidenceTypes:EvidenceType[];openTrade:(id:string)=>void}){
   const [exportMessage,setExportMessage]=useState('');
   const weeks=[...new Set([...journalWeeks(rows),...decisionOnlyRows.map(item=>journalWeekStart(item.session_date)).filter((week):week is string=>week!==null)])].sort().reverse();
   const [selectedWeek,setSelectedWeek]=useState('');
   const activeWeek=weeks.includes(selectedWeek)?selectedWeek:(weeks[0]??'');
   const weekly=activeWeek?weeklyLearningSnapshot(rows,activeWeek,mistakes):null;
   const decisionWeekRows=activeWeek?decisionOnlyRows.filter(item=>journalWeekStart(item.session_date)===activeWeek):[];
+  const weeklyReasons=activeWeek?decisionReasonRows.filter(item=>journalWeekStart(item.session_date)===activeWeek):[];
   const decisionWeekSummary=decisionWeekRows.reduce((acc,item)=>({noTrade:acc.noTrade+item.no_trade_count,missed:acc.missed+item.missed_count,missingReason:acc.missingReason+item.reason_missing_count}),{noTrade:0,missed:0,missingReason:0});
   const instrumentBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'instrument_symbol'):[];
   const decisionBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'decision_quality'):[];
@@ -1371,6 +1376,16 @@ function AnalyticsPanel({filter,patchFilter,apply,rows,decisionOnlyRows,decision
         <span>{item.no_trade_count} NO_TRADE · {item.missed_count} MISSED</span>
         {item.reason_missing_count>0&&<small>{item.reason_missing_count} decision(s) missing an explicit reason</small>}
       </div>)}</div>
+      <details className="guidedMore"><summary>Recorded decision reasons · {weeklyReasons.length} group(s)</summary>
+        <p className="subtle">Only original structured reason codes are grouped. Free-text-only explanations remain a separate uncoded category; the program does not infer or invent their meaning.</p>
+        {weeklyReasons.length===0?<p className="subtle">No decision reasons recorded for this week and these date/instrument filters.</p>:<div className="weeklyBreakdown">
+          {weeklyReasons.map(reason=><div className="weeklyBreakdownRow" key={[reason.session_date,reason.instrument_symbol,reason.decision_type,reason.reason_code].join(':')}>
+            <strong>{reason.decision_type} · {reason.reason_code==='[FREE_TEXT_ONLY]'?'Free-text reason (not classified)':reason.reason_code==='[NO_REASON]'?'Reason not recorded':reason.reason_code}</strong>
+            <span>{reason.instrument_symbol} · {reason.session_date}</span>
+            <span>{reason.decision_count} recorded decision(s)</span>
+          </div>)}
+        </div>}
+      </details>
       <p className="subtle">MISSED is a recorded decision category, not proof that the missed opportunity was valid or profitable. There is no counterfactual P&amp;L assigned to these records. Every decision remains separate from execution and outcome.</p>
     </>}
   </section>
