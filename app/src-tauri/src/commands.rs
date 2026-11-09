@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::AppHandle;
-use crate::{diagnostics, attachments, backup, db, error::AppError, exports, paths::AppPaths, repository::{self, AddCandidateStatusInput, AddLiveCandidateInput, AddLiveCandidateResult, AddTradeFillInput, CandidateDecisionDto, ConfirmInitialPlanInput, ConfirmPlanResult, CreateCandidateDecisionInput, CreatePlanRevisionInput, CreateSessionInput, UpdateDraftSessionInput, InstrumentDto, CreateInstrumentInput, UpdateInstrumentInput, ReorderInstrumentsInput, CreateTradeExecutionInput, CurrentPlanDto, EvidenceObservationDto, EvidenceObservationInput, EvidenceTypeDto, LevelSourceTypeDto, CreateLevelSourceInput, UpdateLevelSourceInput, ReorderLevelSourcesInput, MoveStopInput, PlanConsistencyDto, ReviseCandidateInput, SessionSummary, TimelineEventDto, TradeDetailDto, TradeMetricsDto, MistakeTypeDto, SaveTradeReviewInput, TradeReviewDto, RuleDto, SaveTradeRuleCheckInput, TradeRuleCheckDto, SessionReviewSummaryDto, SaveSessionReviewInput, SessionReviewDto, JournalFilterInput, JournalTradeRowDto, AnalyticsSummaryDto, MistakeSummaryDto}, restore, runtime};
+use crate::{diagnostics, attachments, backup, db, error::AppError, exports, paths::AppPaths, repository::{self, AddCandidateStatusInput, AddLiveCandidateInput, AddLiveCandidateResult, AddTradeFillInput, CandidateDecisionDto, ConfirmInitialPlanInput, ConfirmPlanResult, CreateCandidateDecisionInput, CreatePlanRevisionInput, CreateSessionInput, UpdateDraftSessionInput, InstrumentDto, CreateInstrumentInput, UpdateInstrumentInput, ReorderInstrumentsInput, CreateTradeExecutionInput, CurrentPlanDto, EvidenceObservationDto, EvidenceObservationInput, EvidenceTypeDto, LevelSourceTypeDto, CreateLevelSourceInput, UpdateLevelSourceInput, ReorderLevelSourcesInput, MoveStopInput, PlanConsistencyDto, ReviseCandidateInput, SessionSummary, TimelineEventDto, TradeDetailDto, TradeMetricsDto, MistakeTypeDto, SaveTradeReviewInput, TradeReviewDto, RuleDto, SaveTradeRuleCheckInput, TradeRuleCheckDto, SessionReviewSummaryDto, SaveSessionReviewInput, SessionReviewDto, JournalFilterInput, JournalTradeRowDto, AnalyticsSummaryDto, MistakeSummaryDto, DecisionOnlyAnalyticsDto}, restore, runtime};
 
 /// Gate 3 read-only discovery. Never opens or migrates an existing journal for writing.
 fn open_custom_fields_readonly(app:&AppHandle)->Result<rusqlite::Connection,AppError>{
@@ -623,6 +623,13 @@ pub fn list_journal_trades(app: AppHandle, filter: JournalFilterInput) -> Result
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
     repository::list_journal_trades(&conn, filter)
+}
+
+#[tauri::command]
+pub fn list_decision_only_analytics(app: AppHandle, filter: JournalFilterInput) -> Result<Vec<DecisionOnlyAnalyticsDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::list_decision_only_analytics(&conn,filter)
 }
 
 #[tauri::command]
