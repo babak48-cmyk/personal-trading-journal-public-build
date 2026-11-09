@@ -94,6 +94,7 @@ export type SessionReview = SaveSessionReviewInput & { review_id:string; status:
 export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null };
 export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number };
 export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:string;no_trade_count:number;missed_count:number;reason_missing_count:number};
+export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
 export type AnalyticsSummary = { trade_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
 export type MistakeSummary = { mistake_type_id:string; label:string; count:number };
 
@@ -181,7 +182,8 @@ export const localApi = {
   saveSessionReview: (input:SaveSessionReviewInput) => invoke<SessionReview>('save_session_review',{input}),
   getSessionReview: (sessionId:string) => invoke<SessionReview|null>('get_session_review',{sessionId}),
   listJournalTrades: (filter:JournalFilter={}) => invoke<JournalTradeRow[]>('list_journal_trades',{filter}),
-  listDecisionOnlyAnalytics: (filter:JournalFilter={}) => invoke<DecisionOnlyAnalyticsRow[]>('list_decision_only_analytics',{filter}),
+
+  listDecisionReasonAnalytics: (filter:JournalFilter={}) => invoke<DecisionReasonAnalyticsRow[]>('list_decision_reason_analytics',{filter}),  listDecisionOnlyAnalytics: (filter:JournalFilter={}) => invoke<DecisionOnlyAnalyticsRow[]>('list_decision_only_analytics',{filter}),
   getAnalyticsSummary: (filter:JournalFilter={}) => invoke<AnalyticsSummary>('get_analytics_summary',{filter}),
   listMistakeSummary: (filter:JournalFilter={}) => invoke<MistakeSummary[]>('list_mistake_summary',{filter}),
   importAttachment: (input:ImportAttachmentInput) => invoke<Attachment>('import_attachment',{input}),
