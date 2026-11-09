@@ -2531,6 +2531,36 @@ mod decision_only_analytics_tests {
     }
 
     #[test]
+    fn groups_original_decision_codes_without_inventing_text_categories() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT);
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,instrument_symbol_snapshot TEXT);
+            CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,decision_type TEXT,reason_code TEXT,reason_note TEXT);
+            INSERT INTO instruments VALUES('i-es','ES'),('i-gc','GC');
+            INSERT INTO sessions VALUES('s1','i-es','2026-11-09','ES'),('s2','i-gc','2026-11-09','GC'),('s3','i-es','2026-11-02','ES');
+            INSERT INTO candidate_decisions VALUES
+                ('d1','s1','NO_TRADE','MISSING_CONFIRMATION',NULL),
+                ('d2','s1','NO_TRADE','MISSING_CONFIRMATION',NULL),
+                ('d3','s1','MISSED','', 'Discretionary note retained in source only'),
+                ('d4','s1','MISSED',NULL,NULL),
+                ('d5','s2','MISSED','NO_TIME',NULL),
+                ('d6','s1','TRADE','MISSING_CONFIRMATION',NULL),
+                ('d7','s3','NO_TRADE','PRIOR_WEEK',NULL);
+        ").unwrap();
+        let rows=list_decision_reason_analytics(&db,JournalFilterInput{
+            date_from:Some("2026-11-09".into()),date_to:Some("2026-11-15".into()),
+            instrument_symbol:Some("ES".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(rows.len(),3);
+        assert!(rows.iter().any(|x|x.decision_type=="NO_TRADE"&&x.reason_code=="MISSING_CONFIRMATION"&&x.decision_count==2));
+        assert!(rows.iter().any(|x|x.decision_type=="MISSED"&&x.reason_code=="[FREE_TEXT_ONLY]"&&x.decision_count==1));
+        assert!(rows.iter().any(|x|x.decision_type=="MISSED"&&x.reason_code=="[NO_REASON]"&&x.decision_count==1));
+        assert!(rows.iter().all(|x|x.instrument_symbol=="ES"&&x.session_date=="2026-11-09"));
+        assert!(rows.iter().all(|x|!x.reason_code.contains("Discretionary note")));
+    }
+
+    #[test]
     fn missing_reason_is_observed_missing_data_not_invented_context() {
         let db=Connection::open_in_memory().unwrap();
         db.execute_batch("
