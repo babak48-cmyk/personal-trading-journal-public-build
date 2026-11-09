@@ -96,5 +96,10 @@ describe('Package A cross-stage delivery gate',()=>{
     // Post-trade Review currently lives on the Execution page; Session Review is separate.
     expect(quickValidationRoute('review.note',false,true).notebookPage).toBe('EXECUTION');
     expect(quickValidationRoute('sessionReview.nextImprovement',false,true).notebookPage).toBe('REVIEW');
+    expect(quickValidationRoute(customFieldFocusId('session-review','review-1','lesson'),false,true).notebookPage).toBe('REVIEW');
+    expect(quickValidationRoute(customFieldFocusId('session','session-1','readiness'),true,false)).toMatchObject({draftStep:1,draftPlanPage:0});
+    expect(quickValidationRoute(customFieldFocusId('session','session-1','readiness'),false,true).notebookPage).toBe('PLAN');
+    expect(quickValidationRoute(customFieldFocusId('premarket-plan','session-1','scenario'),true,false)).toMatchObject({draftStep:1,draftPlanPage:0});
+    expect(quickValidationRoute(customFieldFocusId('post-trade-review','trade-1','note'),false,true).notebookPage).toBe('EXECUTION');
   });
 });
