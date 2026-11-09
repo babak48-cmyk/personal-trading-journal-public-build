@@ -1800,6 +1800,53 @@ pub struct DecisionOnlyAnalyticsDto {
     pub reason_missing_count: i64,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct DecisionReasonAnalyticsDto {
+    pub session_date: String,
+    pub instrument_symbol: String,
+    pub decision_type: String,
+    /// Existing structured reason code, or an explicit marker for uncoded notes/missing.
+    /// Raw free-text reason notes are never returned in aggregated analytics.
+    pub reason_code: String,
+    pub decision_count: i64,
+}
+
+/// Read-only descriptive aggregation. Never infer missed validity from a reason.
+pub fn list_decision_reason_analytics(
+    conn: &Connection,
+    filter: JournalFilterInput,
+)->Result<Vec<DecisionReasonAnalyticsDto>,AppError>{
+    let mut stmt=conn.prepare(
+        "SELECT s.session_date, COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                cd.decision_type,
+                CASE
+                  WHEN TRIM(COALESCE(cd.reason_code,''))<>'' THEN TRIM(cd.reason_code)
+                  WHEN TRIM(COALESCE(cd.reason_note,''))<>'' THEN '[FREE_TEXT_ONLY]'
+                  ELSE '[NO_REASON]'
+                END AS reason_group,
+                COUNT(*)
+         FROM candidate_decisions cd
+         JOIN sessions s ON s.session_id=cd.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         WHERE cd.decision_type IN ('NO_TRADE','MISSED')
+           AND (?1 IS NULL OR s.session_date>=?1)
+           AND (?2 IS NULL OR s.session_date<=?2)
+           AND (?3 IS NULL OR COALESCE(s.instrument_symbol_snapshot,i.symbol)=?3)
+         GROUP BY s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                  cd.decision_type,reason_group
+         ORDER BY s.session_date DESC,COUNT(*) DESC,cd.decision_type,reason_group"
+    )?;
+    let rows=stmt.query_map(
+        params![filter.date_from,filter.date_to,filter.instrument_symbol],
+        |row|Ok(DecisionReasonAnalyticsDto{
+            session_date:row.get(0)?,instrument_symbol:row.get(1)?,
+            decision_type:row.get(2)?,reason_code:row.get(3)?,
+            decision_count:row.get(4)?,
+        })
+    )?.collect::<Result<Vec<_>,_>>()?;
+    Ok(rows)
+}
+
 /// Read-only and intentionally scoped to session dates and instrument. Other trade
 /// filters (R, rule checks, evidence, direction) do not apply to unexecuted decisions.
 pub fn list_decision_only_analytics(
