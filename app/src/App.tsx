@@ -1358,8 +1358,8 @@ function AnalyticsPanel({filter,patchFilter,apply,rows,decisionOnlyRows,decision
   <section className="panel" aria-label="Decision-only weekly review">
     <h2>NO_TRADE / MISSED · recorded decisions</h2>
     <p className="subtle">Counts come from original decision events, including decisions with no trade or Fill. Weekly date and instrument filters apply. Trade-only filters (direction, quality, rules, level source and evidence) do NOT constrain these decision counts; they are shown separately to avoid false comparisons.</p>
-    {decisionOnlyError&&<p role="alert" className="warningBox">{decisionOnlyError}</p>}
-    {!activeWeek?<p className="subtle">No week with recorded trades or decision-only events under the selected date/instrument filters.</p>:<>
+    {decisionOnlyError?<p role="alert" className="warningBox">{decisionOnlyError} · Counts are unavailable, not zero.</p>
+    :!activeWeek?<p className="subtle">No week with recorded trades or decision-only events under the selected date/instrument filters.</p>:<>
       <p className="subtle">Week of {activeWeek} (Monday) · {decisionWeekRows.length} date/instrument group(s)</p>
       <div className="summaryStrip">
         <span><b>No trade decisions</b>{decisionWeekSummary.noTrade}</span>
