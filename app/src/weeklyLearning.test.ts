@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -30,6 +30,31 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(s).toMatchObject({netR:0,ruleViolationCount:1,uncheckedRuleCount:1});
     expect(s.mistakes).toEqual([{id:'m1',label:'Late entry',count:2},{id:'m2',label:'m2',count:1}]);
     expect(s.action).toContain('rule-violation');
+  });
+  it('compares instruments without mixing time windows or treating missing R as zero',()=>{
+    const data=[
+      row('es1','2026-11-09',{instrument_symbol:'ES',realized_r:2,rule_status:'VIOLATED'}),
+      row('es2','2026-11-10',{instrument_symbol:'ES',realized_r:null}),
+      row('gc1','2026-11-11',{instrument_symbol:'GC',realized_r:null}),
+      row('gc2','2026-11-02',{instrument_symbol:'GC',realized_r:999}),
+    ];
+    expect(weeklyTradeBreakdown(data,'2026-11-09','instrument_symbol')).toEqual([
+      {label:'ES',tradeCount:2,closedCount:2,eligibleRCount:1,netR:2,ruleViolationCount:1},
+      {label:'GC',tradeCount:1,closedCount:1,eligibleRCount:0,netR:null,ruleViolationCount:0},
+    ]);
+  });
+  it('keeps missing decision quality distinct from reviewed outcomes and counts only valid R',()=>{
+    const data=[
+      row('q1','2026-11-09',{decision_quality:'A',realized_r:-1}),
+      row('q2','2026-11-09',{decision_quality:'A',realized_r:null}),
+      row('q3','2026-11-09',{decision_quality:'C',realized_r:3}),
+      row('q4','2026-11-09',{decision_quality:null,status:'OPEN',realized_r:null}),
+    ];
+    expect(weeklyTradeBreakdown(data,'2026-11-09','decision_quality')).toEqual([
+      {label:'A',tradeCount:2,closedCount:2,eligibleRCount:1,netR:-1,ruleViolationCount:0},
+      {label:'C',tradeCount:1,closedCount:1,eligibleRCount:1,netR:3,ruleViolationCount:0},
+      {label:'Not recorded',tradeCount:1,closedCount:0,eligibleRCount:0,netR:null,ruleViolationCount:0},
+    ]);
   });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
