@@ -361,6 +361,8 @@ export function App(){
     if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
     if(route.draftZonePage!==null)setDraftZonePage(route.draftZonePage);
     if(route.notebookPage!==null)setNotebookPage(route.notebookPage);
+    // Opening the Review page must not refresh persisted values over an unsaved draft.
+    if(route.notebookPage==='REVIEW')setShowSessionReview(true);
     // Custom fields follow the canonical owner rather than a generic field name.
     if(id.startsWith('custom-required-')){
       if(id.startsWith('custom-required-candidate-')||id.startsWith('custom-required-zone-'))setNotebookPage('PLAN');
@@ -1095,7 +1097,7 @@ export function App(){
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'})}>Select zone ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'})}>Select zone ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>05</span><b>Execution</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>{setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));window.requestAnimationFrame(()=>document.getElementById('journal-session-trades')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>View trades ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-session-review')?.scrollIntoView({behavior:'smooth',block:'start'})}>Session review ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>{setNotebookPage('REVIEW');if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>document.getElementById('journal-session-review')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>Session review ↓</button>}</div>
       </div>
       <p className="journeyNote">Only confirmed stages are marked complete. Later stages are available to document actual events; they are not automatically complete.</p>
     </div>}
