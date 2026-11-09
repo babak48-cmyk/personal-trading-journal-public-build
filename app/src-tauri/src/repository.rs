@@ -2444,3 +2444,58 @@ mod unknown_cost_accounting_integrity_tests {
         assert_eq!(summary.net_pnl,Some(20.0));
     }
 }
+
+#[cfg(test)]
+mod decision_only_analytics_tests {
+    use super::*;
+
+    #[test]
+    fn counts_nonexecuted_decision_events_without_any_trade_or_fill_table() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT);
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,instrument_symbol_snapshot TEXT);
+            CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,decision_type TEXT,reason_code TEXT,reason_note TEXT);
+            INSERT INTO instruments VALUES('i-es','ES'),('i-gc','GC');
+            INSERT INTO sessions VALUES('s1','i-es','2026-11-09','ES'),('s2','i-gc','2026-11-10','GC'),('s3','i-es','2026-11-02','ES');
+            INSERT INTO candidate_decisions VALUES
+                ('d1','s1','NO_TRADE','MISSING_CONFIRMATION',NULL),
+                ('d2','s1','MISSED','', 'Could not execute in time'),
+                ('d3','s1','TRADE',NULL,NULL),
+                ('d4','s2','MISSED','ENTRY_DELAY',NULL),
+                ('d5','s3','MISSED','PRIOR_WEEK',NULL);
+        ").unwrap();
+        let all=list_decision_only_analytics(&db,JournalFilterInput{
+            date_from:Some("2026-11-09".into()),
+            date_to:Some("2026-11-15".into()),
+            ..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(all.len(),2);
+        let es=all.iter().find(|x|x.instrument_symbol=="ES").unwrap();
+        assert_eq!((es.no_trade_count,es.missed_count,es.reason_missing_count),(1,1,0));
+        let gc=all.iter().find(|x|x.instrument_symbol=="GC").unwrap();
+        assert_eq!((gc.no_trade_count,gc.missed_count),(0,1));
+
+        let es_only=list_decision_only_analytics(&db,JournalFilterInput{
+            instrument_symbol:Some("ES".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(es_only.len(),2); // Two separate ES dates, not conflated into one.
+        assert_eq!(es_only.iter().map(|x|x.missed_count).sum::<i64>(),2);
+    }
+
+    #[test]
+    fn missing_reason_is_observed_missing_data_not_invented_context() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT);
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,instrument_symbol_snapshot TEXT);
+            CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,decision_type TEXT,reason_code TEXT,reason_note TEXT);
+            INSERT INTO instruments VALUES('i','ES');
+            INSERT INTO sessions VALUES('s','i','2026-11-09','ES');
+            INSERT INTO candidate_decisions VALUES('d1','s','MISSED',' ',NULL),('d2','s','NO_TRADE',NULL,'No setup');
+        ").unwrap();
+        let rows=list_decision_only_analytics(&db,JournalFilterInput::default()).unwrap();
+        assert_eq!(rows.len(),1);
+        assert_eq!((rows[0].no_trade_count,rows[0].missed_count,rows[0].reason_missing_count),(1,1,1));
+    }
+}
