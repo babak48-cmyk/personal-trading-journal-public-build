@@ -1791,6 +1791,47 @@ fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String
     Ok(n>0)
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct DecisionOnlyAnalyticsDto {
+    pub session_date: String,
+    pub instrument_symbol: String,
+    pub no_trade_count: i64,
+    pub missed_count: i64,
+    pub reason_missing_count: i64,
+}
+
+/// Read-only and intentionally scoped to session dates and instrument. Other trade
+/// filters (R, rule checks, evidence, direction) do not apply to unexecuted decisions.
+pub fn list_decision_only_analytics(
+    conn: &Connection,
+    filter: JournalFilterInput,
+)->Result<Vec<DecisionOnlyAnalyticsDto>,AppError>{
+    let mut stmt=conn.prepare(
+        "SELECT s.session_date, COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                SUM(CASE WHEN cd.decision_type='NO_TRADE' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN cd.decision_type='MISSED' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN TRIM(COALESCE(cd.reason_code,''))='' AND TRIM(COALESCE(cd.reason_note,''))='' THEN 1 ELSE 0 END)
+         FROM candidate_decisions cd
+         JOIN sessions s ON s.session_id=cd.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         WHERE cd.decision_type IN ('NO_TRADE','MISSED')
+           AND (?1 IS NULL OR s.session_date>=?1)
+           AND (?2 IS NULL OR s.session_date<=?2)
+           AND (?3 IS NULL OR COALESCE(s.instrument_symbol_snapshot,i.symbol)=?3)
+         GROUP BY s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol)
+         ORDER BY s.session_date DESC,COALESCE(s.instrument_symbol_snapshot,i.symbol)"
+    )?;
+    let rows=stmt.query_map(
+        params![filter.date_from,filter.date_to,filter.instrument_symbol],
+        |row|Ok(DecisionOnlyAnalyticsDto{
+            session_date:row.get(0)?,instrument_symbol:row.get(1)?,
+            no_trade_count:row.get(2)?,missed_count:row.get(3)?,
+            reason_missing_count:row.get(4)?,
+        })
+    )?.collect::<Result<Vec<_>,_>>()?;
+    Ok(rows)
+}
+
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
     let mut stmt=conn.prepare(
         "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1)
