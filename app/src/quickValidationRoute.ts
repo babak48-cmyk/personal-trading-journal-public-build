@@ -17,6 +17,13 @@ export function quickValidationRoute(
   const empty:QuickValidationRoute={notebookPage:null,draftStep:null,draftPlanPage:null,draftZonePage:null};
   // Custom field errors contain stage + immutable owner/field identifiers.
   // Stage routing remains separate from the stored values and history.
+  if(validationId.startsWith('custom-required-session-review-')){
+    return hasConfirmedPlan?{...empty,notebookPage:'REVIEW'}:empty;
+  }
+  if(validationId.startsWith('custom-required-session-')){
+    return isDraftSession?{...empty,draftStep:1,draftPlanPage:0}
+      :hasConfirmedPlan?{...empty,notebookPage:'PLAN'}:empty;
+  }
   if(validationId.startsWith('custom-required-premarket-plan-')){
     return isDraftSession?{...empty,draftStep:1,draftPlanPage:0}
       :hasConfirmedPlan?{...empty,notebookPage:'PLAN'}:empty;
