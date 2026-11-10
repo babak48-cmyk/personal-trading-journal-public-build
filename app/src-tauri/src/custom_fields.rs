@@ -250,6 +250,52 @@ pub fn edit_custom_field(conn:&mut Connection,field_id:&str,label:&str,help_text
     if changed!=1 {return Err(invalid("unknown custom field"));}
     Ok(())
 }
+/// Atomically move one custom field within its own stage. Reordering changes
+/// presentation metadata only; no event, answer or selection snapshot is edited.
+pub fn move_custom_field(conn:&mut Connection,field_id:&str,direction:i64)->Result<(),AppError>{
+    if !valid_key(field_id)||!matches!(direction,-1|1){return Err(invalid("invalid field move"));}
+    let tx=conn.transaction()?;
+    let stage:String=tx.query_row("SELECT stage FROM custom_field_definitions WHERE field_id=?1",
+        [field_id],|row|row.get(0)).map_err(|_|invalid("unknown custom field"))?;
+    let mut stmt=tx.prepare("SELECT field_id FROM custom_field_definitions WHERE stage=?1 ORDER BY display_order,field_id")?;
+    let mut ids=stmt.query_map([&stage],|row|row.get::<_,String>(0))?
+        .collect::<Result<Vec<_>,_>>()?;
+    drop(stmt);
+    let at=ids.iter().position(|id|id==field_id).ok_or_else(||invalid("custom field not in stage"))?;
+    let dest=at as i64+direction;
+    if dest<0||dest>=ids.len() as i64{return Err(invalid("custom field already at order boundary"));}
+    ids.swap(at,dest as usize);
+    for (order,id) in ids.iter().enumerate(){
+        tx.execute("UPDATE custom_field_definitions SET display_order=?1 WHERE field_id=?2",
+            params![order as i64,id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Atomically reorder options inside one select field, including retired
+/// options. Existing option IDs and immutable historical selection labels stay.
+pub fn move_custom_field_option(conn:&mut Connection,field_id:&str,option_id:&str,direction:i64)->Result<(),AppError>{
+    if !valid_key(field_id)||!valid_key(option_id)||!matches!(direction,-1|1){
+        return Err(invalid("invalid option move"));
+    }
+    let tx=conn.transaction()?;
+    let mut stmt=tx.prepare("SELECT option_id FROM custom_field_options WHERE field_id=?1 ORDER BY display_order,option_id")?;
+    let mut ids=stmt.query_map([field_id],|row|row.get::<_,String>(0))?
+        .collect::<Result<Vec<_>,_>>()?;
+    drop(stmt);
+    let at=ids.iter().position(|id|id==option_id).ok_or_else(||invalid("option does not belong to field"))?;
+    let dest=at as i64+direction;
+    if dest<0||dest>=ids.len() as i64{return Err(invalid("option already at order boundary"));}
+    ids.swap(at,dest as usize);
+    for (order,id) in ids.iter().enumerate(){
+        tx.execute("UPDATE custom_field_options SET display_order=?1 WHERE field_id=?2 AND option_id=?3",
+            params![order as i64,field_id,id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn list_custom_fields(conn:&Connection)->Result<Vec<ManagedField>,AppError>{
     let mut stmt=conn.prepare("SELECT field_id,stage,field_type,label,help_text,is_required,is_active,display_order FROM custom_field_definitions ORDER BY stage,display_order,field_id")?;
     let rows=stmt.query_map([],|r|Ok(ManagedField{
