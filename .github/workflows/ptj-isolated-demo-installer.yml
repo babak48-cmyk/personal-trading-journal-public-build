@@ -1,11 +1,6 @@
 name: PTJ isolated DEMO installer (manual only)
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/package-a-evidence-decision-completion-2026-11-06
-    paths:
-      - '.github/workflows/ptj-isolated-demo-installer.yml'
 permissions:
   contents: read
 jobs:
