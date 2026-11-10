@@ -6,6 +6,7 @@ export type ReadOnlyCustomRow=Readonly<{
   display:string;
   retired:boolean;
   stage:string;
+  displayOrder:number;
 }>;
 
 /** Use stored option LABEL snapshots, not mutable current option names.
@@ -39,10 +40,10 @@ export function readOnlyCustomRow(
   }
   return display==null?null:{
     id:field.field_id,label:field.label,display,
-    retired:!field.active,stage:field.stage,
+    retired:!field.active,stage:field.stage,displayOrder:field.display_order,
   };
 }
 
 export function orderedReadOnlyCustomRows(rows:readonly ReadOnlyCustomRow[]):ReadOnlyCustomRow[]{
-  return [...rows].sort((a,b)=>a.stage.localeCompare(b.stage)||a.label.localeCompare(b.label)||a.id.localeCompare(b.id));
+  return [...rows].sort((a,b)=>a.stage.localeCompare(b.stage)||a.displayOrder-b.displayOrder||a.id.localeCompare(b.id));
 }
