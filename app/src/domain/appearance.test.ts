@@ -8,7 +8,7 @@ describe('appearance preferences',()=>{
 
   it('keeps valid values',()=>{
     expect(normalizeAppearance({theme:'DARK',fontSize:'LARGE',fontFamily:'SERIF',backgroundTone:'WARM'})).toEqual({
-      theme:'DARK',fontSize:'LARGE',fontFamily:'SERIF',backgroundTone:'WARM'
+      theme:'DARK',fontSize:'LARGE',fontFamily:'SERIF',backgroundTone:'WARM',accent:'DEFAULT'
     });
   });
 
