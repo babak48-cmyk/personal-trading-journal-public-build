@@ -28,11 +28,22 @@ describe('completed review historical custom answers',()=>{
     expect(readOnlyCustomRow(field('blank','TEXT'),typed({text_value:'  '}),null)).toBeNull();
     expect(readOnlyCustomRow(field('not-a-number','NUMBER'),typed({number_value:Number.NaN}),null)).toBeNull();
   });
+  it('honors Field Manager display order instead of alphabetical labels while retaining snapshots',()=>{
+    const last={...field('alpha','TEXT'),display_order:7};
+    const first={...field('zeta','TEXT'),display_order:1};
+    const rows=[
+      readOnlyCustomRow(last,typed({text_value:'Alpha saved'}),null)!,
+      readOnlyCustomRow(first,typed({text_value:'Zeta saved'}),null)!,
+    ];
+    expect(orderedReadOnlyCustomRows(rows).map(row=>row.id)).toEqual(['zeta','alpha']);
+    expect(orderedReadOnlyCustomRows(rows).map(row=>row.display)).toEqual(['Zeta saved','Alpha saved']);
+    expect(rows[0].id).toBe('alpha'); // sort never mutates fetched records
+  });
   it('keeps saved date and descriptive text unchanged and sorts without mutation',()=>{
     expect(readOnlyCustomRow(field('date','DATE'),typed({date_value:'2026-11-09'}),null)?.display).toBe('2026-11-09');
     expect(readOnlyCustomRow(field('reason','TEXT'),typed({text_value:'Review learning'}),null)?.display).toBe('Review learning');
-    const a={id:'z',label:'Z',display:'Z',retired:false,stage:'trade'};
-    const b={id:'a',label:'A',display:'A',retired:false,stage:'session-review'};
+    const a={id:'z',label:'Z',display:'Z',retired:false,stage:'trade',displayOrder:0};
+    const b={id:'a',label:'A',display:'A',retired:false,stage:'session-review',displayOrder:0};
     const input=[a,b] as const;
     expect(orderedReadOnlyCustomRows(input).map(x=>x.id)).toEqual(['a','z']);
     expect(input[0].id).toBe('z');
