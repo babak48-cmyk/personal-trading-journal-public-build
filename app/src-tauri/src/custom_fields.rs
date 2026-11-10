@@ -666,3 +666,47 @@ mod custom_review_lock_tests {
         assert!(ensure_review_writable(&db,"zone","trade-b").is_ok());
     }
 }
+
+#[cfg(test)]
+mod custom_order_transaction_tests {
+    use super::*;
+
+    #[test]
+    fn field_moves_within_stage_and_preserves_other_stages_and_value_events() {
+        let mut db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE custom_field_definitions(field_id TEXT PRIMARY KEY,stage TEXT,display_order INTEGER);
+            CREATE TABLE custom_field_options(option_id TEXT PRIMARY KEY,field_id TEXT,display_order INTEGER);
+            CREATE TABLE custom_field_value_events(event_id TEXT PRIMARY KEY,field_id TEXT);
+            INSERT INTO custom_field_definitions VALUES('a','session',0),('b','session',1),('c','session-review',0);
+            INSERT INTO custom_field_value_events VALUES('evt','a');
+        ").unwrap();
+        move_custom_field(&mut db,"b",-1).unwrap();
+        let a:i64=db.query_row("SELECT display_order FROM custom_field_definitions WHERE field_id='a'",[],|r|r.get(0)).unwrap();
+        let b:i64=db.query_row("SELECT display_order FROM custom_field_definitions WHERE field_id='b'",[],|r|r.get(0)).unwrap();
+        let c:i64=db.query_row("SELECT display_order FROM custom_field_definitions WHERE field_id='c'",[],|r|r.get(0)).unwrap();
+        assert_eq!((a,b,c),(1,0,0));
+        assert!(move_custom_field(&mut db,"b",-1).is_err());
+        let n:i64=db.query_row("SELECT COUNT(*) FROM custom_field_value_events",[],|r|r.get(0)).unwrap();
+        assert_eq!(n,1);
+    }
+
+    #[test]
+    fn option_moves_are_atomic_and_cannot_cross_field_ownership() {
+        let mut db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE custom_field_options(option_id TEXT PRIMARY KEY,field_id TEXT,display_order INTEGER);
+            CREATE TABLE custom_field_selection_snapshots(event_id TEXT,option_id TEXT,label_at_selection TEXT);
+            INSERT INTO custom_field_options VALUES('a','one',0),('b','one',1),('c','two',0);
+            INSERT INTO custom_field_selection_snapshots VALUES('evt','a','Original historical label');
+        ").unwrap();
+        move_custom_field_option(&mut db,"one","b",-1).unwrap();
+        let positions:Vec<(String,i64)>=db.prepare("SELECT option_id,display_order FROM custom_field_options WHERE field_id='one' ORDER BY display_order").unwrap()
+            .query_map([],|r|Ok((r.get(0)?,r.get(1)?))).unwrap()
+            .collect::<Result<Vec<_>,_>>().unwrap();
+        assert_eq!(positions,vec![("b".into(),0),("a".into(),1)]);
+        assert!(move_custom_field_option(&mut db,"two","a",1).is_err());
+        let label:String=db.query_row("SELECT label_at_selection FROM custom_field_selection_snapshots WHERE event_id='evt'",[],|r|r.get(0)).unwrap();
+        assert_eq!(label,"Original historical label");
+    }
+}
