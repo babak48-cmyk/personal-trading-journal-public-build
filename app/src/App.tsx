@@ -1698,6 +1698,19 @@ function CustomFieldDiscovery(){
     catch(e){setNotice('Not saved: '+String(e));}
     finally{setBusy(false);}
   }
+  async function moveOption(fieldId:string,optionId:string,direction:-1|1){
+    if(busy)return;
+    setBusy(true);
+    try{
+      await localApi.moveCustomFieldOption(fieldId,optionId,direction);
+      const [defs,opts]=await Promise.all([
+        localApi.listCustomFieldDefinitions(),localApi.listCustomFieldOptions(fieldId),
+      ]);
+      setFields(defs);setOptions(v=>({...v,[fieldId]:opts}));
+      setNotice('Option order saved. Existing selection events and historic labels are unchanged.');
+    }catch(e){setNotice('Option order not confirmed: '+String(e));}
+    finally{setBusy(false);}
+  }
   function newId(){return crypto.randomUUID();}
   return <details className="guidedMore"><summary>Custom Fields & Options — management (beta)</summary>
     <p className="subtle">Changes affect field definitions and future selections, not old values. Schema v9 is required. Use a DEMO journal for testing this beta.</p>
@@ -1705,7 +1718,7 @@ function CustomFieldDiscovery(){
     <p className="subtle" role="status">{notice}</p>
     <div className="requirementGroup">
       <h3>Create custom field</h3>
-      <p className="subtle">New fields can be created in six supported stages: Session, Pre-market Plan, Candidate, Zone, Trade and Post-trade Review. Existing definitions for other stages remain visible and retain their history; those stages are not yet available for new capture.</p>
+      <p className="subtle">New fields can be created in the supported stages listed below, including Session Review. Existing definitions for other stages remain visible and retain their history; those stages are not yet available for new capture.</p>
       <label>Label<input value={newField.label} maxLength={240} onChange={e=>setNewField(v=>({...v,label:e.target.value}))}/></label>
       <label>Stage<select value={newField.stage} onChange={e=>setNewField(v=>({...v,stage:e.target.value}))}>{CAPTURABLE_CUSTOM_FIELD_STAGES.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
       <label>Type<select value={newField.field_type} onChange={e=>setNewField(v=>({...v,field_type:e.target.value}))}>{['TEXT','NUMBER','DATE','BOOLEAN','SINGLE_SELECT','MULTI_SELECT'].map(x=><option key={x}>{x}</option>)}</select></label>
@@ -1720,6 +1733,10 @@ function CustomFieldDiscovery(){
     <label><input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)}/> Show inactive</label>
     {visibleFields.map(field=><div className="requirementGroup" key={field.field_id}>
       <b>{field.label}</b> <small>({field.field_type} · {field.stage} · {field.active?'Active':'Inactive'})</small>
+      <span className="rowActions">
+        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===0} onClick={()=>runChange(()=>localApi.moveCustomField(field.field_id,-1))} aria-label={'Move field '+field.label+' earlier'}>↑ Earlier</button>
+        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===fields.filter(f=>f.stage===field.stage).length-1} onClick={()=>runChange(()=>localApi.moveCustomField(field.field_id,1))} aria-label={'Move field '+field.label+' later'}>↓ Later</button>
+      </span>
       <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}{!canCaptureCustomFieldStage(field.stage)?' · No capture editor for this legacy stage; cannot newly require it':''}</p>
       <label><input type="checkbox" checked={field.required} disabled={busy||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,e.target.checked,field.active,field.display_order));}}/> Required at this stage</label>
       <button type="button" disabled={busy||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,!field.active,field.display_order))}>{field.active?'Deactivate':'Reactivate'}</button>
@@ -1751,8 +1768,10 @@ function CustomFieldDiscovery(){
         <button type="button" disabled={busy} onClick={async()=>{try{const fieldOptions=await localApi.listCustomFieldOptions(field.field_id);setOptions(v=>({...v,[field.field_id]:fieldOptions}));}catch(e){setNotice(String(e));}}}>View options</button>
         <label>New option<input value={newOption[field.field_id]||''} onChange={e=>setNewOption(v=>({...v,[field.field_id]:e.target.value}))}/></label>
         <button type="button" disabled={busy||!field.active||!(newOption[field.field_id]||'').trim()} onClick={()=>runChange(async()=>{await localApi.createCustomFieldOption({option_id:newId(),field_id:field.field_id,label:newOption[field.field_id],display_order:options[field.field_id]?.length||0});setNewOption(v=>({...v,[field.field_id]:''}));})}>Add option</button>
-        {options[field.field_id]?.map(option=><p key={option.option_id} className="subtle">
+        {options[field.field_id]?.map((option,optionIndex)=><p key={option.option_id} className="subtle">
           {option.label} · {option.active?'Active':'Inactive'} · ID: {option.option_id}
+          <button type="button" disabled={busy||optionIndex===0} onClick={()=>void moveOption(field.field_id,option.option_id,-1)} aria-label={'Move option '+option.label+' earlier'}>↑ Earlier</button>
+          <button type="button" disabled={busy||optionIndex===((options[field.field_id]?.length??0)-1)} onClick={()=>void moveOption(field.field_id,option.option_id,1)} aria-label={'Move option '+option.label+' later'}>↓ Later</button>
           <button type="button" disabled={busy} onClick={()=>runChange(()=>localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,!option.active,option.display_order))}>{option.active?'Deactivate':'Reactivate'}</button>
           <button type="button" disabled={busy} onClick={()=>{const label=window.prompt('New option label',option.label);if(label!==null&&label.trim())void runChange(()=>localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order));}}>Rename</button>
         </p>)}
