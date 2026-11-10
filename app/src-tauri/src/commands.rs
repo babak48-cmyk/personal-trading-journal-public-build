@@ -46,6 +46,17 @@ pub fn edit_custom_field_definition(app:AppHandle,field_id:String,label:String,h
     crate::custom_fields::edit_custom_field(&mut conn,&field_id,&label,&help_text,required,active,order)
 }
 #[tauri::command]
+pub fn move_custom_field(app:AppHandle,field_id:String,direction:i64)->Result<(),AppError>{
+    let mut conn=open_custom_fields_write(&app)?;
+    crate::custom_fields::move_custom_field(&mut conn,&field_id,direction)
+}
+#[tauri::command]
+pub fn move_custom_field_option(app:AppHandle,field_id:String,option_id:String,direction:i64)->Result<(),AppError>{
+    let mut conn=open_custom_fields_write(&app)?;
+    crate::custom_fields::move_custom_field_option(&mut conn,&field_id,&option_id,direction)
+}
+
+#[tauri::command]
 pub fn create_custom_field_option(app:AppHandle,input:crate::custom_fields::OptionDefinitionInput)->Result<(),AppError>{
     let mut conn=open_custom_fields_write(&app)?;
     crate::custom_fields::create_option(&mut conn,&input)
