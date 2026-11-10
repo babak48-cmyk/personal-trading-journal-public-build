@@ -61,6 +61,8 @@ pub fn run() {
             commands::cleanup_unused_custom_field,
             commands::list_custom_field_options,
             commands::create_custom_field_definition,
+            commands::move_custom_field,
+            commands::move_custom_field_option,
             commands::edit_custom_field_definition,
             commands::create_custom_field_option,
             commands::edit_custom_field_option,
