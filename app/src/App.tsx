@@ -17,7 +17,7 @@ import { missingRequiredCustomValues } from './customFieldRequired';
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
-import { fieldConnectionReport, fieldConnectionSummary } from './fieldInventory';
+import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, type InventoryStage } from './fieldInventory';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -1844,7 +1844,8 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const [draft,setDraft]=useState<RequirementOverrides>(overrides);
   const [msg,setMsg]=useState('');
   const [fieldSearch,setFieldSearch]=useState('');
-  const [inventoryFilter,setInventoryFilter]=useState<'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'>('ALL');
+  const [inventoryFilter,setInventoryFilter]=useState<'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'|'REQUIRED'>('ALL');
+  const [stageFilter,setStageFilter]=useState<'ALL'|InventoryStage>('ALL');
   const settingsSaveRef=useRef(false);
   const [settingsSaving,setSettingsSaving]=useState(false);
   async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>):Promise<boolean>{
@@ -1922,20 +1923,26 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const groups=['Session','Plan','Candidate','Evidence','Decision','Trade','Review','Psychology','SessionReview','Attachment'] as const;
   const coverageReport=fieldConnectionReport();
   const coverageSummary=fieldConnectionSummary();
+  const requiredPresentationGaps=requiredPresentationIssues(draft,visibility,placements);
+  const stageOptions=[...new Set(FIELD_CONTROL_INVENTORY.map(item=>item.stage))];
   return <div className="guideOverlay" onClick={onClose}><div className="guideCard sourceManagerCard" onClick={e=>e.stopPropagation()}>
     <div className="panelTitle"><div><h2>Field Requirements</h2><p className="subtle">Choose which optional fields must be completed. System and conditional requirements are locked to protect workflow integrity.</p></div><div className="headerActions"><button onClick={onAppearance}>Appearance</button><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onClose}>Close</button></div></div>
     {msg&&<p role="status" aria-live="polite" className="subtle">{msg}</p>}
     <CustomFieldDiscovery/>
-    <details className="guidedMore"><summary>All-input Field Manager · search and configure ({FIELD_CONTROL_INVENTORY.length} inputs)</summary>
+    {requiredPresentationGaps.length>0&&<p role="alert" className="warningBox">Required fields are not visible in both input modes: {requiredPresentationGaps.join(', ')}. Review your settings; these fields must remain accessible in Quick and Detailed.</p>}
+    <details className="guidedMore" open><summary>All-input Field Manager · search and configure ({FIELD_CONTROL_INVENTORY.length} inputs)</summary>
       <p className="subtle">Manage connected inputs in one place. Protected fields and unresolved connections remain visible for audit, but cannot be silently changed. Only confirmed settings persist; saved historical field values stay intact.</p>
       <div className="rowActions"><label>Find an input <input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Field, stage or ID"/></label>
-        <label>Show <select aria-label="Input coverage filter" value={inventoryFilter} onChange={e=>setInventoryFilter(e.target.value as 'ALL'|'EDITABLE'|'PROTECTED'|'OPEN')}>
-          <option value="ALL">All inputs</option><option value="EDITABLE">Connected & editable</option><option value="PROTECTED">Protected</option><option value="OPEN">Unfinished connections</option>
+        <label>Stage <select aria-label="Input lifecycle stage filter" value={stageFilter} onChange={e=>setStageFilter(e.target.value as 'ALL'|InventoryStage)}><option value="ALL">All stages</option>{stageOptions.map(stage=><option key={stage} value={stage}>{stage.replaceAll('-',' ')}</option>)}</select></label>
+        <label>Show <select aria-label="Input coverage filter" value={inventoryFilter} onChange={e=>setInventoryFilter(e.target.value as 'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'|'REQUIRED')}>
+          <option value="ALL">All inputs</option><option value="EDITABLE">Connected & editable</option><option value="PROTECTED">Protected</option><option value="OPEN">Unfinished connections</option><option value="REQUIRED">System / user required</option>
         </select></label></div>
       <div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
-        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'));
-        return matchesFilter&&(!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()));
+        const definition=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
+        const configuredRequired=definition?.defaultRequirement==='SYSTEM_REQUIRED'||(!!item.formalFieldId&&isUserRequired(item.formalFieldId,draft));
+        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='REQUIRED'&&configuredRequired);
+        return matchesFilter&&(stageFilter==='ALL'||item.stage===stageFilter)&&(!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()));
       }).map(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
         const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
