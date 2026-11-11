@@ -175,6 +175,7 @@ export const localApi = {
   checkPlanConsistency: (sessionId:string) => invoke<PlanConsistency>('check_plan_consistency',{sessionId}),
   createCandidateDecision: (input:CandidateDecisionInput) => invoke<CandidateDecision>('create_candidate_decision',{input}),
   listCandidateDecisions: (candidateId:string) => invoke<CandidateDecision[]>('list_candidate_decisions',{candidateId}),
+  listUnexecutedTradeDecisions: (sessionId:string) => invoke<CandidateDecision[]>('list_unexecuted_trade_decisions',{sessionId}),
 
   createTradeWithEntry: (input:CreateTradeExecutionInput) => invoke<TradeDetail>('create_trade_with_entry',{input}),
   addTradeFill: (input:AddTradeFillInput) => invoke<TradeDetail>('add_trade_fill',{input}),
