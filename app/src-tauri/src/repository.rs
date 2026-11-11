@@ -2781,3 +2781,39 @@ mod read_only_trade_risk_history_tests {
         assert_eq!(persisted,3);
     }
 }
+
+#[cfg(test)]
+mod pending_trade_decision_recovery_tests {
+    use super::*;
+
+    #[test]
+    fn only_saved_trade_decisions_without_trades_are_returned_even_in_same_zone() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE candidate_decisions (
+              decision_id TEXT,candidate_id TEXT,session_id TEXT,occurred_at TEXT,
+              decision_type TEXT,intended_direction TEXT,reason_code TEXT,reason_note TEXT,
+              decision_quality TEXT,plan_alignment TEXT,plan_mismatch_reason TEXT,
+              based_on_plan_revision_id TEXT,based_on_candidate_revision_id TEXT
+            );
+            CREATE TABLE trades (trade_id TEXT,decision_id TEXT);
+            INSERT INTO candidate_decisions VALUES
+              ('d-executed','zone-1','session-a','2026-11-12T09:00:00Z','TRADE','LONG',NULL,NULL,NULL,NULL,NULL,NULL,'rev-1'),
+              ('d-pending','zone-1','session-a','2026-11-12T09:05:00Z','TRADE','LONG',NULL,NULL,NULL,NULL,NULL,NULL,'rev-1'),
+              ('d-pending-2','zone-1','session-a','2026-11-12T09:07:00Z','TRADE','SHORT',NULL,NULL,NULL,NULL,NULL,NULL,'rev-2'),
+              ('d-no-trade','zone-1','session-a','2026-11-12T09:08:00Z','NO_TRADE',NULL,'RULE',NULL,NULL,NULL,NULL,NULL,'rev-2'),
+              ('d-other-session','zone-1','session-b','2026-11-12T09:09:00Z','TRADE','LONG',NULL,NULL,NULL,NULL,NULL,NULL,'rev-3');
+            INSERT INTO trades VALUES ('trade-a','d-executed');
+        ").unwrap();
+        let result=list_unexecuted_trade_decisions(&conn,"session-a").unwrap();
+        assert_eq!(result.len(),2);
+        assert_eq!(result[0].decision_id,"d-pending-2");
+        assert_eq!(result[1].decision_id,"d-pending");
+        assert_eq!(result[0].candidate_id.as_deref(),Some("zone-1"));
+        assert_eq!(result[1].based_on_candidate_revision_id.as_deref(),Some("rev-1"));
+        assert!(list_unexecuted_trade_decisions(&conn,"unknown-session").unwrap().is_empty());
+        // Read-only recovery must not insert an execution.
+        let trades:i64=conn.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
+        assert_eq!(trades,1);
+    }
+}
