@@ -1093,9 +1093,24 @@ pub struct ExecutionFillDto {
 }
 
 #[derive(Debug, Serialize)]
+pub struct RiskSnapshotDto {
+    pub risk_snapshot_id: String,
+    pub occurred_at: String,
+    pub snapshot_type: String,
+    pub stop_price: Option<f64>,
+    pub quantity: Option<f64>,
+    pub risk_dollars: Option<f64>,
+    pub change_reason: Option<String>,
+    pub was_rule_compliant: Option<bool>,
+    pub provenance: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct TradeDetailDto {
     pub metrics: TradeMetricsDto,
     pub fills: Vec<ExecutionFillDto>,
+    /// Read-only, timestamped risk history. Existing events never rewritten.
+    pub risk_snapshots: Vec<RiskSnapshotDto>,
 }
 
 fn price_tick_aligned(price: f64, tick_size: f64) -> bool {
@@ -1325,7 +1340,19 @@ pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,A
     let metrics=trade_metrics(conn,trade_id)?;
     let mut stmt=conn.prepare("SELECT execution_id,occurred_at,action,side,price,quantity,order_type,commission,fees,note FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
     let rows=stmt.query_map([trade_id],|r|Ok(ExecutionFillDto{execution_id:r.get(0)?,occurred_at:r.get(1)?,action:r.get(2)?,side:r.get(3)?,price:r.get(4)?,quantity:r.get(5)?,order_type:r.get(6)?,commission:r.get(7)?,fees:r.get(8)?,note:r.get(9)?}))?;
-    Ok(TradeDetailDto{metrics,fills:rows.collect::<Result<Vec<_>,_>>()?})
+    let fills=rows.collect::<Result<Vec<_>,_>>()?;
+    let mut risk_stmt=conn.prepare(
+        "SELECT risk_snapshot_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,
+                change_reason,was_rule_compliant,provenance
+         FROM risk_snapshots WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid"
+    )?;
+    let risk_snapshots=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
+        risk_snapshot_id:r.get(0)?,occurred_at:r.get(1)?,snapshot_type:r.get(2)?,
+        stop_price:r.get(3)?,quantity:r.get(4)?,risk_dollars:r.get(5)?,
+        change_reason:r.get(6)?,was_rule_compliant:r.get::<_,Option<i64>>(7)?.map(|n|n!=0),
+        provenance:r.get(8)?
+    }))?.collect::<Result<Vec<_>,_>>()?;
+    Ok(TradeDetailDto{metrics,fills,risk_snapshots})
 }
 
 pub fn list_session_trades(conn:&Connection,session_id:&str)->Result<Vec<TradeMetricsDto>,AppError>{
