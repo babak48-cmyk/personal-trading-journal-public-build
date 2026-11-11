@@ -91,3 +91,35 @@ pub fn copy_backup_to_directory(source: &Path, directory: &Path) -> Result<PathB
     }
     Ok(destination)
 }
+
+#[cfg(test)]
+mod destination_tests {
+    use super::*;
+    #[test]
+    fn external_copy_is_verified_and_never_overwrites() {
+        let root = std::env::temp_dir().join(format!("ptj-backup-destination-{}", uuid::Uuid::new_v4()));
+        let internal = root.join("internal");
+        let external = root.join("selected");
+        fs::create_dir_all(&internal).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        let source = internal.join("test-backup.zip");
+        fs::write(&source, b"isolated-backup-test-bytes").unwrap();
+        let result = copy_backup_to_directory(&source, &external).unwrap();
+        assert_eq!(fs::read(&result).unwrap(), fs::read(&source).unwrap());
+        // Reusing the filename must not replace the previous selected backup.
+        assert!(copy_backup_to_directory(&source, &external).is_err());
+        assert_eq!(fs::read(&result).unwrap(), b"isolated-backup-test-bytes");
+        assert_eq!(copy_backup_to_directory(&source, &internal).unwrap(), source);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn unavailable_destination_does_not_touch_source() {
+        let root = std::env::temp_dir().join(format!("ptj-backup-invalid-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("untouched.zip");
+        fs::write(&source, b"original").unwrap();
+        assert!(copy_backup_to_directory(&source, &root.join("missing")).is_err());
+        assert_eq!(fs::read(&source).unwrap(), b"original");
+        fs::remove_dir_all(root).unwrap();
+    }
+}
