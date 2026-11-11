@@ -248,6 +248,7 @@ export function App(){
   const [activeTrade,setActiveTrade]=useState<TradeDetail|null>(null);
   const [sessionTrades,setSessionTrades]=useState<TradeMetrics[]>([]);
   const [unexecutedTradeDecisions,setUnexecutedTradeDecisions]=useState<CandidateDecision[]>([]);
+  const [unexecutedSessionId,setUnexecutedSessionId]=useState<string|null>(null);
   const [unexecutedLoading,setUnexecutedLoading]=useState(false);
   const [unexecutedError,setUnexecutedError]=useState('');
   const [unexecutedRefreshToken,setUnexecutedRefreshToken]=useState(0);
@@ -257,16 +258,18 @@ export function App(){
   useEffect(()=>{
     const sessionId=active?.session_id??null;
     const request=++unexecutedRequestRef.current;
-    setUnexecutedTradeDecisions([]);setUnexecutedError('');
+    setUnexecutedTradeDecisions([]);setUnexecutedSessionId(null);setUnexecutedError('');
     if(!sessionId||active?.status!=='ACTIVE'){setUnexecutedLoading(false);return;}
     setUnexecutedLoading(true);
     let cancelled=false;
     localApi.listUnexecutedTradeDecisions(sessionId)
       .then(items=>{
-        if(!cancelled&&request===unexecutedRequestRef.current)setUnexecutedTradeDecisions(items);
+        if(!cancelled&&request===unexecutedRequestRef.current){
+          setUnexecutedTradeDecisions(items);setUnexecutedSessionId(sessionId);
+        }
       }).catch(e=>{
         if(!cancelled&&request===unexecutedRequestRef.current){
-          setUnexecutedTradeDecisions([]);
+          setUnexecutedTradeDecisions([]);setUnexecutedSessionId(null);
           setUnexecutedError('Could not verify saved unexecuted TRADE decisions: '+String(e));
         }
       }).finally(()=>{
@@ -1134,7 +1137,7 @@ export function App(){
       setMessage('This saved Decision cannot be resumed as an active trade entry. Inspect its history.');
       return;
     }
-    if(!unexecutedTradeDecisions.some(d=>d.decision_id===decision.decision_id)){
+    if(unexecutedSessionId!==active.session_id||!unexecutedTradeDecisions.some(d=>d.decision_id===decision.decision_id)){
       setMessage('The saved Decision is not in the verified unexecuted list. Refresh before resuming.');
       return;
     }
