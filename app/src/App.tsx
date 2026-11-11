@@ -2,7 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { quickValidationRoute } from './quickValidationRoute';
 import { tradeEntryIssues } from './tradeEntryValidation';
-import { zoneRequiredIssues } from './zoneRequired';
+import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { previewEntryRisk } from './entryRiskPreview';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -737,8 +737,8 @@ export function App(){
       blockMissing(missing);
       return;
     }
-    const badZone=candidates.findIndex(c=>c.price_mode==='RANGE'&&c.price_from!=null&&c.price_to!=null&&c.price_from>c.price_to);
-    if(badZone>=0){const c=candidates[badZone];setDraftStep(2);setDraftZonePage(badZone);setValidationErrors([`candidate-${badZone}.priceFrom`,`candidate-${badZone}.priceTo`]);setMessage(`Zone ${badZone+1} (${c.label||'Unnamed'}): From ${c.price_from} exceeds To ${c.price_to}. Correct the highlighted range before confirming.`);window.setTimeout(()=>{const node=document.querySelector<HTMLElement>(`[data-validation-id="candidate-${badZone}.priceFrom"]`);node?.scrollIntoView({behavior:'smooth',block:'center'});node?.querySelector<HTMLElement>('input')?.focus({preventScroll:true});},120);return;}
+    const badZone=candidates.findIndex(c=>zoneRangeOrderIssue(c)!==null);
+    if(badZone>=0){const c=candidates[badZone];setDraftStep(2);setDraftZonePage(badZone);setValidationErrors([`candidate-${badZone}.priceFrom`,`candidate-${badZone}.priceTo`]);setMessage(`Zone ${badZone+1} (${c.label||'Unnamed'}): ${zoneRangeOrderIssue(c)} Correct the highlighted range before confirming.`);window.setTimeout(()=>{const node=document.querySelector<HTMLElement>(`[data-validation-id="candidate-${badZone}.priceFrom"]`);node?.scrollIntoView({behavior:'smooth',block:'center'});node?.querySelector<HTMLElement>('input')?.focus({preventScroll:true});},120);return;}
     setValidationErrors([]);
     try{
       await localApi.confirmInitialPlan({session_id:active.session_id,initial_bias:bias,main_scenario:mainScenario||null,alternative_scenario:altScenario||null,expected_context:[],things_not_to_do:[],pre_session_state:preSessionState||null,pre_session_state_intensity:preSessionStateIntensity,candidates:candidates.map(cleanCandidate)});
@@ -798,6 +798,15 @@ export function App(){
       ...zoneRequiredIssues(liveCandidate,'liveCandidate',requirementOverrides),
     ];
     if(blockMissing(missingLiveZone)){setLiveZoneFeedback('Complete all highlighted required fields.');return;}
+    const rangeIssue=zoneRangeOrderIssue(liveCandidate);
+    if(rangeIssue){
+      setValidationErrors(['liveCandidate.priceFrom','liveCandidate.priceTo']);
+      setValidationIssueLabels(v=>({...v,'liveCandidate.priceFrom':'Valid range start','liveCandidate.priceTo':'Valid range end'}));
+      setMessage(rangeIssue);
+      setLiveZoneFeedback(rangeIssue);
+      jumpToRequiredField('liveCandidate.priceFrom');
+      return;
+    }
     liveZoneSavingRef.current=true;setLiveZoneSaving(true);setLiveZoneFeedback('Adding new zone…');
     try{
       await localApi.addLiveCandidate({session_id:active.session_id,why_changed:liveCandidateReason,new_evidence_summary:liveCandidateEvidence||null,candidate:cleanCandidate(liveCandidate)});
