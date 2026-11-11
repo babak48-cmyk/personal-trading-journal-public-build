@@ -109,6 +109,36 @@ export function App(){
   const [message,setMessage]=useState('Local desktop build — planning core checkpoint');
   const [backupBusy,setBackupBusy]=useState(false);
   const [backupResult,setBackupResult]=useState('');
+  const [backupDestination,setBackupDestination]=useState<string|null>(null);
+  const [backupFolderBusy,setBackupFolderBusy]=useState(false);
+  useEffect(()=>{
+    let mounted=true;
+    localApi.getBackupDestination().then(dir=>{if(mounted)setBackupDestination(dir);})
+      .catch(e=>{if(mounted)setMessage('Backup destination preference unavailable: '+String(e));});
+    return ()=>{mounted=false;};
+  },[]);
+  async function chooseBackupFolder(){
+    if(backupFolderBusy||backupBusy)return;
+    setBackupFolderBusy(true);
+    try{
+      const selected=await open({directory:true,multiple:false,title:'Select the folder for your backup copies'});
+      if(typeof selected!=='string')return;
+      await localApi.setBackupDestination(selected);
+      setBackupDestination(selected);
+      setMessage('Backup destination saved. Internal safety backups are retained.');
+    }catch(e){setMessage('Could not change backup destination: '+String(e));}
+    finally{setBackupFolderBusy(false);}
+  }
+  async function resetBackupFolder(){
+    if(backupFolderBusy||backupBusy)return;
+    setBackupFolderBusy(true);
+    try{
+      await localApi.setBackupDestination(null);
+      setBackupDestination(null);
+      setMessage('Backup destination reset to the app-managed folder.');
+    }catch(e){setMessage('Could not reset backup destination: '+String(e));}
+    finally{setBackupFolderBusy(false);}
+  }
   async function createBackupWithFeedback(){
     if(backupBusy)return;
     setBackupBusy(true);setBackupResult('');
@@ -1142,6 +1172,9 @@ export function App(){
         <button className={showSafety?'activeMode':''} onClick={async()=>{setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}}>Safety</button>
         <button className={showSettings?'activeMode':''} onClick={()=>{setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}>Settings</button>
         <button onClick={createBackupWithFeedback} disabled={backupBusy}>{backupBusy?'Creating backup…':'Create backup'}</button>
+        <button type="button" onClick={chooseBackupFolder} disabled={backupBusy||backupFolderBusy}>Choose backup folder</button>
+        <small title={backupDestination??'Application default folder'} style={{overflowWrap:'anywhere'}}>Backup folder: {backupDestination??'App default'}</small>
+        {backupDestination&&<button type="button" onClick={resetBackupFolder} disabled={backupBusy||backupFolderBusy}>Use default backup folder</button>}
         <button className={showRoadmap?'activeMode':''} onClick={()=>{setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}>Feature Roadmap</button>
         <div className="recent"><strong>Recent</strong>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" disabled={active?.session_id===lastOpenedSessionId} onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div>
       </aside>
