@@ -16,8 +16,6 @@ export function zoneRequiredIssues(
   const missing:ZoneRequiredIssue[]=[];
   const add=(field:string,label:string)=>missing.push({id:`${prefix}.${field}`,label:`${label}${suffix}`});
   if(isUserRequired('candidate.label',overrides)&&!candidate.label?.trim())add('label','Zone name');
-  if(isUserRequired('candidate.trendRelationship',overrides)&&(!candidate.trend_relationship||candidate.trend_relationship==='UNCLEAR'))
-    add('trendRelationship','Trend relationship');
   if(isUserRequired('candidate.sources',overrides)&&candidate.sources.length===0)add('sources','Level source');
   if(isUserRequired('candidate.requiredConditions',overrides)&&!candidate.required_conditions.some(x=>x.trim()))
     add('requiredConditions','Need to see');
