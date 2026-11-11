@@ -66,7 +66,12 @@ export type TradeMetrics = {
   gross_realized_pnl?:number|null; net_realized_pnl?:number|null; realized_r?:number|null; fill_count:number;
 };
 export type ExecutionFill = { execution_id:string; occurred_at?:string|null; action:string; side:string; price:number; quantity:number; order_type?:string|null; commission?:number|null; fees?:number|null; note?:string|null };
-export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[] };
+export type RiskSnapshot = {
+  risk_snapshot_id:string; occurred_at:string; snapshot_type:string;
+  stop_price:number|null; quantity:number|null; risk_dollars:number|null;
+  change_reason:string|null; was_rule_compliant:boolean|null; provenance:string|null;
+};
+export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[] };
 
 export type MistakeType = { mistake_type_id:string; code:string; label:string; mistake_group:string };
 export type SaveTradeReviewInput = {
