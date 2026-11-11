@@ -239,6 +239,9 @@ export function App(){
   const tradeOpeningRef=useRef(false);
   const [tradeOpening,setTradeOpening]=useState(false);
   const [tradeOpeningFeedback,setTradeOpeningFeedback]=useState('');
+  const [entryOutcomeUncertainDecisionId,setEntryOutcomeUncertainDecisionId]=useState<string|null>(null);
+  const [entryHistoryCheckedDecisionId,setEntryHistoryCheckedDecisionId]=useState<string|null>(null);
+  const [entryHistoryVerifying,setEntryHistoryVerifying]=useState(false);
   const [entryPrice,setEntryPrice]=useState<number|null>(null);
   const [stopPrice,setStopPrice]=useState<number|null>(null);
   const [tradeQty,setTradeQty]=useState<number>(1);
@@ -1014,7 +1017,7 @@ export function App(){
     } finally {setDecisionHistoryVerifying(false);}
   }
   async function createExecutedTrade(){
-    if(!pendingTradeDecision||tradeOpeningRef.current)return;
+    if(!pendingTradeDecision||tradeOpeningRef.current||hasUncertainWrite(entryOutcomeUncertainDecisionId,pendingTradeDecision.decision_id))return;
     const entryCommission=parseOptionalFillCost(entryCommissionInput);
     const entryFees=parseOptionalFillCost(entryFeesInput);
     const preflight=previewEntryRisk({entry:entryPrice,stop:stopPrice,quantity:tradeQty,
@@ -1033,12 +1036,46 @@ export function App(){
       const detail=await localApi.createTradeWithEntry({decision_id:pendingTradeDecision.decision_id,entry_price:entryPrice,stop_price:stopPrice,quantity:tradeQty,order_type:'MARKET',planned_target_price:plannedTarget,commission:entryCommission.value,fees:entryFees.value});
       reviewSelectionRequestRef.current++;
       setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);setReviewVerifiedTradeId(detail.metrics.trade_id);setReviewFeedback('');
+      setEntryOutcomeUncertainDecisionId(null);setEntryHistoryCheckedDecisionId(null);
       setPendingTradeDecision(null);setUnexecutedRefreshToken(v=>v+1);setReviewQueue(null);setEntryCommissionInput('');setEntryFeesInput('');
       setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');setTradeOpeningFeedback('Entry and initial risk saved.');
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
       catch(e){setMessage('Trade created, but trade list refresh failed: '+String(e));}
-    }catch(e){setUnexecutedRefreshToken(v=>v+1);setMessage('Trade creation was not confirmed. Refresh saved decisions and trades before retrying: '+String(e));setTradeOpeningFeedback('Trade opening outcome UNKNOWN. Check the saved Decision-to-Trade association before retrying.');}
+    }catch(e){
+      setEntryOutcomeUncertainDecisionId(pendingTradeDecision.decision_id);
+      setEntryHistoryCheckedDecisionId(null);
+      setUnexecutedRefreshToken(v=>v+1);
+      setMessage('Entry save outcome UNKNOWN. Check the original Decision-to-Trade association before retrying: '+String(e));
+      setTradeOpeningFeedback('Trade opening outcome UNKNOWN. Refresh the saved Decision and Trade history before any retry.');
+    }
     finally{tradeOpeningRef.current=false;setTradeOpening(false);}
+  }
+  async function verifyTradeEntryWriteOutcome(){
+    if(!active||!pendingTradeDecision||entryHistoryVerifying||tradeOpeningRef.current)return;
+    const sessionId=active.session_id;
+    const decisionId=pendingTradeDecision.decision_id;
+    setEntryHistoryVerifying(true);
+    try{
+      const [pending,recordedTrades]=await Promise.all([
+        localApi.listUnexecutedTradeDecisions(sessionId),
+        localApi.listSessionTrades(sessionId),
+      ]);
+      setSessionTrades(recordedTrades);
+      // A missing pending decision may have been converted into a real Trade.
+      // Never offer retry in that case: the underlying database already checks
+      // uniqueness of decision_id when opening a trade.
+      if(pending.some(d=>d.decision_id===decisionId)){
+        setEntryHistoryCheckedDecisionId(decisionId);
+        setTradeOpeningFeedback('This Decision is still unexecuted in the database. Check the saved Trade list before manually enabling another entry attempt.');
+      }else{
+        setEntryHistoryCheckedDecisionId(null);
+        setTradeOpeningFeedback('This Decision is NOT in the unexecuted list. An execution may already exist. Review saved Trades; entry retry remains blocked.');
+      }
+      setUnexecutedRefreshToken(v=>v+1);
+    }catch(e){
+      setEntryHistoryCheckedDecisionId(null);
+      setTradeOpeningFeedback('Cannot verify this Decision-to-Trade association. Entry retry remains blocked: '+String(e));
+    }finally{setEntryHistoryVerifying(false);}
   }
   async function addFill(){
     if(fillSavingRef.current||!activeTrade||hasUncertainWrite(fillSaveUncertainTradeId,activeTrade.metrics.trade_id))return;
@@ -1489,7 +1526,7 @@ export function App(){
           <details className="guidedMore"><summary>Entry commission and fees (optional)</summary>
             <p className="subtle">Total amounts for this entry fill in the instrument currency, not per contract. Blank means unknown; enter 0 only when confirmed zero. Recorded values cannot be silently edited.</p>
             <div className="formGrid"><label data-validation-id="trade.entryCommission" className={invalidClass('trade.entryCommission')}>Commission (total)<input type="number" min="0" step="any" value={entryCommissionInput} onChange={e=>{setEntryCommissionInput(e.target.value);clearValidation('trade.entryCommission')}} placeholder="Unknown"/></label><label data-validation-id="trade.entryFees" className={invalidClass('trade.entryFees')}>Other fees (total)<input type="number" min="0" step="any" value={entryFeesInput} onChange={e=>{setEntryFeesInput(e.target.value);clearValidation('trade.entryFees')}} placeholder="Unknown"/></label></div>
-          </details><button className="primary" disabled={tradeOpening} aria-busy={tradeOpening} onClick={createExecutedTrade}>{tradeOpening?'Opening…':'Open trade'}</button><span role="status" aria-live="polite">{tradeOpeningFeedback}</span></div>}
+          </details><button className="primary" disabled={tradeOpening||hasUncertainWrite(entryOutcomeUncertainDecisionId,pendingTradeDecision.decision_id)} aria-busy={tradeOpening} onClick={createExecutedTrade}>{tradeOpening?'Opening…':'Open trade'}</button><span role="status" aria-live="polite">{tradeOpeningFeedback}</span>{hasUncertainWrite(entryOutcomeUncertainDecisionId,pendingTradeDecision.decision_id)&&<div className="rowActions"><button type="button" disabled={entryHistoryVerifying} onClick={verifyTradeEntryWriteOutcome}>{entryHistoryVerifying?'Checking…':'Verify saved Decision / Trades'}</button><button type="button" disabled={!canAcknowledgeVerifiedHistory(entryOutcomeUncertainDecisionId,entryHistoryCheckedDecisionId,pendingTradeDecision.decision_id)} onClick={()=>{setEntryOutcomeUncertainDecisionId(null);setEntryHistoryCheckedDecisionId(null);setTradeOpeningFeedback('Retry manually enabled. Confirm no Trade was saved for this Decision before opening again.');}}>I verified no Trade exists — enable retry</button></div>}</div>}
 
           {sessionTrades.some(t=>t.status==='CLOSED')&&<div className="panel"><div className="panelTitle"><div><h2>Review Pending</h2><p className="subtle">Closed trades can be reviewed later. This does not block a new trade.</p></div><button disabled={reviewQueueLoading} onClick={loadReviewPending}>{reviewQueueLoading?'Checking…':'Refresh reviews'}</button></div><p className="subtle">Automatically checked against saved trade reviews. Closing a trade does not block another entry.</p>{reviewQueueError&&<p role="alert" className="warningBox">{reviewQueueError}</p>}{reviewQueueLoading&&<p role="status">Checking saved reviews…</p>}{!reviewQueueLoading&&reviewQueueSessionId===active.session_id&&reviewQueue!==null&&<div className="tradeList">{reviewQueue.length===0?<p role="status">All closed trades in this session have completed reviews.</p>:reviewQueue.map(t=><button className="tradeRow" key={t.trade_id} onClick={()=>openTradeDetail(t)}><b>{t.direction}</b><span>Review pending</span><span>{t.realized_r==null?'R —':`${t.realized_r.toFixed(2)}R`}</span><span>Open review</span></button>)}</div>}</div>}
           {sessionTrades.length>0&&<div id="journal-session-trades" className="panel"><div className="panelTitle"><div><h2>Trades this session</h2><p className="subtle">Quick operational view — detailed review stays separate.</p></div></div><div className="tradeList">{sessionTrades.map(t=><button className="tradeRow" key={t.trade_id} onClick={()=>openTradeDetail(t)}><b>{t.direction}</b><span>{t.status}</span><span>Qty open {t.open_quantity}</span><span>{t.realized_r==null?'R —':`${t.realized_r.toFixed(2)}R`}</span></button>)}</div></div>}
