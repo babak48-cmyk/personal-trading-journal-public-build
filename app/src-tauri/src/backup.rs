@@ -26,43 +26,66 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
     drop(conn);
 
-    // Millisecond timestamp reduces collisions; create_new rejects any remaining collision.
-    // Never silently overwrite an existing safety backup.
+    // A staging file ensures failed ZIP creation never leaves a *.zip that appears valid.
+    // Unique names avoid collisions even when two backups start in the same millisecond.
+    let unique = uuid::Uuid::new_v4();
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S_%3f");
-    let output = paths.backups.join(format!("TradingJournal_Backup_{timestamp}.zip"));
-    let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&output)?;
-    let mut zip = ZipWriter::new(file);
-    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let stem = format!("TradingJournal_Backup_{timestamp}_{unique}");
+    let output = paths.backups.join(format!("{stem}.zip"));
+    let staging = paths.backups.join(format!(".{stem}.partial"));
 
-    let db_path = paths.database();
-    let db_hash = sha256(&db_path)?;
-    zip.start_file("database.sqlite", options)?;
-    zip.write_all(&fs::read(&db_path)?)?;
+    let result = (|| -> Result<(), AppError> {
+        let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&staging)?;
+        let mut zip = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-    let mut attachment_count = 0usize;
-    if paths.attachments.exists() {
-        // Fail closed: silently skipping an unreadable attachment would produce an incomplete backup.
-        for item in WalkDir::new(&paths.attachments) {
-            let entry = item.map_err(|err| AppError::Validation(format!("Cannot enumerate backup attachments: {err}")))?;
-            if !entry.file_type().is_file() { continue; }
-            let rel = entry.path().strip_prefix(&paths.root)
-                .map_err(|err| AppError::Validation(format!("Attachment is outside backup root: {err}")))?;
-            zip.start_file(rel.to_string_lossy().replace('\\', "/"), options)?;
-            zip.write_all(&fs::read(entry.path())?)?;
-            attachment_count += 1;
+        let db_path = paths.database();
+        let db_hash = sha256(&db_path)?;
+        zip.start_file("database.sqlite", options)?;
+        zip.write_all(&fs::read(&db_path)?)?;
+
+        let mut attachment_count = 0usize;
+        if paths.attachments.exists() {
+            // Never silently skip unreadable attachment directories or files.
+            for item in WalkDir::new(&paths.attachments) {
+                let entry = item.map_err(|err| AppError::Validation(format!("Cannot enumerate backup attachments: {err}")))?;
+                if !entry.file_type().is_file() { continue; }
+                let rel = entry.path().strip_prefix(&paths.root)
+                    .map_err(|err| AppError::Validation(format!("Attachment is outside backup root: {err}")))?;
+                zip.start_file(rel.to_string_lossy().replace('\\', "/"), options)?;
+                zip.write_all(&fs::read(entry.path())?)?;
+                attachment_count += 1;
+            }
         }
-    }
 
-    let info = serde_json::json!({
-        "backup_version": 1,
-        "created_at_utc": Utc::now().to_rfc3339(),
-        "schema_version": db::CURRENT_SCHEMA_VERSION,
-        "database_sha256": db_hash,
-        "attachment_count": attachment_count
-    });
-    zip.start_file("backup_info.json", options)?;
-    zip.write_all(serde_json::to_string_pretty(&info).unwrap().as_bytes())?;
-    zip.finish()?;
+        let info = serde_json::json!({
+            "backup_version": 1,
+            "created_at_utc": Utc::now().to_rfc3339(),
+            "schema_version": db::CURRENT_SCHEMA_VERSION,
+            "database_sha256": db_hash,
+            "attachment_count": attachment_count
+        });
+        zip.start_file("backup_info.json", options)?;
+        zip.write_all(serde_json::to_string_pretty(&info).unwrap().as_bytes())?;
+        let completed = zip.finish()?;
+        completed.sync_all()?;
+        Ok(())
+    })();
+
+    if let Err(err) = result {
+        // This is a new, uniquely named incomplete staging file, never an existing backup.
+        let _ = fs::remove_file(&staging);
+        return Err(err);
+    }
+    // Do not overwrite an existing backup even in the unlikely event of a name collision.
+    if output.exists() {
+        let _ = fs::remove_file(&staging);
+        return Err(AppError::Validation("Backup filename already exists; no file was overwritten".into()));
+    }
+    if let Err(err) = fs::rename(&staging, &output) {
+        let _ = fs::remove_file(&staging);
+        return Err(AppError::Io(err));
+    }
     Ok(output)
 }
 
