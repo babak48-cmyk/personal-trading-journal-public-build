@@ -349,7 +349,22 @@ pub fn create_backup(app: AppHandle) -> Result<String, AppError> {
     let internal_path = backup::create_backup(&paths)?;
     restore::validate_backup(&internal_path)?;
     if let Some(dir) = get_backup_destination(app)? {
-        let copied = backup::copy_backup_to_directory(&internal_path, &PathBuf::from(dir))
+        // A previously selected directory can be renamed or replaced after it was saved.
+        // Resolve it again at backup time instead of trusting stale preference state.
+        let selected = std::fs::canonicalize(&dir)
+            .map_err(|err| AppError::Validation(format!(
+                "External backup directory is unavailable: {err}. Verified internal backup: {}",
+                internal_path.display()
+            )))?;
+        let app_root = std::fs::canonicalize(&paths.root)?;
+        let internal_dir = std::fs::canonicalize(&paths.backups)?;
+        if selected.starts_with(&app_root) && selected != internal_dir {
+            return Err(AppError::Validation(format!(
+                "External backup directory moved inside live app data. Verified internal backup: {}",
+                internal_path.display()
+            )));
+        }
+        let copied = backup::copy_backup_to_directory(&internal_path, &selected)
             .map_err(|err| AppError::Validation(format!(
                 "External backup failed: {err}. A verified internal backup remains at {}",
                 internal_path.display()
