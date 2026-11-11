@@ -29,3 +29,9 @@ Only temporary public development branch modified. No merge, private source upda
 
 ## Next
 Run relevant frontend and Rust CI for full cohesive package on exact HEAD, remedy failures, integrate the exact binary icon assets (no substitute image), and plan one limited Windows acceptance when the package is ready. Audited correction remains separate design gate.
+
+## 2026-11-12 — Recent list height regression (user screenshots)
+- User observed left Recent session list growing indefinitely, lengthening app page; screenshot evidence provided in current project conversation. This is a layout/ergonomics issue, not lost trades.
+- Source fix committed on the SAME active cohesive batch branch: App.tsx now uses labelled, keyboard-focusable .recentList region for all sessions; CSS limits this region to clamp(12rem,42vh,28rem) with independent vertical scrolling at desktop widths, while retaining the existing <=680px hidden Recent behavior. Main navigation remains outside list scrolling.
+- Code commits: 105b562368d5c02e8ae76e703dbc32d0452211ac (markup) and 4473b0e757442c689ec94de935b9700104217436 (CSS). GitHub file readback verified for both. No session records changed, no DB migration, no new installer.
+- Validation state: SOURCE IMPLEMENTED / READBACK VERIFIED; React build and installed Windows layout not yet tested. Include desktop narrow/short window, many sessions, keyboard scrolling, and primary navigation checks within next cohesive Windows acceptance; do not create a special installer solely for this cosmetic fix.
