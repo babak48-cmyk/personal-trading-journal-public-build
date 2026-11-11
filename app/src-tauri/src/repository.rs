@@ -1731,6 +1731,9 @@ pub struct JournalTradeRowDto {
     pub decision_quality: Option<String>,
     pub rule_status: String,
     pub level_sources: Vec<String>,
+    /// True if a historical trade has a Zone but lacks decision-time revision provenance.
+    /// Such rows must not be mislabelled as having no Level Sources.
+    pub level_source_snapshot_missing: bool,
     pub mistakes: Vec<String>,
     pub realized_r: Option<f64>,
     pub net_realized_pnl: Option<f64>,
@@ -1909,7 +1912,9 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         let metrics=trade_metrics(conn,&trade_id)?;
         out.push(JournalTradeRowDto{
             trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
-            level_sources:sources.into_iter().map(|(_,label)|label).collect(),mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
+            level_sources:sources.into_iter().map(|(_,label)|label).collect(),
+            level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
+            mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
             realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,open_quantity:metrics.open_quantity
         });
     }
