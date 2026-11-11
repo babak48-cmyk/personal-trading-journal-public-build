@@ -258,3 +258,20 @@ describe('Trade Review quality field ordering',()=>{
     });
   });
 });
+
+
+describe('Trade Review note field manager integration',()=>{
+  const noteFields=['review.exitNote','review.note'] as const;
+  it('preserves independent stored identities across note reordering',()=>{
+    expect(orderFieldIdsWithinSection(noteFields,{})).toEqual([...noteFields]);
+    expect(orderFieldIdsWithinSection(noteFields,{'review.note':0,'review.exitNote':1}))
+      .toEqual(['review.note','review.exitNote']);
+    expect(noteFields.every(id=>fieldConnectionReport().find(x=>x.id===id)?.status==='CONNECTED')).toBe(true);
+  });
+  it('keeps both user-required Review notes accessible in Quick',()=>{
+    for(const id of noteFields){
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+      expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(false);
+    }
+  });
+});
