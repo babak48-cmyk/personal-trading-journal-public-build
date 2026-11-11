@@ -627,6 +627,13 @@ pub fn list_unexecuted_trade_decisions(app: AppHandle, session_id: String) -> Re
 }
 
 #[tauri::command]
+pub fn get_trade_for_decision(app: AppHandle, session_id: String, decision_id: String) -> Result<Option<TradeDetailDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::get_trade_for_decision(&conn,&session_id,&decision_id)
+}
+
+#[tauri::command]
 pub fn get_trade_detail(app: AppHandle, trade_id: String) -> Result<TradeDetailDto, AppError> {
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
