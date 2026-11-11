@@ -87,3 +87,12 @@ Checkpoint ID: PTJ-FIELD-MANAGER-TRADE-REVIEW-ORDER-2026-11-12
 - Verified exact-head GitHub Actions run `43068150904` on `77914714d9124ef335c44e0d23602a080d709224`: completed SUCCESS, Frontend SUCCESS, Rust SUCCESS. CI-TESTED on this commit, not WINDOWS-TESTED or ACCEPTED.
 - This is a scoped, actual field-connection increment, NOT full Field Manager acceptance. Complete all-input ordering, custom option snapshots, full auditing and dynamic historical display remain PARTIAL. Windows acceptance for this new layout remains OPEN.
 - Draft public PR #8, no merge, no private repo updates, no installer or database changes. Exact approved Windows icon assets remain outside GitHub; do not substitute.
+
+## 2026-11-12 — Trade Review detail configuration, CI verified
+Checkpoint ID: PTJ-REVIEW-DETAIL-FIELD-MANAGER-2026-11-12
+- This is an additive, source-verified Field Manager increment on the existing Quick/Review lifecycle, not acceptance of all-input coverage.
+- Existing `review.exitReason`, `review.exitNote`, and `review.note` form controls now render user-configured labels and contextual help from persisted field text preferences; no new database columns or change to saved review answers.
+- Existing `review.exitNote` and `review.note` form controls now honor persisted relative field order; Field Manager adds Up/Down ordering for the pair under the existing ordering section. Their stable field IDs and required Quick visibility remain unchanged.
+- Feature commit `83c192b9fc68fdd628d867766f98cb60296c4456`; regression tests commit `9c88ebf109250bccb7b203d39e80d252ff23a05f`. Exact-source GitHub Actions run `43069928537` for the test commit: COMPLETED SUCCESS, frontend SUCCESS, Rust SUCCESS, jobs independently read back.
+- Exact approved icon local ZIP verified again: `approved-original.png` SHA256 `a8d698360c4b76ee10270f0c00a3e3fc379872e5c3b0f32fd842afb934e6eb3c`; Windows `icon.ico` SHA256 `1add9664f063c9c4e7ea2fbbb7257b2c6d78ea94d3c8161e9814d8def42cc1ea`. The exact binary files remain **NOT COMMITTED**: GitHub text connector does not directly consume local file paths, and the container cannot resolve GitHub over DNS. Do not substitute a different icon. Binary transfer remains an open release blocker.
+- Windows-installed acceptance OPEN; complete All-Inputs Field Manager PARTIAL; Audited Fill correction not implemented; Quick Workflow PARTIAL; all twelve roadmap categories retained. PR #8 remains DRAFT/UNMERGED; private canonical repository, main and real databases untouched.
