@@ -14,11 +14,11 @@ describe('Shared initial/live Zone required-field gate',()=>{
     expect(zoneRequiredIssues(draft(),'candidate-0',{})).toEqual([]);
   });
   it('identifies all configured required fields with lifecycle-specific focus ids',()=>{
-    const required={'candidate.label':true,'candidate.trendRelationship':true,'candidate.sources':true,
+    const required={'candidate.label':true,'candidate.sources':true,
       'candidate.requiredConditions':true,'candidate.invalidationConditions':true};
     const issues=zoneRequiredIssues(draft(),'liveCandidate',required);
     expect(issues.map(x=>x.id)).toEqual([
-      'liveCandidate.label','liveCandidate.trendRelationship','liveCandidate.sources',
+      'liveCandidate.label','liveCandidate.sources',
       'liveCandidate.requiredConditions','liveCandidate.invalidationConditions'
     ]);
     expect(zoneRequiredIssues(draft(),'candidate-2',required).every(x=>x.id.startsWith('candidate-2.'))).toBe(true);
@@ -28,7 +28,7 @@ describe('Shared initial/live Zone required-field gate',()=>{
       required_conditions:['Reclaim'],invalidation_conditions:['Break of level'],
       sources:[{source_type_id:'validated-source'}]};
     expect(zoneRequiredIssues(candidate,'liveCandidate',{'candidate.label':true,
-      'candidate.trendRelationship':true,'candidate.sources':true,
+      'candidate.sources':true,
       'candidate.requiredConditions':true,'candidate.invalidationConditions':true})).toEqual([]);
   });
   it('reports missing price geometry without invalidating an unspecified draft price',()=>{
@@ -43,18 +43,14 @@ describe('Shared initial/live Zone required-field gate',()=>{
   });
 });
 
-describe('Trend relationship Field Manager connection',()=>{
-  it('is connected and cannot disappear from Quick when user-required',()=>{
-    expect(fieldConnectionReport().find(x=>x.id==='candidate.trendRelationship')?.status).toBe('CONNECTED');
-    expect(isFieldPresented('candidate.trendRelationship',true,
-      {'candidate.trendRelationship':false},
-      {'candidate.trendRelationship':'DETAILED_ONLY'},
-      {'candidate.trendRelationship':true})).toBe(true);
+describe('System-locked trend/psychology semantics',()=>{
+  it('protects trend classification and conditional psychology from user visibility overrides',()=>{
+    for(const id of ['candidate.trendRelationship','psychology.state','psychology.stage']){
+      expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('PROTECTED');
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+    }
   });
-  it('may be hidden when optional and never hides protected psychology',()=>{
-    expect(isFieldPresented('candidate.trendRelationship',true,
-      {'candidate.trendRelationship':false},{},{})).toBe(false);
-    expect(fieldConnectionReport().find(x=>x.id==='psychology.state')?.status).toBe('PROTECTED');
-    expect(fieldConnectionReport().find(x=>x.id==='psychology.stage')?.status).toBe('PROTECTED');
+  it('does not elevate an unsupported trend requirement override',()=>{
+    expect(zoneRequiredIssues(draft(),'liveCandidate',{'candidate.trendRelationship':true})).toEqual([]);
   });
 });
