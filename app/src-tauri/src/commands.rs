@@ -304,9 +304,50 @@ pub fn save_appearance_preferences(app: AppHandle, json: String) -> Result<(), A
 }
 
 #[tauri::command]
+pub fn get_backup_destination(app: AppHandle) -> Result<Option<String>, AppError> {
+    use rusqlite::OptionalExtension;
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    Ok(conn.query_row(
+        "SELECT value FROM app_settings WHERE key='backup_destination_v1'",
+        [], |r| r.get::<_, String>(0),
+    ).optional()?)
+}
+
+#[tauri::command]
+pub fn set_backup_destination(app: AppHandle, destination: Option<String>) -> Result<(), AppError> {
+    let normalized = destination.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    if let Some(ref dir) = normalized {
+        if !PathBuf::from(dir).is_dir() {
+            return Err(AppError::Validation("Backup destination is not an accessible directory".into()));
+        }
+    }
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    if let Some(dir) = normalized {
+        conn.execute(
+            "INSERT INTO app_settings(key,value) VALUES('backup_destination_v1',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [dir],
+        )?;
+    } else {
+        conn.execute("DELETE FROM app_settings WHERE key='backup_destination_v1'", [])?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn create_backup(app: AppHandle) -> Result<String, AppError> {
     let paths = AppPaths::from_app(&app)?;
-    Ok(backup::create_backup(&paths)?.to_string_lossy().to_string())
+    // Always make the app-managed verified backup first; the user folder is a second recoverable copy.
+    let internal_path = backup::create_backup(&paths)?;
+    restore::validate_backup(&internal_path)?;
+    if let Some(dir) = get_backup_destination(app)? {
+        let copied = backup::copy_backup_to_directory(&internal_path, &PathBuf::from(dir))?;
+        restore::validate_backup(&copied)?;
+        Ok(copied.to_string_lossy().to_string())
+    } else {
+        Ok(internal_path.to_string_lossy().to_string())
+    }
 }
 
 #[tauri::command]
