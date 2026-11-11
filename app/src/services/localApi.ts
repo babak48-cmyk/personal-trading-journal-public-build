@@ -91,7 +91,7 @@ export type SaveSessionReviewInput = { session_id:string; what_went_well?:string
 export type SessionReview = SaveSessionReviewInput & { review_id:string; status:'DRAFT'|'COMPLETED'; completed_at?:string|null };
 
 
-export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null };
+export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null; evidence_timing?:'ANY_RECORDED'|'AT_DECISION'|null };
 export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; level_source_snapshot_missing?:boolean; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number };
 export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:string;no_trade_count:number;missed_count:number;reason_missing_count:number};
 export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
