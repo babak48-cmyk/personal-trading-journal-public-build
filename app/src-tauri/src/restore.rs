@@ -37,6 +37,30 @@ pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
     if sha256_bytes(&db_bytes) != info.database_sha256 {
         return Err(AppError::Validation("database checksum mismatch".into()));
     }
+    // Read every attachment so ZIP CRC/read errors surface before a backup is trusted.
+    // Existing backup_version=1 remains compatible; no migration or manifest format change.
+    let mut seen = std::collections::HashSet::new();
+    let mut actual_attachments = 0usize;
+    for index in 0..zip.len() {
+        let mut item = zip.by_index(index)?;
+        let path = item.enclosed_name().ok_or_else(|| AppError::Validation(
+            "unsafe path in backup archive".into()
+        ))?.to_owned();
+        if !seen.insert(path.clone()) {
+            return Err(AppError::Validation("duplicate path in backup archive".into()));
+        }
+        if !item.is_dir() && path.starts_with("attachments") {
+            let mut sink = std::io::sink();
+            std::io::copy(&mut item, &mut sink)?;
+            actual_attachments += 1;
+        }
+    }
+    if actual_attachments != info.attachment_count {
+        return Err(AppError::Validation(format!(
+            "backup attachment count mismatch: expected {}, found {}",
+            info.attachment_count, actual_attachments
+        )));
+    }
     Ok(info)
 }
 
