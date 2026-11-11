@@ -1129,6 +1129,25 @@ export function App(){
     setPsychStage((r?.psychology_stage as any)||''); setReviewMistakes(r?.mistake_type_ids||[]); setReviewNote(r?.note||'');
   }
   function loadReviewPending(){setReviewQueueRefreshToken(v=>v+1);}
+  function resumeUnexecutedTradeDecision(decision:CandidateDecision){
+    if(!active||active.status!=='ACTIVE'||decision.decision_type!=='TRADE'||!['LONG','SHORT'].includes(decision.intended_direction??'')){
+      setMessage('This saved Decision cannot be resumed as an active trade entry. Inspect its history.');
+      return;
+    }
+    if(!unexecutedTradeDecisions.some(d=>d.decision_id===decision.decision_id)){
+      setMessage('The saved Decision is not in the verified unexecuted list. Refresh before resuming.');
+      return;
+    }
+    if(pendingTradeDecision?.decision_id!==decision.decision_id &&
+        pendingTradeDecision && (entryPrice!==null||stopPrice!==null||plannedTarget!==null||entryCommissionInput.trim()||entryFeesInput.trim()) &&
+        !window.confirm('Switching to another saved TRADE decision will discard unsaved entry fields. Continue?'))return;
+    setPendingTradeDecision(decision);
+    setActiveTrade(null);setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
+    setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
+    setEntryCommissionInput('');setEntryFeesInput('');setTradeOpeningFeedback('');
+    setMessage('Resumed original saved Decision '+decision.decision_id+'. No new Decision was created. Record actual entry only.');
+    window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
   function beginSameZoneReentry(t:TradeMetrics){
     if(!plan||!t.candidate_id||t.status!=='CLOSED')return;
     const zone=plan.candidates.find(c=>c.candidate_id===t.candidate_id);
@@ -1403,7 +1422,7 @@ export function App(){
 
         {active&&plan&&<>
           {quickMode&&<nav className="panel" aria-label="Quick notebook pages" style={{padding:12,marginBottom:12}}>
-            <strong>Journal pages</strong><p className="subtle">One page at a time. Previously entered values stay in place.</p>
+            <strong>Journal pages</strong><p className="subtle">One page at a time. Previously entered values stay in place.</p>{unexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{unexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={()=>{setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));}}>Review saved decisions</button></div>}
             <div className="rowActions" style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               {(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).map((page,i)=><button key={page} type="button" className={notebookPage===page?'primary':''} aria-current={notebookPage===page?'page':undefined} onClick={()=>{setNotebookPage(page);window.scrollTo({top:0,behavior:'smooth'});}}>{i+1}. {page==='PLAN'?'Zones':page==='DECISION'?'Decision':page==='EVIDENCE'?'Evidence':page==='EXECUTION'?'Trade':'Review'}</button>)}
             </div>
@@ -1454,7 +1473,8 @@ export function App(){
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
-          {quickMode&&!pendingTradeDecision&&!activeTrade&&sessionTrades.length===0&&<div className="panel"><h2>Trade entry</h2><p className="subtle">No trade entry yet. Record a TRADE decision first; a decision alone does not create a fill.</p></div>}
+          {active?.status==='ACTIVE'&&<div className="panel" aria-label="Saved decisions awaiting trade entry"><div className="panelTitle"><div><h2>Saved TRADE decisions awaiting entry</h2><p className="subtle">These are decisions already stored in SQLite but not attached to any Trade. Resume the original decision; never create another one to replace it.</p></div><button type="button" disabled={unexecutedLoading} onClick={()=>setUnexecutedRefreshToken(v=>v+1)}>{unexecutedLoading?'Checking…':'Refresh'}</button></div>{unexecutedError&&<p className="warningBox" role="alert">{unexecutedError}</p>}{unexecutedLoading&&<p role="status">Checking persisted decision-to-trade links…</p>}{!unexecutedLoading&&!unexecutedError&&unexecutedTradeDecisions.length===0&&<p className="subtle">No saved TRADE decisions currently awaiting execution entry.</p>}{!unexecutedLoading&&!unexecutedError&&unexecutedTradeDecisions.map(d=><div className="decisionHistory" key={d.decision_id}><time>{d.occurred_at}</time><b>{d.intended_direction??'Unknown direction'} · Zone {d.candidate_id??'Unplanned'}</b><small>Decision ID: {d.decision_id}{d.reason_code?' · '+d.reason_code:''}</small><button type="button" disabled={tradeOpening||pendingTradeDecision?.decision_id===d.decision_id} onClick={()=>resumeUnexecutedTradeDecision(d)}>{pendingTradeDecision?.decision_id===d.decision_id?'Current entry':'Resume original Decision'}</button></div>)}</div>}
+          {quickMode&&!pendingTradeDecision&&!activeTrade&&sessionTrades.length===0&&!unexecutedLoading&&!unexecutedError&&unexecutedTradeDecisions.length===0&&<div className="panel"><h2>Trade entry</h2><p className="subtle">No trade entry yet. Record a TRADE decision first; a decision alone does not create a fill.</p></div>}
           {pendingTradeDecision&&<div className="panel executionPanel" id="journal-quick-entry"><div className="panelTitle"><div><h2>Quick trade entry</h2><p className="subtle">Only the essentials now. Review can be completed later.</p></div><button onClick={()=>setPendingTradeDecision(null)}>Close</button></div><div className="formGrid"><label data-validation-id="trade.entryPrice" className={invalidClass('trade.entryPrice')}>Entry price <FieldHelp id="trade.entryPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={entryPrice??''} onChange={e=>{setEntryPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.entryPrice')}} placeholder="e.g. 6025.25"/></label><label data-validation-id="trade.stopPrice" className={invalidClass('trade.stopPrice')}>Initial stop price <FieldHelp id="trade.stopPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={stopPrice??''} onChange={e=>{setStopPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.stopPrice')}} placeholder="e.g. 6022.25"/></label><label data-validation-id="trade.quantity" className={invalidClass('trade.quantity')}>Quantity <FieldHelp id="trade.quantity"/><input type="number" min="1" step="1" value={tradeQty} onChange={e=>{setTradeQty(e.target.value===''?0:Number(e.target.value));clearValidation('trade.quantity')}}/></label>{isFieldPresented('trade.plannedTarget',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="trade.plannedTarget" className={invalidClass('trade.plannedTarget')}>{fieldText['trade.plannedTarget']?.label?.trim()||'Planned target'} <RequirementBadge id="trade.plannedTarget" overrides={requirementOverrides}/>{fieldText['trade.plannedTarget']?.help&&<small title={fieldText['trade.plannedTarget'].help}>ⓘ</small>} <FieldHelp id="trade.plannedTarget"/><input type="number" step={tickStep} value={plannedTarget??''} onChange={e=>{setPlannedTarget(e.target.value?Number(e.target.value):null);clearValidation('trade.plannedTarget')}}/></label>}</div><div className="summaryStrip" role="status" aria-live="polite">
             <span><b>Initial risk (gross)</b>{entryRiskPreview.riskDollars===null?'Enter valid entry, stop and quantity':`${entryRiskPreview.riskDollars.toFixed(2)} ${active?.instrument_currency??''}`}</span>
             <span><b>Stop distance</b>{entryRiskPreview.riskTicks===null?'—':`${entryRiskPreview.riskTicks.toFixed(0)} ticks`}</span>
