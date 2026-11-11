@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { zoneRequiredIssues } from './zoneRequired';
+import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import type { CandidateDraftInput } from './services/localApi';
 import { fieldConnectionReport, isFieldPresented } from './fieldInventory';
 
@@ -52,5 +52,20 @@ describe('System-locked trend/psychology semantics',()=>{
   });
   it('does not elevate an unsupported trend requirement override',()=>{
     expect(zoneRequiredIssues(draft(),'liveCandidate',{'candidate.trendRelationship':true})).toEqual([]);
+  });
+});
+
+
+describe('Shared price range order validation',()=>{
+  it('prevents an inverted range in live and initial Zones',()=>{
+    const invalid={...draft(),price_from:7402,price_to:7400};
+    expect(zoneRangeOrderIssue(invalid)).toContain('7402');
+    expect(zoneRangeOrderIssue(invalid)).toContain('7400');
+  });
+  it('accepts valid and equal boundaries and defers missing geometry to required-field checks',()=>{
+    expect(zoneRangeOrderIssue(draft())).toBeNull();
+    expect(zoneRangeOrderIssue({...draft(),price_from:7400,price_to:7400})).toBeNull();
+    expect(zoneRangeOrderIssue({...draft(),price_from:null,price_to:7400})).toBeNull();
+    expect(zoneRangeOrderIssue({...draft(),price_mode:'UNSPECIFIED'})).toBeNull();
   });
 });
