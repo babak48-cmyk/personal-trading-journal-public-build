@@ -66,7 +66,12 @@ export type TradeMetrics = {
   gross_realized_pnl?:number|null; net_realized_pnl?:number|null; realized_r?:number|null; fill_count:number;
 };
 export type ExecutionFill = { execution_id:string; occurred_at?:string|null; action:string; side:string; price:number; quantity:number; order_type?:string|null; commission?:number|null; fees?:number|null; note?:string|null };
-export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[] };
+export type RiskSnapshot = {
+  risk_snapshot_id:string; occurred_at:string; snapshot_type:string;
+  stop_price:number|null; quantity:number|null; risk_dollars:number|null;
+  change_reason:string|null; was_rule_compliant:boolean|null; provenance:string|null;
+};
+export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[] };
 
 export type MistakeType = { mistake_type_id:string; code:string; label:string; mistake_group:string };
 export type SaveTradeReviewInput = {
@@ -91,8 +96,8 @@ export type SaveSessionReviewInput = { session_id:string; what_went_well?:string
 export type SessionReview = SaveSessionReviewInput & { review_id:string; status:'DRAFT'|'COMPLETED'; completed_at?:string|null };
 
 
-export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null };
-export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number };
+export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null; evidence_timing?:'ANY_RECORDED'|'AT_DECISION'|null };
+export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; level_source_snapshot_missing?:boolean; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number };
 export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:string;no_trade_count:number;missed_count:number;reason_missing_count:number};
 export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
 export type AnalyticsSummary = { trade_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
@@ -135,6 +140,8 @@ export const localApi = {
   getAppearancePreferences: async () => JSON.parse(await invoke<string>('get_appearance_preferences')) as unknown,
   saveAppearancePreferences: (preferences:unknown) => invoke<void>('save_appearance_preferences',{json:JSON.stringify(preferences)}),
   runBetaSelfTest: () => invoke<BetaSelfTestResult>('run_beta_self_test'),
+  getBackupDestination: () => invoke<string|null>('get_backup_destination'),
+  setBackupDestination: (destination:string|null) => invoke<void>('set_backup_destination',{destination}),
   createBackup: () => invoke<string>('create_backup'),
   validateBackup: (backupPath:string) => invoke<BackupInfo>('validate_backup',{backupPath}),
   restoreBackupToStaging: (backupPath:string) => invoke<string>('restore_backup_to_staging',{backupPath}),
@@ -168,11 +175,13 @@ export const localApi = {
   checkPlanConsistency: (sessionId:string) => invoke<PlanConsistency>('check_plan_consistency',{sessionId}),
   createCandidateDecision: (input:CandidateDecisionInput) => invoke<CandidateDecision>('create_candidate_decision',{input}),
   listCandidateDecisions: (candidateId:string) => invoke<CandidateDecision[]>('list_candidate_decisions',{candidateId}),
+  listUnexecutedTradeDecisions: (sessionId:string) => invoke<CandidateDecision[]>('list_unexecuted_trade_decisions',{sessionId}),
 
   createTradeWithEntry: (input:CreateTradeExecutionInput) => invoke<TradeDetail>('create_trade_with_entry',{input}),
   addTradeFill: (input:AddTradeFillInput) => invoke<TradeDetail>('add_trade_fill',{input}),
   moveTradeStop: (input:MoveStopInput) => invoke<TradeDetail>('move_trade_stop',{input}),
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
+  getTradeForDecision: (sessionId:string,decisionId:string) => invoke<TradeDetail|null>('get_trade_for_decision',{sessionId,decisionId}),
   listSessionTrades: (sessionId:string) => invoke<TradeMetrics[]>('list_session_trades',{sessionId}),
   listMistakeTypes: () => invoke<MistakeType[]>('list_mistake_types'),
   saveTradeReview: (input:SaveTradeReviewInput) => invoke<TradeReview>('save_trade_review',{input}),

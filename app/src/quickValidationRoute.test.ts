@@ -17,7 +17,7 @@ describe('Quick Workflow missing-required navigation',()=>{
     ['fill.reason','EXECUTION'],['management.reason','EXECUTION'],
     ['review.note','EXECUTION'],['rule.note','EXECUTION'],
     ['psychology.stage','EXECUTION'],['sessionReview.wentWell','REVIEW'],
-    ['planRevision.evidence','PLAN'],['liveZone.reason','PLAN'],['zoneRevision.reason','PLAN'],
+    ['planRevision.evidence','PLAN'],['liveZone.reason','PLAN'],['liveCandidate.label','PLAN'],['liveCandidate.sources','PLAN'],['liveCandidate.requiredConditions','PLAN'],['zoneRevision.reason','PLAN'],
   ] as const)('routes %s to its actual notebook view %s',(id,page)=>{
     expect(quickValidationRoute(id,false,true).notebookPage).toBe(page);
   });

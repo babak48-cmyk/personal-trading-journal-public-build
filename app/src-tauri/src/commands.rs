@@ -304,9 +304,79 @@ pub fn save_appearance_preferences(app: AppHandle, json: String) -> Result<(), A
 }
 
 #[tauri::command]
+pub fn get_backup_destination(app: AppHandle) -> Result<Option<String>, AppError> {
+    use rusqlite::OptionalExtension;
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    Ok(conn.query_row(
+        "SELECT value FROM app_settings WHERE key='backup_destination_v1'",
+        [], |r| r.get::<_, String>(0),
+    ).optional()?)
+}
+
+#[tauri::command]
+pub fn set_backup_destination(app: AppHandle, destination: Option<String>) -> Result<(), AppError> {
+    let normalized = destination.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let paths = AppPaths::from_app(&app)?;
+    if let Some(ref dir) = normalized {
+        let chosen = PathBuf::from(dir);
+        if !chosen.is_dir() {
+            return Err(AppError::Validation("Backup destination is not an accessible directory".into()));
+        }
+        // Do not place external backups inside the live database/attachment tree.
+        let selected = std::fs::canonicalize(&chosen)?;
+        let app_root = std::fs::canonicalize(&paths.root)?;
+        if selected.starts_with(&app_root) && selected != std::fs::canonicalize(&paths.backups)? {
+            return Err(AppError::Validation("Choose a folder outside the app data directory".into()));
+        }
+    }
+    let conn = db::open_database(&paths.database())?;
+    if let Some(dir) = normalized {
+        conn.execute(
+            "INSERT INTO app_settings(key,value) VALUES('backup_destination_v1',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [dir],
+        )?;
+    } else {
+        conn.execute("DELETE FROM app_settings WHERE key='backup_destination_v1'", [])?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn create_backup(app: AppHandle) -> Result<String, AppError> {
     let paths = AppPaths::from_app(&app)?;
-    Ok(backup::create_backup(&paths)?.to_string_lossy().to_string())
+    // Always make the app-managed verified backup first; the user folder is a second recoverable copy.
+    let internal_path = backup::create_backup(&paths)?;
+    restore::validate_backup(&internal_path)?;
+    if let Some(dir) = get_backup_destination(app)? {
+        // A previously selected directory can be renamed or replaced after it was saved.
+        // Resolve it again at backup time instead of trusting stale preference state.
+        let selected = std::fs::canonicalize(&dir)
+            .map_err(|err| AppError::Validation(format!(
+                "External backup directory is unavailable: {err}. Verified internal backup: {}",
+                internal_path.display()
+            )))?;
+        let app_root = std::fs::canonicalize(&paths.root)?;
+        let internal_dir = std::fs::canonicalize(&paths.backups)?;
+        if selected.starts_with(&app_root) && selected != internal_dir {
+            return Err(AppError::Validation(format!(
+                "External backup directory moved inside live app data. Verified internal backup: {}",
+                internal_path.display()
+            )));
+        }
+        let copied = backup::copy_backup_to_directory(&internal_path, &selected)
+            .map_err(|err| AppError::Validation(format!(
+                "External backup failed: {err}. A verified internal backup remains at {}",
+                internal_path.display()
+            )))?;
+        restore::validate_backup(&copied).map_err(|err| AppError::Validation(format!(
+            "External backup validation failed: {err}. A verified internal backup remains at {}",
+            internal_path.display()
+        )))?;
+        Ok(copied.to_string_lossy().to_string())
+    } else {
+        Ok(internal_path.to_string_lossy().to_string())
+    }
 }
 
 #[tauri::command]
@@ -547,6 +617,20 @@ pub fn move_trade_stop(app: AppHandle, input: MoveStopInput) -> Result<TradeDeta
     let paths = AppPaths::from_app(&app)?;
     let mut conn = db::open_database(&paths.database())?;
     repository::move_trade_stop(&mut conn, input)
+}
+
+#[tauri::command]
+pub fn list_unexecuted_trade_decisions(app: AppHandle, session_id: String) -> Result<Vec<CandidateDecisionDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::list_unexecuted_trade_decisions(&conn,&session_id)
+}
+
+#[tauri::command]
+pub fn get_trade_for_decision(app: AppHandle, session_id: String, decision_id: String) -> Result<Option<TradeDetailDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::get_trade_for_decision(&conn,&session_id,&decision_id)
 }
 
 #[tauri::command]

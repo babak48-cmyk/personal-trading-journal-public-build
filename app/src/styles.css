@@ -464,3 +464,34 @@
 .appShell .weeklyBreakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem;margin:.7rem 0}
 .appShell .weeklyBreakdownRow{display:flex;flex-direction:column;gap:.35rem;padding:.75rem;border:1px solid var(--border);border-inline-start:4px solid var(--family-review-rule,var(--border));border-radius:.55rem;background:var(--surface-soft);color:var(--text);font-size:.84rem}
 .appShell .weeklyBreakdownRow small{color:var(--text-muted);line-height:1.45}
+
+
+/* PTJ: Recent sessions must never dictate the height of the overall journal page.
+   Preserve every session and existing navigation; only the history list scrolls. */
+@media (min-width:681px){
+  .appShell .sidebar{min-width:0;align-self:start}
+  .appShell .sidebar .recent{min-width:0;max-width:100%}
+  .appShell .sidebar .recentList{
+    display:flex;
+    flex-direction:column;
+    gap:.4rem;
+    min-height:0;
+    max-height:clamp(12rem,42vh,28rem);
+    overflow-y:auto;
+    overflow-x:hidden;
+    overscroll-behavior:contain;
+    scrollbar-gutter:stable;
+    padding:.15rem .2rem .2rem 0;
+  }
+  .appShell .sidebar .recentList .sessionLink{
+    flex:0 0 auto;
+    width:100%;
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+  .appShell .sidebar .recentList:focus-visible{
+    outline:2px solid var(--text);
+    outline-offset:2px;
+    border-radius:.35rem;
+  }
+}

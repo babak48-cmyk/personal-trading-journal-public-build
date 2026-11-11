@@ -37,6 +37,30 @@ pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
     if sha256_bytes(&db_bytes) != info.database_sha256 {
         return Err(AppError::Validation("database checksum mismatch".into()));
     }
+    // Read every attachment so ZIP CRC/read errors surface before a backup is trusted.
+    // Existing backup_version=1 remains compatible; no migration or manifest format change.
+    let mut seen = std::collections::HashSet::new();
+    let mut actual_attachments = 0usize;
+    for index in 0..zip.len() {
+        let mut item = zip.by_index(index)?;
+        let path = item.enclosed_name().ok_or_else(|| AppError::Validation(
+            "unsafe path in backup archive".into()
+        ))?.to_owned();
+        if !seen.insert(path.clone()) {
+            return Err(AppError::Validation("duplicate path in backup archive".into()));
+        }
+        if !item.is_dir() && path.starts_with("attachments") {
+            let mut sink = std::io::sink();
+            std::io::copy(&mut item, &mut sink)?;
+            actual_attachments += 1;
+        }
+    }
+    if actual_attachments != info.attachment_count {
+        return Err(AppError::Validation(format!(
+            "backup attachment count mismatch: expected {}, found {}",
+            info.attachment_count, actual_attachments
+        )));
+    }
     Ok(info)
 }
 
@@ -147,5 +171,43 @@ pub fn replace_live_from_backup(paths: &AppPaths, backup_path: &Path) -> Result<
             }
             Err(AppError::Validation(format!("restore failed and rollback was attempted: {err}")))
         }
+    }
+}
+
+#[cfg(test)]
+mod backup_integrity_tests {
+    use super::*;
+    use zip::{write::SimpleFileOptions, ZipWriter};
+
+    #[test]
+    fn validator_rejects_missing_attachment_and_accepts_present_attachment() {
+        let root = std::env::temp_dir().join(format!("ptj-archive-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        for include_attachment in [false, true] {
+            let path = root.join(if include_attachment { "present.zip" } else { "missing.zip" });
+            let file = File::create(&path).unwrap();
+            let mut zip = ZipWriter::new(file);
+            let options = SimpleFileOptions::default();
+            zip.start_file("database.sqlite", options).unwrap();
+            zip.write_all(b"synthetic-database-test").unwrap();
+            if include_attachment {
+                zip.start_file("attachments/test.png", options).unwrap();
+                zip.write_all(b"synthetic-screenshot-test").unwrap();
+            }
+            let info = BackupInfo {
+                backup_version: 1,
+                created_at_utc: "2026-11-12T00:00:00Z".into(),
+                schema_version: 1,
+                database_sha256: sha256_bytes(b"synthetic-database-test"),
+                attachment_count: 1,
+            };
+            zip.start_file("backup_info.json", options).unwrap();
+            zip.write_all(serde_json::to_string(&info).unwrap().as_bytes()).unwrap();
+            zip.finish().unwrap();
+
+            let checked = validate_backup(&path);
+            assert_eq!(checked.is_ok(), include_attachment);
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 }

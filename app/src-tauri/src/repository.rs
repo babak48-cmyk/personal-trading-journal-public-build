@@ -1023,6 +1023,29 @@ pub fn list_candidate_decisions(conn: &Connection, candidate_id: &str) -> Result
     Ok(rows)
 }
 
+/// Read-only recovery of TRADE decisions that have no associated execution.
+/// Never infer this relationship from Zone or timestamps: two independent
+/// decisions may legitimately be made in the same Zone.
+pub fn list_unexecuted_trade_decisions(conn:&Connection,session_id:&str)->Result<Vec<CandidateDecisionDto>,AppError>{
+    let mut stmt=conn.prepare(
+        "SELECT cd.decision_id,cd.candidate_id,cd.occurred_at,cd.decision_type,cd.intended_direction,
+                cd.reason_code,cd.reason_note,cd.decision_quality,cd.plan_alignment,
+                cd.plan_mismatch_reason,cd.based_on_plan_revision_id,cd.based_on_candidate_revision_id
+         FROM candidate_decisions cd
+         WHERE cd.session_id=?1 AND cd.decision_type='TRADE'
+           AND NOT EXISTS(SELECT 1 FROM trades t WHERE t.decision_id=cd.decision_id)
+         ORDER BY cd.occurred_at DESC,cd.rowid DESC"
+    )?;
+    let decisions=stmt.query_map([session_id],|r|Ok(CandidateDecisionDto{
+        decision_id:r.get(0)?,candidate_id:r.get(1)?,occurred_at:r.get(2)?,
+        decision_type:r.get(3)?,intended_direction:r.get(4)?,reason_code:r.get(5)?,
+        reason_note:r.get(6)?,decision_quality:r.get(7)?,plan_alignment:r.get(8)?,
+        plan_mismatch_reason:r.get(9)?,based_on_plan_revision_id:r.get(10)?,
+        based_on_candidate_revision_id:r.get(11)?
+    }))?.collect::<Result<Vec<_>,_>>()?;
+    Ok(decisions)
+}
+
 // =============================
 // Phase 3 v0.7 — Trade Execution Core
 // =============================
@@ -1093,9 +1116,24 @@ pub struct ExecutionFillDto {
 }
 
 #[derive(Debug, Serialize)]
+pub struct RiskSnapshotDto {
+    pub risk_snapshot_id: String,
+    pub occurred_at: String,
+    pub snapshot_type: String,
+    pub stop_price: Option<f64>,
+    pub quantity: Option<f64>,
+    pub risk_dollars: Option<f64>,
+    pub change_reason: Option<String>,
+    pub was_rule_compliant: Option<bool>,
+    pub provenance: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct TradeDetailDto {
     pub metrics: TradeMetricsDto,
     pub fills: Vec<ExecutionFillDto>,
+    /// Read-only, timestamped risk history. Existing events never rewritten.
+    pub risk_snapshots: Vec<RiskSnapshotDto>,
 }
 
 fn price_tick_aligned(price: f64, tick_size: f64) -> bool {
@@ -1321,11 +1359,46 @@ pub fn move_trade_stop(conn:&mut Connection,input:MoveStopInput)->Result<TradeDe
     tx.commit()?; get_trade_detail(conn,&input.trade_id)
 }
 
+fn trade_risk_history(conn:&Connection,trade_id:&str)->Result<Vec<RiskSnapshotDto>,AppError>{
+    let mut risk_stmt=conn.prepare(
+        "SELECT risk_snapshot_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,
+                change_reason,was_rule_compliant,provenance
+         FROM risk_snapshots WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid"
+    )?;
+    let items=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
+        risk_snapshot_id:r.get(0)?,occurred_at:r.get(1)?,snapshot_type:r.get(2)?,
+        stop_price:r.get(3)?,quantity:r.get(4)?,risk_dollars:r.get(5)?,
+        change_reason:r.get(6)?,was_rule_compliant:r.get::<_,Option<i64>>(7)?.map(|n|n!=0),
+        provenance:r.get(8)?
+    }))?.collect::<Result<Vec<_>,_>>()?;
+    Ok(items)
+}
+
 pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,AppError>{
     let metrics=trade_metrics(conn,trade_id)?;
     let mut stmt=conn.prepare("SELECT execution_id,occurred_at,action,side,price,quantity,order_type,commission,fees,note FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
     let rows=stmt.query_map([trade_id],|r|Ok(ExecutionFillDto{execution_id:r.get(0)?,occurred_at:r.get(1)?,action:r.get(2)?,side:r.get(3)?,price:r.get(4)?,quantity:r.get(5)?,order_type:r.get(6)?,commission:r.get(7)?,fees:r.get(8)?,note:r.get(9)?}))?;
-    Ok(TradeDetailDto{metrics,fills:rows.collect::<Result<Vec<_>,_>>()?})
+    let fills=rows.collect::<Result<Vec<_>,_>>()?;
+    let risk_snapshots=trade_risk_history(conn,trade_id)?;
+    Ok(TradeDetailDto{metrics,fills,risk_snapshots})
+}
+
+/// Exact, read-only recovery for a possibly committed entry whose response
+/// was lost. Cross-session IDs cannot retrieve another session's execution.
+fn trade_id_for_decision(conn:&Connection,session_id:&str,decision_id:&str)->Result<Option<String>,AppError>{
+    let id=conn.query_row(
+        "SELECT t.trade_id FROM trades t
+         JOIN candidate_decisions cd ON cd.decision_id=t.decision_id
+         WHERE cd.session_id=?1 AND t.session_id=?1 AND cd.decision_id=?2",
+        params![session_id,decision_id],|r|r.get(0)
+    ).optional()?;
+    Ok(id)
+}
+
+pub fn get_trade_for_decision(conn:&Connection,session_id:&str,decision_id:&str)->Result<Option<TradeDetailDto>,AppError>{
+    trade_id_for_decision(conn,session_id,decision_id)?
+        .map(|trade_id|get_trade_detail(conn,&trade_id))
+        .transpose()
 }
 
 pub fn list_session_trades(conn:&Connection,session_id:&str)->Result<Vec<TradeMetricsDto>,AppError>{
@@ -1717,6 +1790,9 @@ pub struct JournalFilterInput {
     pub rule_status: Option<String>, // FOLLOWED / VIOLATED / UNCHECKED
     pub level_source_type_id: Option<String>,
     pub evidence_type_id: Option<String>,
+    /// Default ANY_RECORDED preserves existing analytics. AT_DECISION excludes
+    /// evidence created after the decision; no hindsight-based confirmation.
+    pub evidence_timing: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1731,6 +1807,9 @@ pub struct JournalTradeRowDto {
     pub decision_quality: Option<String>,
     pub rule_status: String,
     pub level_sources: Vec<String>,
+    /// True if a historical trade has a Zone but lacks decision-time revision provenance.
+    /// Such rows must not be mislabelled as having no Level Sources.
+    pub level_source_snapshot_missing: bool,
     pub mistakes: Vec<String>,
     pub realized_r: Option<f64>,
     pub net_realized_pnl: Option<f64>,
@@ -1765,15 +1844,14 @@ pub struct MistakeSummaryDto {
     pub count: i64,
 }
 
-fn trade_level_sources(conn:&Connection, candidate_id:&Option<String>)->Result<Vec<(String,String)>,AppError>{
-    let Some(cid)=candidate_id else{return Ok(Vec::new())};
-    let latest:Option<String>=conn.query_row(
-        "SELECT candidate_revision_id FROM candidate_revisions WHERE candidate_id=?1 ORDER BY revision_number DESC LIMIT 1",
-        [cid], |r| r.get(0)
-    ).optional()?;
-    let Some(rev)=latest else{return Ok(Vec::new())};
+fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<String>)->Result<Vec<(String,String)>,AppError>{
+    // Anti-hindsight: a trade's Level Sources belong to the candidate revision
+    // captured WITH THE DECISION, never the candidate's latest revision.
+    // A legacy decision without a revision snapshot stays UNKNOWN (no attribution)
+    // rather than acquiring sources added after the trade.
+    let Some(revision_id)=decision_candidate_revision_id else{return Ok(Vec::new())};
     let mut stmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_revision_id=?1 ORDER BY cs.is_primary DESC,lst.label")?;
-    let rows = stmt.query_map([rev],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let rows=stmt.query_map([revision_id],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
 }
 
@@ -1783,10 +1861,19 @@ fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppE
     Ok(rows)
 }
 
-fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str)->Result<bool,AppError>{
+fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str,
+    decision_at:Option<&str>,at_decision:bool)->Result<bool,AppError>{
+    // Existing ANY_RECORDED filter means observed at any point in the lifecycle.
+    // Only the opt-in AT_DECISION filter enforces a contemporaneous timestamp.
+    // julianday converts timezone offsets and excludes unparseable/unknown dates.
+    // Do not silently interpret post-decision observations as entry confirmation.
     let n:i64=conn.query_row(
-        "SELECT COUNT(*) FROM evidence_observations WHERE evidence_type_id=?1 AND present=1 AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))",
-        params![evidence_type_id,trade_id,candidate_id], |r|r.get(0)
+        "SELECT COUNT(*) FROM evidence_observations
+         WHERE evidence_type_id=?1 AND present=1
+           AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))
+           AND (?4=0 OR (?5 IS NOT NULL AND julianday(occurred_at) IS NOT NULL
+               AND julianday(?5) IS NOT NULL AND julianday(occurred_at)<=julianday(?5)))",
+        params![evidence_type_id,trade_id,candidate_id,i64::from(at_decision),decision_at], |r|r.get(0)
     )?;
     Ok(n>0)
 }
@@ -1880,8 +1967,11 @@ pub fn list_decision_only_analytics(
 }
 
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
+    if !matches!(filter.evidence_timing.as_deref(),None|Some("ANY_RECORDED")|Some("AT_DECISION")){
+        return Err(AppError::Validation("unknown evidence timing filter".into()));
+    }
     let mut stmt=conn.prepare(
-        "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1)
+        "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1),cd.based_on_candidate_revision_id,cd.occurred_at
          FROM trades t
          JOIN sessions s ON s.session_id=t.session_id
          JOIN instruments i ON i.instrument_id=s.instrument_id
@@ -1893,10 +1983,10 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
     )?;
     let base=stmt.query_map([],|r|Ok((
         r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,
-        r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?
+        r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?
     )))?.collect::<Result<Vec<_>,_>>()?;
     let mut out=Vec::new();
-    for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag) in base {
+    for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag,decision_candidate_revision_id,decision_at) in base {
         if let Some(v)=&filter.date_from {if session_date.as_str() < v.as_str() {continue;}}
         if let Some(v)=&filter.date_to {if session_date.as_str() > v.as_str() {continue;}}
         if let Some(v)=&filter.instrument_symbol {if instrument.as_str() != v.as_str() {continue;}}
@@ -1904,13 +1994,18 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         if let Some(v)=&filter.decision_quality {if decision_quality.as_deref()!=Some(v.as_str()) {continue;}}
         let rule_status=match rule_flag {1=>"VIOLATED",0=>"FOLLOWED",_=>"UNCHECKED"}.to_string();
         if let Some(v)=&filter.rule_status {if rule_status.as_str() != v.as_str() {continue;}}
-        let sources=trade_level_sources(conn,&candidate_id)?;
+        let sources=trade_level_sources(conn,&decision_candidate_revision_id)?;
         if let Some(v)=&filter.level_source_type_id {if !sources.iter().any(|(id,_)|id==v){continue;}}
-        if let Some(v)=&filter.evidence_type_id {if !trade_has_evidence(conn,&trade_id,&candidate_id,v)?{continue;}}
+        if let Some(v)=&filter.evidence_type_id {
+            let at_decision=matches!(filter.evidence_timing.as_deref(),Some("AT_DECISION"));
+            if !trade_has_evidence(conn,&trade_id,&candidate_id,v,decision_at.as_deref(),at_decision)?{continue;}
+        }
         let metrics=trade_metrics(conn,&trade_id)?;
         out.push(JournalTradeRowDto{
             trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
-            level_sources:sources.into_iter().map(|(_,label)|label).collect(),mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
+            level_sources:sources.into_iter().map(|(_,label)|label).collect(),
+            level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
+            mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
             realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,open_quantity:metrics.open_quantity
         });
     }
@@ -2574,5 +2669,195 @@ mod decision_only_analytics_tests {
         let rows=list_decision_only_analytics(&db,JournalFilterInput::default()).unwrap();
         assert_eq!(rows.len(),1);
         assert_eq!((rows[0].no_trade_count,rows[0].missed_count,rows[0].reason_missing_count),(1,1,1));
+    }
+}
+
+#[cfg(test)]
+mod partial_position_cost_disclosure_tests {
+    use super::*;
+
+    #[test]
+    fn partially_open_ledger_deducts_all_costs_already_incurred_not_prorated_costs() {
+        // Two ES contracts entered and one exited. This is the exact semantics
+        // disclosed in the UI; do not silently describe it as pro-rata realized net.
+        let events = vec![
+            ("ENTRY".to_string(), 7400.0, 2.0, 4.0, 1.0),
+            ("EXIT".to_string(), 7404.0, 1.0, 2.0, 0.5),
+        ];
+        let ledger = execution_ledger(&events, "LONG", 50.0).unwrap();
+        assert_eq!(ledger.open_qty, 1.0);
+        assert_eq!(ledger.exit_qty, 1.0);
+        assert_eq!(ledger.gross_realized, Some(200.0));
+        assert!((ledger.costs-7.5).abs()<1e-9);
+        assert!((ledger.gross_realized.unwrap()-ledger.costs-192.5).abs()<1e-9);
+    }
+
+    #[test]
+    fn closed_position_ledger_deducts_all_confirmed_costs() {
+        let events=vec![
+            ("ENTRY".to_string(), 7400.0, 1.0, 2.0, 0.5),
+            ("EXIT".to_string(), 7404.0, 1.0, 2.0, 0.5),
+        ];
+        let ledger=execution_ledger(&events,"LONG",50.0).unwrap();
+        assert_eq!(ledger.open_qty,0.0);
+        assert_eq!(ledger.gross_realized,Some(200.0));
+        assert!((ledger.gross_realized.unwrap()-ledger.costs-195.0).abs()<1e-9);
+    }
+}
+
+#[cfg(test)]
+mod journal_level_provenance_snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn revision_scoped_sources_do_not_follow_future_zone_edits() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE level_source_types(source_type_id TEXT PRIMARY KEY,label TEXT);
+            CREATE TABLE candidate_sources(
+                candidate_revision_id TEXT NOT NULL,source_type_id TEXT NOT NULL,is_primary INTEGER NOT NULL
+            );
+            INSERT INTO level_source_types VALUES
+                ('prior-high','Prior high'),('later-vwap','VWAP added later');
+            INSERT INTO candidate_sources VALUES
+                ('revision-at-decision','prior-high',1),
+                ('revision-added-later','later-vwap',1);
+        ").unwrap();
+
+        let frozen=trade_level_sources(&conn,&Some("revision-at-decision".to_string())).unwrap();
+        assert_eq!(frozen,vec![("prior-high".to_string(),"Prior high".to_string())]);
+        assert!(!frozen.iter().any(|(id,_)|id=="later-vwap"));
+
+        let newer=trade_level_sources(&conn,&Some("revision-added-later".to_string())).unwrap();
+        assert_eq!(newer[0].0,"later-vwap");
+        // Old/imported decisions with missing revision provenance must never
+        // acquire newly edited Zone sources just because they share a candidate.
+        assert!(trade_level_sources(&conn,&None).unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod decision_time_evidence_filter_tests {
+    use super::*;
+
+    #[test]
+    fn evidence_filter_separates_known_at_decision_from_post_decision_and_preserves_legacy_any_time() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE evidence_observations (
+                evidence_type_id TEXT, present INTEGER, trade_id TEXT,
+                candidate_id TEXT, occurred_at TEXT
+            );
+            INSERT INTO evidence_observations VALUES
+                ('DELTA',1,NULL,'zone-one','2026-11-12T09:59:59+00:00'),
+                ('ABSORPTION',1,NULL,'zone-one','2026-11-12T10:00:01+00:00'),
+                ('LATE',1,'trade-one',NULL,'2026-11-12T10:01:00+00:00'),
+                ('CONTRARY',1,NULL,'zone-one','2026-11-12T11:00:00+11:00'),
+                ('BAD_DATE',1,NULL,'zone-one','unknown'),
+                ('ABSENT',0,NULL,'zone-one','2026-11-12T09:00:00Z');
+        ").unwrap();
+        let zone=Some("zone-one".to_string());
+        let decision="2026-11-12T10:00:00Z";
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"DELTA",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSORPTION",Some(decision),true).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"ABSORPTION",Some(decision),false).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"LATE",Some(decision),true).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"LATE",Some(decision),false).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"CONTRARY",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"BAD_DATE",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSENT",Some(decision),false).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"DELTA",None,true).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod read_only_trade_risk_history_tests {
+    use super::*;
+
+    #[test]
+    fn returns_original_risk_snapshots_in_timestamp_order_without_modifying_them() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE risk_snapshots(
+              risk_snapshot_id TEXT,trade_id TEXT,occurred_at TEXT,snapshot_type TEXT,
+              stop_price REAL,quantity REAL,risk_dollars REAL,change_reason TEXT,
+              was_rule_compliant INTEGER,provenance TEXT
+            );
+            INSERT INTO risk_snapshots VALUES
+              ('later','trade-a','2026-11-12T10:01:00Z','MODIFIED',7401.0,1.0,50.0,'Trail',1,'NATIVE'),
+              ('initial','trade-a','2026-11-12T10:00:00Z','INITIAL',7398.0,2.0,200.0,NULL,NULL,'NATIVE'),
+              ('other','trade-b','2026-11-12T10:00:00Z','INITIAL',7000.0,1.0,100.0,NULL,NULL,'NATIVE');
+        ").unwrap();
+        let items=trade_risk_history(&conn,"trade-a").unwrap();
+        assert_eq!(items.len(),2);
+        assert_eq!(items[0].risk_snapshot_id,"initial");
+        assert_eq!(items[1].risk_snapshot_id,"later");
+        assert_eq!(items[0].was_rule_compliant,None);
+        assert_eq!(items[1].was_rule_compliant,Some(true));
+        assert_eq!(items[1].change_reason.as_deref(),Some("Trail"));
+        let persisted:i64=conn.query_row("SELECT COUNT(*) FROM risk_snapshots",[],|r|r.get(0)).unwrap();
+        assert_eq!(persisted,3);
+    }
+}
+
+#[cfg(test)]
+mod pending_trade_decision_recovery_tests {
+    use super::*;
+
+    #[test]
+    fn only_saved_trade_decisions_without_trades_are_returned_even_in_same_zone() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE candidate_decisions (
+              decision_id TEXT,candidate_id TEXT,session_id TEXT,occurred_at TEXT,
+              decision_type TEXT,intended_direction TEXT,reason_code TEXT,reason_note TEXT,
+              decision_quality TEXT,plan_alignment TEXT,plan_mismatch_reason TEXT,
+              based_on_plan_revision_id TEXT,based_on_candidate_revision_id TEXT
+            );
+            CREATE TABLE trades (trade_id TEXT,decision_id TEXT);
+            INSERT INTO candidate_decisions VALUES
+              ('d-executed','zone-1','session-a','2026-11-12T09:00:00Z','TRADE','LONG',NULL,NULL,NULL,NULL,NULL,NULL,'rev-1'),
+              ('d-pending','zone-1','session-a','2026-11-12T09:05:00Z','TRADE','LONG',NULL,NULL,NULL,NULL,NULL,NULL,'rev-1'),
+              ('d-pending-2','zone-1','session-a','2026-11-12T09:07:00Z','TRADE','SHORT',NULL,NULL,NULL,NULL,NULL,NULL,'rev-2'),
+              ('d-no-trade','zone-1','session-a','2026-11-12T09:08:00Z','NO_TRADE',NULL,'RULE',NULL,NULL,NULL,NULL,NULL,'rev-2'),
+              ('d-other-session','zone-1','session-b','2026-11-12T09:09:00Z','TRADE','LONG',NULL,NULL,NULL,NULL,NULL,NULL,'rev-3');
+            INSERT INTO trades VALUES ('trade-a','d-executed');
+        ").unwrap();
+        let result=list_unexecuted_trade_decisions(&conn,"session-a").unwrap();
+        assert_eq!(result.len(),2);
+        assert_eq!(result[0].decision_id,"d-pending-2");
+        assert_eq!(result[1].decision_id,"d-pending");
+        assert_eq!(result[0].candidate_id.as_deref(),Some("zone-1"));
+        assert_eq!(result[1].based_on_candidate_revision_id.as_deref(),Some("rev-1"));
+        assert!(list_unexecuted_trade_decisions(&conn,"unknown-session").unwrap().is_empty());
+        // Read-only recovery must not insert an execution.
+        let trades:i64=conn.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
+        assert_eq!(trades,1);
+    }
+}
+
+#[cfg(test)]
+mod exact_decision_trade_recovery_tests {
+    use super::*;
+
+    #[test]
+    fn identifies_only_a_trade_linked_to_the_exact_decision_and_session() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE candidate_decisions(decision_id TEXT,session_id TEXT);
+            CREATE TABLE trades(trade_id TEXT,decision_id TEXT,session_id TEXT);
+            INSERT INTO candidate_decisions VALUES
+              ('executed','session-1'),('not-yet-executed','session-1'),
+              ('same-zone-different-decision','session-1'),('other','session-2');
+            INSERT INTO trades VALUES
+              ('trade-1','executed','session-1'),('trade-2','other','session-2');
+        ").unwrap();
+        assert_eq!(trade_id_for_decision(&conn,"session-1","executed").unwrap().as_deref(),Some("trade-1"));
+        assert!(trade_id_for_decision(&conn,"session-1","not-yet-executed").unwrap().is_none());
+        assert!(trade_id_for_decision(&conn,"session-1","same-zone-different-decision").unwrap().is_none());
+        assert!(trade_id_for_decision(&conn,"session-1","other").unwrap().is_none());
+        assert_eq!(trade_id_for_decision(&conn,"session-2","other").unwrap().as_deref(),Some("trade-2"));
+        let unchanged:i64=conn.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
+        assert_eq!(unchanged,2);
     }
 }

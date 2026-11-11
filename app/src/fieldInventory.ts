@@ -112,6 +112,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('analytics.ruleStatus','Rule status filter','analytics','analytics-filter',false),
   entry('analytics.source','Level-source filter','analytics','analytics-filter',false),
   entry('analytics.evidence','Evidence filter','analytics','analytics-filter',false),
+  entry('analytics.evidenceTiming','Evidence timing relative to decision','analytics','analytics-filter',false,undefined,'Analysis filter semantics must remain explicit; does not alter observed events'),
   entry('instrument.displayName','Instrument display name','settings','registry-setting',false,undefined,'Display label; preserve instrument identity and historical snapshots'),
   entry('instrument.symbol','Instrument symbol','settings','registry-setting',false,undefined,'Snapshot identity'),
   entry('instrument.tickSize','Tick size','settings','registry-setting',false,undefined,'Price and risk calculations'),

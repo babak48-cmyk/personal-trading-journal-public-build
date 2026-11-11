@@ -7,6 +7,7 @@ import {
   isFieldPresented,
   requiredPresentationIssues,
   activeVisibilityInventoryIssues,
+  orderFieldIdsWithinSection,
 } from './fieldInventory';
 
 describe('Field Manager integration safety', () => {
@@ -235,6 +236,42 @@ describe('Formal requirement registry coverage for active customizable inputs', 
       expect(FIELD_DEFINITION_BY_ID[id], id).toBeDefined();
       expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked, id).toBe(false);
       expect(isUserRequired(id, { [id]: true }), id).toBe(true);
+    }
+  });
+});
+
+describe('Trade Review quality field ordering',()=>{
+  const qualityFields=['review.decisionQuality','review.executionQuality','review.managementQuality'] as const;
+  it('preserves stable field identities while ordering the three quality prompts',()=>{
+    expect(orderFieldIdsWithinSection(qualityFields,{})).toEqual([...qualityFields]);
+    const ordered=orderFieldIdsWithinSection(qualityFields,{
+      'review.managementQuality':0,
+      'review.decisionQuality':1,
+      'review.executionQuality':2,
+    });
+    expect(ordered).toEqual(['review.managementQuality','review.decisionQuality','review.executionQuality']);
+    expect(new Set(ordered)).toEqual(new Set(qualityFields));
+  });
+  it('retains required Quick visibility independently of user-defined order',()=>{
+    qualityFields.forEach(id=>{
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    });
+  });
+});
+
+
+describe('Trade Review note field manager integration',()=>{
+  const noteFields=['review.exitNote','review.note'] as const;
+  it('preserves independent stored identities across note reordering',()=>{
+    expect(orderFieldIdsWithinSection(noteFields,{})).toEqual([...noteFields]);
+    expect(orderFieldIdsWithinSection(noteFields,{'review.note':0,'review.exitNote':1}))
+      .toEqual(['review.note','review.exitNote']);
+    expect(noteFields.every(id=>fieldConnectionReport().find(x=>x.id===id)?.status==='CONNECTED')).toBe(true);
+  });
+  it('keeps both user-required Review notes accessible in Quick',()=>{
+    for(const id of noteFields){
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+      expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(false);
     }
   });
 });
