@@ -59,3 +59,35 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     zip.finish()?;
     Ok(output)
 }
+
+
+/// Copy a validated internal backup to a user-selected directory without replacing existing files.
+/// The internal copy is retained as a recovery fallback.
+pub fn copy_backup_to_directory(source: &Path, directory: &Path) -> Result<PathBuf, AppError> {
+    if !directory.is_dir() {
+        return Err(AppError::Validation("Selected backup directory is unavailable".into()));
+    }
+    let filename = source.file_name().ok_or_else(|| AppError::Validation("Invalid backup filename".into()))?;
+    if source.parent() == Some(directory) {
+        return Ok(source.to_path_buf());
+    }
+    let destination = directory.join(filename);
+    let mut input = File::open(source)?;
+    let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&destination)?;
+    let copied = (|| -> Result<(), AppError> {
+        std::io::copy(&mut input, &mut output)?;
+        output.flush()?;
+        output.sync_all()?;
+        if sha256(source)? != sha256(&destination)? {
+            return Err(AppError::Validation("Backup copy failed checksum verification".into()));
+        }
+        Ok(())
+    })();
+    if let Err(err) = copied {
+        drop(output);
+        // Only this newly created destination file may be removed after a failed copy.
+        let _ = fs::remove_file(&destination);
+        return Err(err);
+    }
+    Ok(destination)
+}
