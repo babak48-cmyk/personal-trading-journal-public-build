@@ -1023,6 +1023,29 @@ pub fn list_candidate_decisions(conn: &Connection, candidate_id: &str) -> Result
     Ok(rows)
 }
 
+/// Read-only recovery of TRADE decisions that have no associated execution.
+/// Never infer this relationship from Zone or timestamps: two independent
+/// decisions may legitimately be made in the same Zone.
+pub fn list_unexecuted_trade_decisions(conn:&Connection,session_id:&str)->Result<Vec<CandidateDecisionDto>,AppError>{
+    let mut stmt=conn.prepare(
+        "SELECT cd.decision_id,cd.candidate_id,cd.occurred_at,cd.decision_type,cd.intended_direction,
+                cd.reason_code,cd.reason_note,cd.decision_quality,cd.plan_alignment,
+                cd.plan_mismatch_reason,cd.based_on_plan_revision_id,cd.based_on_candidate_revision_id
+         FROM candidate_decisions cd
+         WHERE cd.session_id=?1 AND cd.decision_type='TRADE'
+           AND NOT EXISTS(SELECT 1 FROM trades t WHERE t.decision_id=cd.decision_id)
+         ORDER BY cd.occurred_at DESC,cd.rowid DESC"
+    )?;
+    let decisions=stmt.query_map([session_id],|r|Ok(CandidateDecisionDto{
+        decision_id:r.get(0)?,candidate_id:r.get(1)?,occurred_at:r.get(2)?,
+        decision_type:r.get(3)?,intended_direction:r.get(4)?,reason_code:r.get(5)?,
+        reason_note:r.get(6)?,decision_quality:r.get(7)?,plan_alignment:r.get(8)?,
+        plan_mismatch_reason:r.get(9)?,based_on_plan_revision_id:r.get(10)?,
+        based_on_candidate_revision_id:r.get(11)?
+    }))?.collect::<Result<Vec<_>,_>>()?;
+    Ok(decisions)
+}
+
 // =============================
 // Phase 3 v0.7 — Trade Execution Core
 // =============================
