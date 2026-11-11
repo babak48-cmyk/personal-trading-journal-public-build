@@ -829,7 +829,13 @@ export function App(){
   }
 
   async function openEvidence(c:CurrentCandidate){
-    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceFeedback(''); setEvidencePrice(null); setEvidenceNote(''); setEvidenceDirection(''); 
+    setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);
+    // Do not discard the attempted batch while its durable outcome is UNKNOWN:
+    // the trader needs its exact type/stance/price/note to compare with history.
+    if(!hasUncertainWrite(evidenceSaveUncertainZoneId,c.candidate_id)){
+      setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);setEvidenceSaved(false);
+      setEvidenceFeedback('');setEvidencePrice(null);setEvidenceNote('');setEvidenceDirection('');
+    } 
     try{
       const rows = await localApi.listCandidateEvidence(c.candidate_id);
       setCandidateEvidence(v=>({...v,[c.candidate_id]:rows}));
