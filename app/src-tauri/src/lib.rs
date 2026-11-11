@@ -84,6 +84,8 @@ pub fn run() {
             commands::save_field_requirement_overrides,
             commands::get_appearance_preferences,
             commands::save_appearance_preferences,
+            commands::get_backup_destination,
+            commands::set_backup_destination,
             commands::create_backup,
             commands::validate_backup,
             commands::restore_backup_to_staging,
