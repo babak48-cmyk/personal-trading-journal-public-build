@@ -106,6 +106,8 @@ export function App(){
   const [sources,setSources]=useState<LevelSourceType[]>([]);
   const [evidenceTypes,setEvidenceTypes]=useState<EvidenceType[]>([]);
   const [active,setActive]=useState<SessionSummary|null>(null);
+  const activeSessionIdRef=useRef<string|null>(null);
+  activeSessionIdRef.current=active?.session_id??null;
   const [plan,setPlan]=useState<CurrentPlan|null>(null);
   const [timeline,setTimeline]=useState<TimelineEvent[]>([]);
   const [consistency,setConsistency]=useState<PlanConsistency|null>(null);
@@ -1056,26 +1058,39 @@ export function App(){
     const decisionId=pendingTradeDecision.decision_id;
     setEntryHistoryVerifying(true);
     try{
-      const [pending,recordedTrades]=await Promise.all([
-        localApi.listUnexecutedTradeDecisions(sessionId),
-        localApi.listSessionTrades(sessionId),
-      ]);
-      setSessionTrades(recordedTrades);
-      // A missing pending decision may have been converted into a real Trade.
-      // Never offer retry in that case: the underlying database already checks
-      // uniqueness of decision_id when opening a trade.
+      // First resolve an exact immutable Decision-to-Trade link, rather than
+      // infer successful execution from a Zone, timestamp or missing pending row.
+      const linkedTrade=await localApi.getTradeForDecision(sessionId,decisionId);
+      if(activeSessionIdRef.current!==sessionId)return;
+      if(linkedTrade){
+        setEntryOutcomeUncertainDecisionId(null);
+        setEntryHistoryCheckedDecisionId(null);
+        setPendingTradeDecision(null);
+        setUnexecutedRefreshToken(v=>v+1);
+        setTradeOpeningFeedback('Original Decision already has a saved Trade. Opened its persisted execution instead of creating another.');
+        setMessage('Recovered the existing Trade linked to Decision '+decisionId+'; no duplicate was created.');
+        void openTradeDetail(linkedTrade.metrics);
+        return;
+      }
+      const pending=await localApi.listUnexecutedTradeDecisions(sessionId);
+      if(activeSessionIdRef.current!==sessionId)return;
       if(pending.some(d=>d.decision_id===decisionId)){
         setEntryHistoryCheckedDecisionId(decisionId);
-        setTradeOpeningFeedback('This Decision is still unexecuted in the database. Check the saved Trade list before manually enabling another entry attempt.');
+        setTradeOpeningFeedback('Exact Decision-to-Trade lookup found no Trade. The original Decision remains unexecuted. Review the saved decision before manually enabling retry.');
       }else{
+        // If the two reads disagree or the Decision disappeared, fail closed.
         setEntryHistoryCheckedDecisionId(null);
-        setTradeOpeningFeedback('This Decision is NOT in the unexecuted list. An execution may already exist. Review saved Trades; entry retry remains blocked.');
+        setTradeOpeningFeedback('Persisted Decision status could not be reconciled. Retry remains blocked; inspect saved history.');
       }
       setUnexecutedRefreshToken(v=>v+1);
     }catch(e){
-      setEntryHistoryCheckedDecisionId(null);
-      setTradeOpeningFeedback('Cannot verify this Decision-to-Trade association. Entry retry remains blocked: '+String(e));
-    }finally{setEntryHistoryVerifying(false);}
+      if(activeSessionIdRef.current===sessionId){
+        setEntryHistoryCheckedDecisionId(null);
+        setTradeOpeningFeedback('Cannot verify this exact Decision-to-Trade link. Entry retry remains blocked: '+String(e));
+      }
+    }finally{
+      if(activeSessionIdRef.current===sessionId)setEntryHistoryVerifying(false);
+    }
   }
   async function addFill(){
     if(fillSavingRef.current||!activeTrade||hasUncertainWrite(fillSaveUncertainTradeId,activeTrade.metrics.trade_id))return;
