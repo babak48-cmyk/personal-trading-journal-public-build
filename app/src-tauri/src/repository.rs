@@ -2576,3 +2576,36 @@ mod decision_only_analytics_tests {
         assert_eq!((rows[0].no_trade_count,rows[0].missed_count,rows[0].reason_missing_count),(1,1,1));
     }
 }
+
+#[cfg(test)]
+mod partial_position_cost_disclosure_tests {
+    use super::*;
+
+    #[test]
+    fn partially_open_ledger_deducts_all_costs_already_incurred_not_prorated_costs() {
+        // Two ES contracts entered and one exited. This is the exact semantics
+        // disclosed in the UI; do not silently describe it as pro-rata realized net.
+        let events = vec![
+            ("ENTRY".to_string(), 7400.0, 2.0, 4.0, 1.0),
+            ("EXIT".to_string(), 7404.0, 1.0, 2.0, 0.5),
+        ];
+        let ledger = execution_ledger(&events, "LONG", 50.0).unwrap();
+        assert_eq!(ledger.open_qty, 1.0);
+        assert_eq!(ledger.exit_qty, 1.0);
+        assert_eq!(ledger.gross_realized, Some(200.0));
+        assert!((ledger.costs-7.5).abs()<1e-9);
+        assert!((ledger.gross_realized.unwrap()-ledger.costs-192.5).abs()<1e-9);
+    }
+
+    #[test]
+    fn closed_position_ledger_deducts_all_confirmed_costs() {
+        let events=vec![
+            ("ENTRY".to_string(), 7400.0, 1.0, 2.0, 0.5),
+            ("EXIT".to_string(), 7404.0, 1.0, 2.0, 0.5),
+        ];
+        let ledger=execution_ledger(&events,"LONG",50.0).unwrap();
+        assert_eq!(ledger.open_qty,0.0);
+        assert_eq!(ledger.gross_realized,Some(200.0));
+        assert!((ledger.gross_realized.unwrap()-ledger.costs-195.0).abs()<1e-9);
+    }
+}
