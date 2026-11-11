@@ -1765,15 +1765,14 @@ pub struct MistakeSummaryDto {
     pub count: i64,
 }
 
-fn trade_level_sources(conn:&Connection, candidate_id:&Option<String>)->Result<Vec<(String,String)>,AppError>{
-    let Some(cid)=candidate_id else{return Ok(Vec::new())};
-    let latest:Option<String>=conn.query_row(
-        "SELECT candidate_revision_id FROM candidate_revisions WHERE candidate_id=?1 ORDER BY revision_number DESC LIMIT 1",
-        [cid], |r| r.get(0)
-    ).optional()?;
-    let Some(rev)=latest else{return Ok(Vec::new())};
+fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<String>)->Result<Vec<(String,String)>,AppError>{
+    // Anti-hindsight: a trade's Level Sources belong to the candidate revision
+    // captured WITH THE DECISION, never the candidate's latest revision.
+    // A legacy decision without a revision snapshot stays UNKNOWN (no attribution)
+    // rather than acquiring sources added after the trade.
+    let Some(revision_id)=decision_candidate_revision_id else{return Ok(Vec::new())};
     let mut stmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_revision_id=?1 ORDER BY cs.is_primary DESC,lst.label")?;
-    let rows = stmt.query_map([rev],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let rows=stmt.query_map([revision_id],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
 }
 
@@ -1881,7 +1880,7 @@ pub fn list_decision_only_analytics(
 
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
     let mut stmt=conn.prepare(
-        "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1)
+        "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1),cd.based_on_candidate_revision_id
          FROM trades t
          JOIN sessions s ON s.session_id=t.session_id
          JOIN instruments i ON i.instrument_id=s.instrument_id
@@ -1893,10 +1892,10 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
     )?;
     let base=stmt.query_map([],|r|Ok((
         r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,
-        r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?
+        r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?,r.get::<_,Option<String>>(10)?
     )))?.collect::<Result<Vec<_>,_>>()?;
     let mut out=Vec::new();
-    for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag) in base {
+    for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag,decision_candidate_revision_id) in base {
         if let Some(v)=&filter.date_from {if session_date.as_str() < v.as_str() {continue;}}
         if let Some(v)=&filter.date_to {if session_date.as_str() > v.as_str() {continue;}}
         if let Some(v)=&filter.instrument_symbol {if instrument.as_str() != v.as_str() {continue;}}
@@ -1904,7 +1903,7 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         if let Some(v)=&filter.decision_quality {if decision_quality.as_deref()!=Some(v.as_str()) {continue;}}
         let rule_status=match rule_flag {1=>"VIOLATED",0=>"FOLLOWED",_=>"UNCHECKED"}.to_string();
         if let Some(v)=&filter.rule_status {if rule_status.as_str() != v.as_str() {continue;}}
-        let sources=trade_level_sources(conn,&candidate_id)?;
+        let sources=trade_level_sources(conn,&decision_candidate_revision_id)?;
         if let Some(v)=&filter.level_source_type_id {if !sources.iter().any(|(id,_)|id==v){continue;}}
         if let Some(v)=&filter.evidence_type_id {if !trade_has_evidence(conn,&trade_id,&candidate_id,v)?{continue;}}
         let metrics=trade_metrics(conn,&trade_id)?;
