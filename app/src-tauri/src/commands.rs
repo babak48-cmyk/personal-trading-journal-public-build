@@ -349,8 +349,15 @@ pub fn create_backup(app: AppHandle) -> Result<String, AppError> {
     let internal_path = backup::create_backup(&paths)?;
     restore::validate_backup(&internal_path)?;
     if let Some(dir) = get_backup_destination(app)? {
-        let copied = backup::copy_backup_to_directory(&internal_path, &PathBuf::from(dir))?;
-        restore::validate_backup(&copied)?;
+        let copied = backup::copy_backup_to_directory(&internal_path, &PathBuf::from(dir))
+            .map_err(|err| AppError::Validation(format!(
+                "External backup failed: {err}. A verified internal backup remains at {}",
+                internal_path.display()
+            )))?;
+        restore::validate_backup(&copied).map_err(|err| AppError::Validation(format!(
+            "External backup validation failed: {err}. A verified internal backup remains at {}",
+            internal_path.display()
+        )))?;
         Ok(copied.to_string_lossy().to_string())
     } else {
         Ok(internal_path.to_string_lossy().to_string())
