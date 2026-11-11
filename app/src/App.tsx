@@ -247,6 +247,33 @@ export function App(){
   const [entryFeesInput,setEntryFeesInput]=useState('');
   const [activeTrade,setActiveTrade]=useState<TradeDetail|null>(null);
   const [sessionTrades,setSessionTrades]=useState<TradeMetrics[]>([]);
+  const [unexecutedTradeDecisions,setUnexecutedTradeDecisions]=useState<CandidateDecision[]>([]);
+  const [unexecutedLoading,setUnexecutedLoading]=useState(false);
+  const [unexecutedError,setUnexecutedError]=useState('');
+  const [unexecutedRefreshToken,setUnexecutedRefreshToken]=useState(0);
+  const unexecutedRequestRef=useRef(0);
+  // Read the actual Decision-to-Trade association from SQLite. A saved decision
+  // without a fill survives application restarts and must remain resumable.
+  useEffect(()=>{
+    const sessionId=active?.session_id??null;
+    const request=++unexecutedRequestRef.current;
+    setUnexecutedTradeDecisions([]);setUnexecutedError('');
+    if(!sessionId||active?.status!=='ACTIVE'){setUnexecutedLoading(false);return;}
+    setUnexecutedLoading(true);
+    let cancelled=false;
+    localApi.listUnexecutedTradeDecisions(sessionId)
+      .then(items=>{
+        if(!cancelled&&request===unexecutedRequestRef.current)setUnexecutedTradeDecisions(items);
+      }).catch(e=>{
+        if(!cancelled&&request===unexecutedRequestRef.current){
+          setUnexecutedTradeDecisions([]);
+          setUnexecutedError('Could not verify saved unexecuted TRADE decisions: '+String(e));
+        }
+      }).finally(()=>{
+        if(!cancelled&&request===unexecutedRequestRef.current)setUnexecutedLoading(false);
+      });
+    return ()=>{cancelled=true;};
+  },[active?.session_id,active?.status,sessionTrades.length,unexecutedRefreshToken]);
   const [reviewQueue,setReviewQueue]=useState<TradeMetrics[]|null>(null);
   const [reviewQueueLoading,setReviewQueueLoading]=useState(false);
   const [reviewQueueError,setReviewQueueError]=useState('');
@@ -956,7 +983,7 @@ export function App(){
       }
       try { setTimeline(await localApi.listPlanTimeline(active.session_id)); }
       catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
-      if(isTrade){ setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
+      if(isTrade){ setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
     }catch(e){
@@ -1003,11 +1030,11 @@ export function App(){
       const detail=await localApi.createTradeWithEntry({decision_id:pendingTradeDecision.decision_id,entry_price:entryPrice,stop_price:stopPrice,quantity:tradeQty,order_type:'MARKET',planned_target_price:plannedTarget,commission:entryCommission.value,fees:entryFees.value});
       reviewSelectionRequestRef.current++;
       setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);setReviewVerifiedTradeId(detail.metrics.trade_id);setReviewFeedback('');
-      setPendingTradeDecision(null);setReviewQueue(null);setEntryCommissionInput('');setEntryFeesInput('');
+      setPendingTradeDecision(null);setUnexecutedRefreshToken(v=>v+1);setReviewQueue(null);setEntryCommissionInput('');setEntryFeesInput('');
       setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');setTradeOpeningFeedback('Entry and initial risk saved.');
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
       catch(e){setMessage('Trade created, but trade list refresh failed: '+String(e));}
-    }catch(e){setMessage('Trade creation was not confirmed. Check existing session trades before retrying: '+String(e));setTradeOpeningFeedback('Trade opening not confirmed. Inspect executions before retrying.');}
+    }catch(e){setUnexecutedRefreshToken(v=>v+1);setMessage('Trade creation was not confirmed. Refresh saved decisions and trades before retrying: '+String(e));setTradeOpeningFeedback('Trade opening outcome UNKNOWN. Check the saved Decision-to-Trade association before retrying.');}
     finally{tradeOpeningRef.current=false;setTradeOpening(false);}
   }
   async function addFill(){
