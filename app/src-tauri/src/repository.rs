@@ -2608,3 +2608,34 @@ mod partial_position_cost_disclosure_tests {
         assert!((ledger.gross_realized.unwrap()-ledger.costs-195.0).abs()<1e-9);
     }
 }
+
+#[cfg(test)]
+mod journal_level_provenance_snapshot_tests {
+    use super::*;
+
+    #[test]
+    fn revision_scoped_sources_do_not_follow_future_zone_edits() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE level_source_types(source_type_id TEXT PRIMARY KEY,label TEXT);
+            CREATE TABLE candidate_sources(
+                candidate_revision_id TEXT NOT NULL,source_type_id TEXT NOT NULL,is_primary INTEGER NOT NULL
+            );
+            INSERT INTO level_source_types VALUES
+                ('prior-high','Prior high'),('later-vwap','VWAP added later');
+            INSERT INTO candidate_sources VALUES
+                ('revision-at-decision','prior-high',1),
+                ('revision-added-later','later-vwap',1);
+        ").unwrap();
+
+        let frozen=trade_level_sources(&conn,&Some("revision-at-decision".to_string())).unwrap();
+        assert_eq!(frozen,vec![("prior-high".to_string(),"Prior high".to_string())]);
+        assert!(!frozen.iter().any(|(id,_)|id=="later-vwap"));
+
+        let newer=trade_level_sources(&conn,&Some("revision-added-later".to_string())).unwrap();
+        assert_eq!(newer[0].0,"later-vwap");
+        // Old/imported decisions with missing revision provenance must never
+        // acquire newly edited Zone sources just because they share a candidate.
+        assert!(trade_level_sources(&conn,&None).unwrap().is_empty());
+    }
+}
