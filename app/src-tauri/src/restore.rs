@@ -173,3 +173,41 @@ pub fn replace_live_from_backup(paths: &AppPaths, backup_path: &Path) -> Result<
         }
     }
 }
+
+#[cfg(test)]
+mod backup_integrity_tests {
+    use super::*;
+    use zip::{write::SimpleFileOptions, ZipWriter};
+
+    #[test]
+    fn validator_rejects_missing_attachment_and_accepts_present_attachment() {
+        let root = std::env::temp_dir().join(format!("ptj-archive-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        for include_attachment in [false, true] {
+            let path = root.join(if include_attachment { "present.zip" } else { "missing.zip" });
+            let file = File::create(&path).unwrap();
+            let mut zip = ZipWriter::new(file);
+            let options = SimpleFileOptions::default();
+            zip.start_file("database.sqlite", options).unwrap();
+            zip.write_all(b"synthetic-database-test").unwrap();
+            if include_attachment {
+                zip.start_file("attachments/test.png", options).unwrap();
+                zip.write_all(b"synthetic-screenshot-test").unwrap();
+            }
+            let info = BackupInfo {
+                backup_version: 1,
+                created_at_utc: "2026-11-12T00:00:00Z".into(),
+                schema_version: 1,
+                database_sha256: sha256_bytes(b"synthetic-database-test"),
+                attachment_count: 1,
+            };
+            zip.start_file("backup_info.json", options).unwrap();
+            zip.write_all(serde_json::to_string(&info).unwrap().as_bytes()).unwrap();
+            zip.finish().unwrap();
+
+            let checked = validate_backup(&path);
+            assert_eq!(checked.is_ok(), include_attachment);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+}
