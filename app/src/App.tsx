@@ -1089,7 +1089,7 @@ export function App(){
         setTradeOpeningFeedback('Cannot verify this exact Decision-to-Trade link. Entry retry remains blocked: '+String(e));
       }
     }finally{
-      if(activeSessionIdRef.current===sessionId)setEntryHistoryVerifying(false);
+      setEntryHistoryVerifying(false);
     }
   }
   async function addFill(){
