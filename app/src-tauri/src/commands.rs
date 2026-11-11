@@ -620,6 +620,13 @@ pub fn move_trade_stop(app: AppHandle, input: MoveStopInput) -> Result<TradeDeta
 }
 
 #[tauri::command]
+pub fn list_unexecuted_trade_decisions(app: AppHandle, session_id: String) -> Result<Vec<CandidateDecisionDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::list_unexecuted_trade_decisions(&conn,&session_id)
+}
+
+#[tauri::command]
 pub fn get_trade_detail(app: AppHandle, trade_id: String) -> Result<TradeDetailDto, AppError> {
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
