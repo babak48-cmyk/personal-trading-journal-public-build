@@ -317,12 +317,19 @@ pub fn get_backup_destination(app: AppHandle) -> Result<Option<String>, AppError
 #[tauri::command]
 pub fn set_backup_destination(app: AppHandle, destination: Option<String>) -> Result<(), AppError> {
     let normalized = destination.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    let paths = AppPaths::from_app(&app)?;
     if let Some(ref dir) = normalized {
-        if !PathBuf::from(dir).is_dir() {
+        let chosen = PathBuf::from(dir);
+        if !chosen.is_dir() {
             return Err(AppError::Validation("Backup destination is not an accessible directory".into()));
         }
+        // Do not place external backups inside the live database/attachment tree.
+        let selected = std::fs::canonicalize(&chosen)?;
+        let app_root = std::fs::canonicalize(&paths.root)?;
+        if selected.starts_with(&app_root) && selected != std::fs::canonicalize(&paths.backups)? {
+            return Err(AppError::Validation("Choose a folder outside the app data directory".into()));
+        }
     }
-    let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
     if let Some(dir) = normalized {
         conn.execute(
