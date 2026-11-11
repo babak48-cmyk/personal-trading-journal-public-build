@@ -181,6 +181,7 @@ export const localApi = {
   addTradeFill: (input:AddTradeFillInput) => invoke<TradeDetail>('add_trade_fill',{input}),
   moveTradeStop: (input:MoveStopInput) => invoke<TradeDetail>('move_trade_stop',{input}),
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
+  getTradeForDecision: (sessionId:string,decisionId:string) => invoke<TradeDetail|null>('get_trade_for_decision',{sessionId,decisionId}),
   listSessionTrades: (sessionId:string) => invoke<TradeMetrics[]>('list_session_trades',{sessionId}),
   listMistakeTypes: () => invoke<MistakeType[]>('list_mistake_types'),
   saveTradeReview: (input:SaveTradeReviewInput) => invoke<TradeReview>('save_trade_review',{input}),
