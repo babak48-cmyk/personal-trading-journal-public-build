@@ -77,3 +77,12 @@ Checkpoint ID: PTJ-ZONE-GEOMETRY-PARITY-2026-11-12
 - Source commits: `708f7d43540abe48719f01801135883dea9efe01` (shared helper), `a6b5fb9373e951c9c7dfa1278e9b1f3773b58c47` (both forms), `249070b648c206109bbed83812c1fed1200173a6` (unit tests).
 - Latest CI run `43060130020` launched for `249070b648c206109bbed83812c1fed1200173a6`. Frontend job SUCCESS; Rust job in progress at observation time. Until verified, overall head CI = NOT YET VERIFIED.
 - Unresolved: exact binary icon integration (original user-approved design only); native Windows installed DEMO targeted acceptance (Backup, net P&L, Recent, icon); audited Fill cost corrections require separately authorized model/migration; all 12 roadmap categories including complete Field Manager remain open until accepted. PR #8 DRAFT/UNMERGED, private repo untouched.
+
+## 2026-11-12 — Trade Review Field Manager ordering package
+Checkpoint ID: PTJ-FIELD-MANAGER-TRADE-REVIEW-ORDER-2026-11-12
+- First verified prior checkpoint CI on `508cc947fbdef193bb7bcb6fe7353c11a7498bf0`: run `43060377220` completed SUCCESS, frontend SUCCESS, Rust SUCCESS (independent GitHub jobs readback).
+- Added user-configurable order of three existing Review quality inputs (decision, execution, management), with configurable saved labels and help on these specific form controls; order uses existing field_order preferences (no migration) and stable field IDs. Setting controls are in Field Requirements > Field ordering, labels and contextual help. UI CSS order places all three at form start without relocating other Review fields. Prior stored Review records untouched.
+- Commits `db871efb31d94c1825646f6386c4284ca2ed5028` (connected Review quality ordering/label bindings), `41c1e5200a842035cb9d8cc84a8fefa9197a9330` (regression tests for ordering, preserved IDs, required Quick presentation).
+- GitHub Actions run `43067930601` on `41c1e5200a842035cb9d8cc84a8fefa9197a9330`: Frontend SUCCESS, Rust in progress at checkpoint creation; overall CI unverified until final run completion.
+- This is a scoped, actual field-connection increment, NOT full Field Manager acceptance. Complete all-input ordering, custom option snapshots, full auditing and dynamic historical display remain PARTIAL. Windows acceptance for this new layout remains OPEN.
+- Draft public PR #8, no merge, no private repo updates, no installer or database changes. Exact approved Windows icon assets remain outside GitHub; do not substitute.
