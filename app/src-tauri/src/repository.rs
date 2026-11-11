@@ -1383,6 +1383,24 @@ pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,A
     Ok(TradeDetailDto{metrics,fills,risk_snapshots})
 }
 
+/// Exact, read-only recovery for a possibly committed entry whose response
+/// was lost. Cross-session IDs cannot retrieve another session's execution.
+fn trade_id_for_decision(conn:&Connection,session_id:&str,decision_id:&str)->Result<Option<String>,AppError>{
+    let id=conn.query_row(
+        "SELECT t.trade_id FROM trades t
+         JOIN candidate_decisions cd ON cd.decision_id=t.decision_id
+         WHERE cd.session_id=?1 AND t.session_id=?1 AND cd.decision_id=?2",
+        params![session_id,decision_id],|r|r.get(0)
+    ).optional()?;
+    Ok(id)
+}
+
+pub fn get_trade_for_decision(conn:&Connection,session_id:&str,decision_id:&str)->Result<Option<TradeDetailDto>,AppError>{
+    trade_id_for_decision(conn,session_id,decision_id)?
+        .map(|trade_id|get_trade_detail(conn,&trade_id))
+        .transpose()
+}
+
 pub fn list_session_trades(conn:&Connection,session_id:&str)->Result<Vec<TradeMetricsDto>,AppError>{
     let mut stmt=conn.prepare("SELECT trade_id FROM trades WHERE session_id=?1 ORDER BY rowid DESC")?;
     let ids=stmt.query_map([session_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
