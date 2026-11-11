@@ -1717,6 +1717,9 @@ pub struct JournalFilterInput {
     pub rule_status: Option<String>, // FOLLOWED / VIOLATED / UNCHECKED
     pub level_source_type_id: Option<String>,
     pub evidence_type_id: Option<String>,
+    /// Default ANY_RECORDED preserves existing analytics. AT_DECISION excludes
+    /// evidence created after the decision; no hindsight-based confirmation.
+    pub evidence_timing: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1785,10 +1788,19 @@ fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppE
     Ok(rows)
 }
 
-fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str)->Result<bool,AppError>{
+fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str,
+    decision_at:Option<&str>,at_decision:bool)->Result<bool,AppError>{
+    // Existing ANY_RECORDED filter means observed at any point in the lifecycle.
+    // Only the opt-in AT_DECISION filter enforces a contemporaneous timestamp.
+    // julianday converts timezone offsets and excludes unparseable/unknown dates.
+    // Do not silently interpret post-decision observations as entry confirmation.
     let n:i64=conn.query_row(
-        "SELECT COUNT(*) FROM evidence_observations WHERE evidence_type_id=?1 AND present=1 AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))",
-        params![evidence_type_id,trade_id,candidate_id], |r|r.get(0)
+        "SELECT COUNT(*) FROM evidence_observations
+         WHERE evidence_type_id=?1 AND present=1
+           AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))
+           AND (?4=0 OR (?5 IS NOT NULL AND julianday(occurred_at) IS NOT NULL
+               AND julianday(?5) IS NOT NULL AND julianday(occurred_at)<=julianday(?5)))",
+        params![evidence_type_id,trade_id,candidate_id,i64::from(at_decision),decision_at], |r|r.get(0)
     )?;
     Ok(n>0)
 }
@@ -1882,8 +1894,11 @@ pub fn list_decision_only_analytics(
 }
 
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
+    if !matches!(filter.evidence_timing.as_deref(),None|Some("ANY_RECORDED")|Some("AT_DECISION")){
+        return Err(AppError::Validation("unknown evidence timing filter".into()));
+    }
     let mut stmt=conn.prepare(
-        "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1),cd.based_on_candidate_revision_id
+        "SELECT t.trade_id,t.session_id,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),t.direction,t.status,t.candidate_id,c.label,COALESCE(tr.decision_quality,t.decision_quality,cd.decision_quality),COALESCE(trc.any_violation,-1),cd.based_on_candidate_revision_id,cd.occurred_at
          FROM trades t
          JOIN sessions s ON s.session_id=t.session_id
          JOIN instruments i ON i.instrument_id=s.instrument_id
@@ -1895,10 +1910,10 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
     )?;
     let base=stmt.query_map([],|r|Ok((
         r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,
-        r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?,r.get::<_,Option<String>>(10)?
+        r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?
     )))?.collect::<Result<Vec<_>,_>>()?;
     let mut out=Vec::new();
-    for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag,decision_candidate_revision_id) in base {
+    for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag,decision_candidate_revision_id,decision_at) in base {
         if let Some(v)=&filter.date_from {if session_date.as_str() < v.as_str() {continue;}}
         if let Some(v)=&filter.date_to {if session_date.as_str() > v.as_str() {continue;}}
         if let Some(v)=&filter.instrument_symbol {if instrument.as_str() != v.as_str() {continue;}}
@@ -1908,7 +1923,10 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         if let Some(v)=&filter.rule_status {if rule_status.as_str() != v.as_str() {continue;}}
         let sources=trade_level_sources(conn,&decision_candidate_revision_id)?;
         if let Some(v)=&filter.level_source_type_id {if !sources.iter().any(|(id,_)|id==v){continue;}}
-        if let Some(v)=&filter.evidence_type_id {if !trade_has_evidence(conn,&trade_id,&candidate_id,v)?{continue;}}
+        if let Some(v)=&filter.evidence_type_id {
+            let at_decision=matches!(filter.evidence_timing.as_deref(),Some("AT_DECISION"));
+            if !trade_has_evidence(conn,&trade_id,&candidate_id,v,decision_at.as_deref(),at_decision)?{continue;}
+        }
         let metrics=trade_metrics(conn,&trade_id)?;
         out.push(JournalTradeRowDto{
             trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
