@@ -2662,3 +2662,37 @@ mod journal_level_provenance_snapshot_tests {
         assert!(trade_level_sources(&conn,&None).unwrap().is_empty());
     }
 }
+
+#[cfg(test)]
+mod decision_time_evidence_filter_tests {
+    use super::*;
+
+    #[test]
+    fn evidence_filter_separates_known_at_decision_from_post_decision_and_preserves_legacy_any_time() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE evidence_observations (
+                evidence_type_id TEXT, present INTEGER, trade_id TEXT,
+                candidate_id TEXT, occurred_at TEXT
+            );
+            INSERT INTO evidence_observations VALUES
+                ('DELTA',1,NULL,'zone-one','2026-11-12T09:59:59+00:00'),
+                ('ABSORPTION',1,NULL,'zone-one','2026-11-12T10:00:01+00:00'),
+                ('LATE',1,'trade-one',NULL,'2026-11-12T10:01:00+00:00'),
+                ('CONTRARY',1,NULL,'zone-one','2026-11-12T11:00:00+11:00'),
+                ('BAD_DATE',1,NULL,'zone-one','unknown'),
+                ('ABSENT',0,NULL,'zone-one','2026-11-12T09:00:00Z');
+        ").unwrap();
+        let zone=Some("zone-one".to_string());
+        let decision="2026-11-12T10:00:00Z";
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"DELTA",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSORPTION",Some(decision),true).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"ABSORPTION",Some(decision),false).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"LATE",Some(decision),true).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"LATE",Some(decision),false).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"CONTRARY",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"BAD_DATE",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSENT",Some(decision),false).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"DELTA",None,true).unwrap());
+    }
+}
