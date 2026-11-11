@@ -29,3 +29,14 @@ export function zoneRequiredIssues(
   }
   return missing;
 }
+
+
+/** Domain-level validation shared by initial and live Zone forms.
+ * Range endpoints are independent of the trade's stop/invalidation.
+ */
+export function zoneRangeOrderIssue(candidate:CandidateDraftInput):string|null {
+  if(candidate.price_mode!=='RANGE')return null;
+  const from=candidate.price_from, to=candidate.price_to;
+  if(from==null||to==null||!Number.isFinite(from)||!Number.isFinite(to))return null;
+  return from>to?`Range start ${from} exceeds range end ${to}.`:null;
+}
