@@ -2835,3 +2835,29 @@ mod pending_trade_decision_recovery_tests {
         assert_eq!(trades,1);
     }
 }
+
+#[cfg(test)]
+mod exact_decision_trade_recovery_tests {
+    use super::*;
+
+    #[test]
+    fn identifies_only_a_trade_linked_to_the_exact_decision_and_session() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE candidate_decisions(decision_id TEXT,session_id TEXT);
+            CREATE TABLE trades(trade_id TEXT,decision_id TEXT,session_id TEXT);
+            INSERT INTO candidate_decisions VALUES
+              ('executed','session-1'),('not-yet-executed','session-1'),
+              ('same-zone-different-decision','session-1'),('other','session-2');
+            INSERT INTO trades VALUES
+              ('trade-1','executed','session-1'),('trade-2','other','session-2');
+        ").unwrap();
+        assert_eq!(trade_id_for_decision(&conn,"session-1","executed").unwrap().as_deref(),Some("trade-1"));
+        assert!(trade_id_for_decision(&conn,"session-1","not-yet-executed").unwrap().is_none());
+        assert!(trade_id_for_decision(&conn,"session-1","same-zone-different-decision").unwrap().is_none());
+        assert!(trade_id_for_decision(&conn,"session-1","other").unwrap().is_none());
+        assert_eq!(trade_id_for_decision(&conn,"session-2","other").unwrap().as_deref(),Some("trade-2"));
+        let unchanged:i64=conn.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
+        assert_eq!(unchanged,2);
+    }
+}
