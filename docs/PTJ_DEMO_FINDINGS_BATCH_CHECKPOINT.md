@@ -43,3 +43,13 @@ Run relevant frontend and Rust CI for full cohesive package on exact HEAD, remed
 - GitHub PR-only workflow run lookup on earlier head `b4c4467a1d3f643fd87746f19e0025fc953e2f6c` returned [] and commit status lookup []; this does NOT demonstrate CI PASS. No local Rust toolchain or GitHub clone due network DNS failure. Current head CI, frontend build, Rust tests and Windows validation remain UNKNOWN.
 - Remaining safety concern to inspect: failed creation of an archive may leave an incomplete `.zip` at the internal backup destination. Consider staged archive/atomic finalization before Windows acceptance.
 - Approved exact icon bytes are not on branch; do not substitute or label integration completed. All previous user Windows PASS scenarios retained. Full all-input coverage and audited fill correction remain open.
+
+## 2026-11-12 — Backup hardening and exact-head CI (material checkpoint)
+Checkpoint ID: PTJ-DEMO-BACKUP-ATOMIC-VALIDATION-CI-2026-11-12
+- Safe write: temporary `.partial` archive, new UUID-based filename, sync, final rename only after ZIP completion; failed archives remove only their new staging file. Commit `c810ba098a2fc76c460f81d3a38e0039d1329648`.
+- Saved external destination is re-canonicalized at copy time; stale/repointed directories under live app data are rejected. Commit `911692ac8b4a781e996225ad4c77ae76dd7f572b`.
+- Backup validation now enumerates archive entries, rejects unsafe or duplicate paths, reads attachment payloads to surface ZIP/CRC errors, and compares actual attachment file count with backup_info.json; legacy v1 manifest format unchanged. Commit `644088ace9e5e5d09ff4b74f68e81a85032d1b77`.
+- Unit test added for missing vs present attachment in archive; source commit `0ac52208e0b1b689476952bb5ae3ec7d0e1a9d06`. Older backup destination tests retained.
+- **Exact-head GitHub Actions run 43040263276 SUCCESS** for commit `0ac52208e0b1b689476952bb5ae3ec7d0e1a9d06`: frontend job SUCCESS (npm ci, Vitest, TypeScript/Vite build, DEMO config check), Rust job SUCCESS (cargo check and complete Rust library tests). Separate job results checked directly. This evidence does **not** establish native Windows installed runtime or user acceptance.
+- Draft PR #8 remains unmerged; no changes to private main, schema, live trading database or existing records. Exact approved binary icon remains OUTSIDE GitHub branch; its original PNG and ICO set reside in chat-generated local package. No substitute icon, no build until asset is included.
+- Targeted Windows acceptance still open for selectable Backup destination, net P&L display, Recent scrolling and eventual icon. Old user-confirmed ES execution/Review PASS remains valid.
