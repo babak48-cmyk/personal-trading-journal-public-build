@@ -1336,22 +1336,27 @@ pub fn move_trade_stop(conn:&mut Connection,input:MoveStopInput)->Result<TradeDe
     tx.commit()?; get_trade_detail(conn,&input.trade_id)
 }
 
-pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,AppError>{
-    let metrics=trade_metrics(conn,trade_id)?;
-    let mut stmt=conn.prepare("SELECT execution_id,occurred_at,action,side,price,quantity,order_type,commission,fees,note FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
-    let rows=stmt.query_map([trade_id],|r|Ok(ExecutionFillDto{execution_id:r.get(0)?,occurred_at:r.get(1)?,action:r.get(2)?,side:r.get(3)?,price:r.get(4)?,quantity:r.get(5)?,order_type:r.get(6)?,commission:r.get(7)?,fees:r.get(8)?,note:r.get(9)?}))?;
-    let fills=rows.collect::<Result<Vec<_>,_>>()?;
+fn trade_risk_history(conn:&Connection,trade_id:&str)->Result<Vec<RiskSnapshotDto>,AppError>{
     let mut risk_stmt=conn.prepare(
         "SELECT risk_snapshot_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,
                 change_reason,was_rule_compliant,provenance
          FROM risk_snapshots WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid"
     )?;
-    let risk_snapshots=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
+    let items=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
         risk_snapshot_id:r.get(0)?,occurred_at:r.get(1)?,snapshot_type:r.get(2)?,
         stop_price:r.get(3)?,quantity:r.get(4)?,risk_dollars:r.get(5)?,
         change_reason:r.get(6)?,was_rule_compliant:r.get::<_,Option<i64>>(7)?.map(|n|n!=0),
         provenance:r.get(8)?
     }))?.collect::<Result<Vec<_>,_>>()?;
+    Ok(items)
+}
+
+pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,AppError>{
+    let metrics=trade_metrics(conn,trade_id)?;
+    let mut stmt=conn.prepare("SELECT execution_id,occurred_at,action,side,price,quantity,order_type,commission,fees,note FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
+    let rows=stmt.query_map([trade_id],|r|Ok(ExecutionFillDto{execution_id:r.get(0)?,occurred_at:r.get(1)?,action:r.get(2)?,side:r.get(3)?,price:r.get(4)?,quantity:r.get(5)?,order_type:r.get(6)?,commission:r.get(7)?,fees:r.get(8)?,note:r.get(9)?}))?;
+    let fills=rows.collect::<Result<Vec<_>,_>>()?;
+    let risk_snapshots=trade_risk_history(conn,trade_id)?;
     Ok(TradeDetailDto{metrics,fills,risk_snapshots})
 }
 
@@ -2721,5 +2726,35 @@ mod decision_time_evidence_filter_tests {
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"BAD_DATE",Some(decision),true).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSENT",Some(decision),false).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"DELTA",None,true).unwrap());
+    }
+}
+
+#[cfg(test)]
+mod read_only_trade_risk_history_tests {
+    use super::*;
+
+    #[test]
+    fn returns_original_risk_snapshots_in_timestamp_order_without_modifying_them() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+            CREATE TABLE risk_snapshots(
+              risk_snapshot_id TEXT,trade_id TEXT,occurred_at TEXT,snapshot_type TEXT,
+              stop_price REAL,quantity REAL,risk_dollars REAL,change_reason TEXT,
+              was_rule_compliant INTEGER,provenance TEXT
+            );
+            INSERT INTO risk_snapshots VALUES
+              ('later','trade-a','2026-11-12T10:01:00Z','MODIFIED',7401.0,1.0,50.0,'Trail',1,'NATIVE'),
+              ('initial','trade-a','2026-11-12T10:00:00Z','INITIAL',7398.0,2.0,200.0,NULL,NULL,'NATIVE'),
+              ('other','trade-b','2026-11-12T10:00:00Z','INITIAL',7000.0,1.0,100.0,NULL,NULL,'NATIVE');
+        ").unwrap();
+        let items=trade_risk_history(&conn,"trade-a").unwrap();
+        assert_eq!(items.len(),2);
+        assert_eq!(items[0].risk_snapshot_id,"initial");
+        assert_eq!(items[1].risk_snapshot_id,"later");
+        assert_eq!(items[0].was_rule_compliant,None);
+        assert_eq!(items[1].was_rule_compliant,Some(true));
+        assert_eq!(items[1].change_reason.as_deref(),Some("Trail"));
+        let persisted:i64=conn.query_row("SELECT COUNT(*) FROM risk_snapshots",[],|r|r.get(0)).unwrap();
+        assert_eq!(persisted,3);
     }
 }
