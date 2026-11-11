@@ -26,9 +26,11 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
     drop(conn);
 
-    let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+    // Millisecond timestamp reduces collisions; create_new rejects any remaining collision.
+    // Never silently overwrite an existing safety backup.
+    let timestamp = Utc::now().format("%Y%m%d_%H%M%S_%3f");
     let output = paths.backups.join(format!("TradingJournal_Backup_{timestamp}.zip"));
-    let file = File::create(&output)?;
+    let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&output)?;
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
