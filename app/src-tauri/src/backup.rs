@@ -41,8 +41,12 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
 
     let mut attachment_count = 0usize;
     if paths.attachments.exists() {
-        for entry in WalkDir::new(&paths.attachments).into_iter().filter_map(Result::ok).filter(|e| e.file_type().is_file()) {
-            let rel = entry.path().strip_prefix(&paths.root).unwrap_or(entry.path());
+        // Fail closed: silently skipping an unreadable attachment would produce an incomplete backup.
+        for item in WalkDir::new(&paths.attachments) {
+            let entry = item.map_err(|err| AppError::Validation(format!("Cannot enumerate backup attachments: {err}")))?;
+            if !entry.file_type().is_file() { continue; }
+            let rel = entry.path().strip_prefix(&paths.root)
+                .map_err(|err| AppError::Validation(format!("Attachment is outside backup root: {err}")))?;
             zip.start_file(rel.to_string_lossy().replace('\\', "/"), options)?;
             zip.write_all(&fs::read(entry.path())?)?;
             attachment_count += 1;
