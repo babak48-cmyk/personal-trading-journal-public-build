@@ -53,3 +53,10 @@ Checkpoint ID: PTJ-DEMO-BACKUP-ATOMIC-VALIDATION-CI-2026-11-12
 - **Exact-head GitHub Actions run 43040263276 SUCCESS** for commit `0ac52208e0b1b689476952bb5ae3ec7d0e1a9d06`: frontend job SUCCESS (npm ci, Vitest, TypeScript/Vite build, DEMO config check), Rust job SUCCESS (cargo check and complete Rust library tests). Separate job results checked directly. This evidence does **not** establish native Windows installed runtime or user acceptance.
 - Draft PR #8 remains unmerged; no changes to private main, schema, live trading database or existing records. Exact approved binary icon remains OUTSIDE GitHub branch; its original PNG and ICO set reside in chat-generated local package. No substitute icon, no build until asset is included.
 - Targeted Windows acceptance still open for selectable Backup destination, net P&L display, Recent scrolling and eventual icon. Old user-confirmed ES execution/Review PASS remains valid.
+
+## 2026-11-12 — Official icon exact-source transfer gate
+- The user approved exactly the image named `Neon Financial Journal App Icon(1).png` (not an alternative generated or search image).
+- Local source file verified: 2,558,186 bytes, SHA256 `a8d698360c4b76ee10270f0c00a3e3fc379872e5c3b0f32fd842afb934e6eb3c`.
+- Local ICO for Tauri Windows: 121,621 bytes, SHA256 `1add9664f063c9c4e7ea2fbbb7257b2c6d78ea94d3c8161e9814d8def42cc1ea`, embedded sizes 16,24,32,48,64,128,256. Packaged with approved original PNG and `app/src-tauri/tauri.conf.json` in `PTJ_Exact_Approved_Icon.zip` attached to this chat.
+- **NOT IN GITHUB**, because this available GitHub connector can write UTF-8 text and blobs only from material supplied in the tool request, and cannot ingest the local binary asset bytes directly; no surrogate logo or invented upload claim. Need an authorized binary transfer path before activating bundle.icon entries. No incorrect installer icon change committed.
+- PR #8 body refreshed with exact hashes, CI run and review gates; remains DRAFT, UNMERGED.
