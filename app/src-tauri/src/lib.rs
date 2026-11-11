@@ -123,6 +123,7 @@ pub fn run() {
             commands::add_trade_fill,
             commands::move_trade_stop,
             commands::get_trade_detail,
+            commands::get_trade_for_decision,
             commands::list_unexecuted_trade_decisions,
             commands::list_session_trades,
             commands::list_mistake_types,
