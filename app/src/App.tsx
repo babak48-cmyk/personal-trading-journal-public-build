@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { quickValidationRoute } from './quickValidationRoute';
 import { tradeEntryIssues } from './tradeEntryValidation';
+import { zoneRequiredIssues } from './zoneRequired';
 import { previewEntryRisk } from './entryRiskPreview';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -719,11 +720,10 @@ export function App(){
     ]).map(issue=>({...issue,label:configuredLabel(issue.id,issue.label)}));
     candidates.forEach((candidate,index)=>{
       const suffix=candidates.length>1?` (zone ${index+1})`:'';
-      if(isUserRequired('candidate.sources',requirementOverrides)&&candidate.sources.length===0)missing.push({id:`candidate-${index}.sources`,label:configuredLabel('candidate.sources','Level source')+suffix});
-      if(isUserRequired('candidate.requiredConditions',requirementOverrides)&&cleanLines(candidate.required_conditions).length===0)missing.push({id:`candidate-${index}.requiredConditions`,label:configuredLabel('candidate.requiredConditions','Need to see')+suffix});
-      if(isUserRequired('candidate.invalidationConditions',requirementOverrides)&&cleanLines(candidate.invalidation_conditions).length===0)missing.push({id:`candidate-${index}.invalidationConditions`,label:configuredLabel('candidate.invalidationConditions','Abandon if')+suffix});
-      if(candidate.price_mode==='RANGE'){if(candidate.price_from==null||!Number.isFinite(candidate.price_from))missing.push({id:`candidate-${index}.priceFrom`,label:`Valid range from${suffix}`});if(candidate.price_to==null||!Number.isFinite(candidate.price_to))missing.push({id:`candidate-${index}.priceTo`,label:`Valid range to${suffix}`});}
-      if(candidate.price_mode==='SINGLE'&&(candidate.reference_price==null||!Number.isFinite(candidate.reference_price)))missing.push({id:`candidate-${index}.price`,label:`Valid price${suffix}`});
+      missing.push(...zoneRequiredIssues(candidate,`candidate-${index}`,requirementOverrides,suffix).map(issue=>({
+        ...issue,
+        label:configuredLabel('candidate.'+issue.id.split('.').pop(),issue.label.replace(suffix,''))+suffix,
+      })));
     });
     if(missing.length){
       // Render the missing fields before scrolling to them; hidden steps cannot be focused.
@@ -795,6 +795,7 @@ export function App(){
     const missingLiveZone:ValidationIssue[]=[
       ...(!liveCandidateReason.trim()?[{id:'liveZone.reason',label:'Reason for adding this zone'}]:[]),
       ...planRevisionEvidenceIssues(requirementOverrides,liveCandidateEvidence),
+      ...zoneRequiredIssues(liveCandidate,'liveCandidate',requirementOverrides),
     ];
     if(blockMissing(missingLiveZone)){setLiveZoneFeedback('Complete all highlighted required fields.');return;}
     liveZoneSavingRef.current=true;setLiveZoneSaving(true);setLiveZoneFeedback('Adding new zone…');
