@@ -218,6 +218,7 @@ export function App(){
   const [decisionSaveFeedback,setDecisionSaveFeedback]=useState('');
   const [decisionSaveUncertain,setDecisionSaveUncertain]=useState(false);
   const [decisionHistoryVerifying,setDecisionHistoryVerifying]=useState(false);
+  const [decisionHistoryChecked,setDecisionHistoryChecked]=useState(false);
   const [lastDecisionNotice,setLastDecisionNotice]=useState('');
   const [quickZoneId,setQuickZoneId]=useState('');
   const [notebookPage,setNotebookPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'>('PLAN');
@@ -853,7 +854,7 @@ export function App(){
 
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
     if(decisionSavingRef.current)return;
-    setDecisionSaveFeedback('');setDecisionSaveUncertain(false);setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
+    setDecisionSaveFeedback('');setDecisionSaveUncertain(false);setDecisionHistoryChecked(false);setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
     if(c.directional_intent==='LONG'||c.directional_intent==='SHORT') setDecisionDirection(c.directional_intent);
     try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
   }
@@ -914,7 +915,7 @@ export function App(){
     }catch(e){
       // A transport error does not prove the durable write failed. Do not encourage
       // a repeat click that could create a second, independent Decision event.
-      setDecisionSaveUncertain(true);
+      setDecisionSaveUncertain(true);setDecisionHistoryChecked(false);
       setDecisionSaveFeedback('Decision save outcome UNKNOWN. Do not retry until checking the saved decision history. '+String(e));
     }
     finally{decisionSavingRef.current=false;setDecisionSaving(false);}
@@ -928,8 +929,10 @@ export function App(){
     try {
       const existing=await localApi.listCandidateDecisions(candidateId);
       setCandidateDecisions(v=>({...v,[candidateId]:existing}));
+      setDecisionHistoryChecked(true);
       setDecisionSaveFeedback('History refreshed. Inspect the saved Decision type, direction, reason and timestamp below. If the attempted Decision already exists, do not retry. If it is absent and you have verified that, you may enable a new attempt.');
     } catch(e) {
+      setDecisionHistoryChecked(false);
       setDecisionSaveFeedback('Could not verify saved Decision history. Retry remains blocked. '+String(e));
     } finally {setDecisionHistoryVerifying(false);}
   }
@@ -1331,8 +1334,8 @@ export function App(){
             {decisionType==='MISSED'&&<div data-validation-id="decision.reason" className={`quickReasons ${invalidClass('decision.reason')}`}><span>Why missed? <FieldHelp id="decision.reason"/></span>{['HESITATION','DID_NOT_NOTICE','TOO_LATE','OPERATIONAL_ISSUE','DISTRACTED','RISK_LIMIT_REACHED','PLATFORM_ISSUE','OTHER'].map(x=><button key={x} className={decisionReason===x?'chip selected':'chip'} onClick={()=>{setDecisionReason(x);clearValidation('decision.reason')}}>{x.replaceAll('_',' ')}</button>)}</div>}
             <div className="formGrid">{(!quickMode||isUserRequired('decision.quality',requirementOverrides)||fieldPlacements['decision.quality']==='QUICK_AND_DETAILED')&&isFieldPresented('decision.quality',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="decision.quality" className={invalidClass('decision.quality')}>{fieldText['decision.quality']?.label?.trim()||'Decision quality'} <small>{requirementLabel('decision.quality',requirementOverrides)}</small>{fieldText['decision.quality']?.help&&<small title={fieldText['decision.quality'].help}>ⓘ</small>} <FieldHelp id="decision.quality" value={decisionQuality}/><select value={decisionQuality} onChange={e=>{setDecisionQuality(e.target.value as any);clearValidation('decision.quality')}}><option value="">Complete later</option>{['A','B','C','INVALID','UNCLEAR'].map(x=><option key={x}>{x}</option>)}</select></label>}{isFieldPresented('decision.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="decision.note" className={invalidClass('decision.note')}>{fieldText['decision.note']?.label?.trim()||'Decision note'}{isUserRequired('decision.note',requirementOverrides)?' (Required)':' (Optional)'}{fieldText['decision.note']?.help&&<small title={fieldText['decision.note'].help}>ⓘ</small>}<textarea value={decisionNote} onChange={e=>{setDecisionNote(e.target.value);clearValidation('decision.note')}} placeholder={isUserRequired('decision.note',requirementOverrides)?'Explain why this decision was made':'Optional: add useful decision context'}/></label>}</div>
             <div className="decisionSnapshot"><span><b>Planned intent</b>{decisionCandidate.directional_intent}</span><span><b>Status</b>{decisionCandidate.current_status}</span><span><b>Sources</b>{decisionCandidate.sources.slice(0,3).join(' · ')||'—'}</span></div>
-            <div className="rowActions"><button disabled={decisionSaving} onClick={()=>setDecisionCandidate(null)}>Cancel</button><button className="primary" disabled={decisionSaving||decisionSaveUncertain} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{decisionSaveUncertain&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" onClick={()=>{setDecisionSaveUncertain(false);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
-            {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary>{candidateDecisions[decisionCandidate.candidate_id].slice(0,6).map(d=><div className="decisionHistory" key={d.decision_id}><time>{timeLabel(d.occurred_at)}</time><b>{d.decision_type}{d.intended_direction?` · ${d.intended_direction}`:''}</b><small>{d.reason_code||d.plan_alignment||'—'}</small>{d.plan_mismatch_reason&&<small>Opposite-plan reason: {d.plan_mismatch_reason}</small>}</div>)}</details>}
+            <div className="rowActions"><button disabled={decisionSaving} onClick={()=>setDecisionCandidate(null)}>Cancel</button><button className="primary" disabled={decisionSaving||decisionSaveUncertain} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{decisionSaveUncertain&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" disabled={!decisionHistoryChecked} onClick={()=>{setDecisionSaveUncertain(false);setDecisionHistoryChecked(false);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
+            {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary>{candidateDecisions[decisionCandidate.candidate_id].slice(0,12).map(d=><div className="decisionHistory" key={d.decision_id}><time title={d.occurred_at}>{d.occurred_at}</time><b>{d.decision_type}{d.intended_direction?` · ${d.intended_direction}`:''}</b><small>{d.reason_code||d.plan_alignment||'—'}</small>{d.plan_mismatch_reason&&<small>Opposite-plan reason: {d.plan_mismatch_reason}</small>}</div>)}</details>}
           </div>}
 
           </div>
