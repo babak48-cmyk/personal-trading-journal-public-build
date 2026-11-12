@@ -777,8 +777,9 @@ export function App(){
   }
 
   function newSession(){
-    setShowAnalysis(false);setShowSafety(false);setShowSettings(false);setShowDraftSetup(false);
     if(draftDirty && !window.confirm('Current draft has unsaved changes. Leave without saving?'))return;
+    if(!confirmDiscardUnsavedTradeCapture('to a new session'))return;
+    setShowAnalysis(false);setShowSafety(false);setShowSettings(false);setShowDraftSetup(false);
     setActive(null);setPlan(null);setTimeline([]);setConsistency(null);
     resetSessionInputState();setDraftDirty(false);setDraftStep(1);
     setMessage('Ready to start a new session.');
