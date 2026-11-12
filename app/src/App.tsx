@@ -1304,7 +1304,6 @@ export function App(){
       exitReason:reviewExitReason,
       exitNote:reviewExitNote,
       reviewNote,
-      mistakeIds:reviewMistakes,
       ruleNote,
       ruleViolationReported,
       emotionAffected,
