@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {hasUnsavedEvidenceDraft,type QuickEvidenceDraft} from './quickEvidenceDraftGuard';
+import {hasUnsavedEvidenceDraft,shouldPromptEvidencePageLeave,type QuickEvidenceDraft} from './quickEvidenceDraftGuard';
 
 const empty:QuickEvidenceDraft={
  selectedIds:[],stances:{},direction:'',price:null,note:'',acknowledgedSaved:false,
@@ -17,6 +17,16 @@ describe('Quick Evidence draft navigation safeguards',()=>{
    expect(hasUnsavedEvidenceDraft({...empty,price:6011.25})).toBe(true);
    expect(hasUnsavedEvidenceDraft({...empty,direction:'NEUTRAL'})).toBe(true);
    expect(hasUnsavedEvidenceDraft({...empty,note:'observed absorption'})).toBe(true);
+ });
+ it('requires an in-app warning for actual observed unsaved Evidence on EVERY page exit',()=>{
+   const observed={...empty,selectedIds:['DELTA_BEHAVIOUR'],note:'Test unsaved evidence'};
+   for(const page of ['PLAN','DECISION','EXECUTION','REVIEW'])
+     expect(shouldPromptEvidencePageLeave('EVIDENCE',page,true,observed)).toBe(true);
+   expect(shouldPromptEvidencePageLeave('EVIDENCE','EVIDENCE',true,observed)).toBe(false);
+   expect(shouldPromptEvidencePageLeave('DECISION','REVIEW',true,observed)).toBe(false);
+   expect(shouldPromptEvidencePageLeave('EVIDENCE','DECISION',false,observed)).toBe(false);
+   expect(shouldPromptEvidencePageLeave('EVIDENCE','DECISION',true,empty)).toBe(false);
+   expect(shouldPromptEvidencePageLeave('EVIDENCE','DECISION',true,{...observed,acknowledgedSaved:true})).toBe(false);
  });
  it('does not represent an acknowledged atomic batch as unsaved',()=>{
    expect(hasUnsavedEvidenceDraft({...empty,selectedIds:['x'],note:'saved',acknowledgedSaved:true})).toBe(false);
