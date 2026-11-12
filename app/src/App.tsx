@@ -9,6 +9,7 @@ import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcome
 import { previewEntryRisk } from './entryRiskPreview';
 import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEvidenceDraft, shouldPromptEvidencePageLeave } from './quickEvidenceDraftGuard';
+import { scopedQuickDraftKey } from './quickDraftIdentity';
 import { hasUnsavedEntryInputs, hasUnsavedManagementInputs, hasUnsavedReviewChanges } from './quickUnsavedCapture';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -1099,7 +1100,7 @@ export function App(){
   }
 
   function decisionDraftKey(candidateId:string,type:string):string{
-    return (active?.session_id??'')+'::'+candidateId+'::'+type;
+    return scopedQuickDraftKey(active?.session_id??'', 'DECISION', candidateId, type);
   }
   function requestCloseDecisionEditor(){
     if(decisionSavingRef.current||decisionSaving){setMessage('Decision save is in progress.');return;}
@@ -1235,7 +1236,7 @@ export function App(){
     } finally {setDecisionHistoryVerifying(false);}
   }
   function entryDraftKey(decisionId:string):string{
-    return (active?.session_id??'')+'::'+decisionId;
+    return scopedQuickDraftKey(active?.session_id??'', 'ENTRY', decisionId);
   }
   function resetPendingEntryEditor(){
     setPendingTradeDecision(null);
