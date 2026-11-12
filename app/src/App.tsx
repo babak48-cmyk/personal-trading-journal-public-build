@@ -8,7 +8,7 @@ import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
 import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
-import { hasUnsavedEvidenceDraft } from './quickEvidenceDraftGuard';
+import { hasUnsavedEvidenceDraft, shouldPromptEvidencePageLeave } from './quickEvidenceDraftGuard';
 import { hasUnsavedEntryInputs, hasUnsavedManagementInputs, hasUnsavedReviewChanges } from './quickUnsavedCapture';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -974,7 +974,10 @@ export function App(){
       if(evidenceSavingRef.current||hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id)){
         setEvidenceFeedback('Finish or verify the Evidence save before switching pages.');return;
       }
-      if(evidenceDraftHasInputs()){
+      if(shouldPromptEvidencePageLeave(notebookPage,page,!!evidenceCandidate,{
+        selectedIds:selectedEvidenceIds,stances:evidenceStances,direction:evidenceDirection,
+        price:evidencePrice,note:evidenceNote,acknowledgedSaved:evidenceSaved,
+      })){
         setPendingEvidencePage(page);
         window.requestAnimationFrame(()=>document.getElementById('evidence-page-navigation-warning')?.scrollIntoView({block:'center',behavior:'smooth'}));
         return;
