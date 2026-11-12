@@ -1394,6 +1394,7 @@ export function App(){
         pendingTradeDecision && unsavedEntryCapture() &&
         !window.confirm('Switching to another saved TRADE decision will discard unsaved entry fields, including a modified quantity. Continue?'))return;
     if(!confirmDiscardUnsavedTradeCapture('to the saved TRADE Decision',false))return;
+    if(!navigateNotebookPage('EXECUTION'))return;
     reviewSelectionRequestRef.current++;
     resetManagementCapture();applyReview(null,null);applyRuleCheck(null);setReviewVerifiedTradeId(null);
     setPendingTradeDecision(decision);
@@ -1421,6 +1422,7 @@ export function App(){
   }
   async function openTradeDetail(t:TradeMetrics){
     if(!confirmDiscardUnsavedTradeCapture('trades / refresh Review',false))return;
+    if(!navigateNotebookPage('EXECUTION'))return;
     resetManagementCapture();
     const request=++reviewSelectionRequestRef.current;
     setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
