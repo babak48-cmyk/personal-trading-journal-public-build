@@ -1,4 +1,5 @@
 name: PTJ isolated DEMO installer (release gate)
+# Rebuild only after confirmed Quick Evidence navigation/shortcut diagnostic fixes; preserve approved icon.
 on:
   workflow_dispatch:
   push:
