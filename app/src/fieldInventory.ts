@@ -222,6 +222,48 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'sessionReview.discipline',
 ] as const;
 
+
+/** Fields whose live form labels/help actually read the saved text preferences.
+ * Restrict editable text settings to verifiably consumed UI controls.
+ * Other inventoried controls remain visible for audit, without fake customization. */
+export const RENDERED_FIELD_TEXT_IDS = [
+  'attachment.caption',
+  'candidate.invalidationConditions',
+  'candidate.label',
+  'candidate.requiredConditions',
+  'candidate.sources',
+  'decision.note',
+  'decision.quality',
+  'evidence.direction',
+  'evidence.note',
+  'evidence.price',
+  'fill.reason',
+  'management.reason',
+  'plan.alternativeScenario',
+  'plan.mainScenario',
+  'plan.preSessionStateIntensity',
+  'planRevision.evidence',
+  'psychology.intensity',
+  'review.decisionQuality',
+  'review.executionQuality',
+  'review.exitNote',
+  'review.exitReason',
+  'review.managementQuality',
+  'review.mistakes',
+  'review.note',
+  'rule.note',
+  'sessionReview.bestDecision',
+  'sessionReview.biggestMistake',
+  'sessionReview.discipline',
+  'sessionReview.marketLearning',
+  'sessionReview.nextImprovement',
+  'sessionReview.overall',
+  'sessionReview.planQuality',
+  'sessionReview.wentPoorly',
+  'sessionReview.wentWell',
+  'trade.plannedTarget',
+] as const;
+
 /** Report stale or duplicated active setting IDs before enabling them in Settings. */
 export function activeVisibilityInventoryIssues():string[] {
   const seen=new Set<string>();
