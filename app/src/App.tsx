@@ -226,6 +226,7 @@ export function App(){
   const [quickMode,setQuickMode]=useState(true);
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
   const [decisionClosePrompt,setDecisionClosePrompt]=useState(false);
+  const [pendingDecisionPage,setPendingDecisionPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'|null>(null);
   const decisionDraftsRef=useRef<Record<string,{
     decisionType:'TRADE'|'NO_TRADE'|'MISSED';direction:ExplicitTradeDirection;reason:string;note:string;
     quality:'A'|'B'|'C'|'INVALID'|'UNCLEAR'|'';mismatchReason:string;
@@ -1010,12 +1011,26 @@ export function App(){
       if(!closeEvidenceEditor())return false;
     }
     if(notebookPage==='DECISION'&&decisionCandidate){
-      if(!confirmCloseDecisionEditor())return false;
+      if(decisionSavingRef.current||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)){
+        setMessage('Finish or verify Decision save before switching pages.');return false;
+      }
+      if(decisionEditorHasUnsavedInput()){
+        setPendingDecisionPage(page);
+        window.requestAnimationFrame(()=>document.getElementById('decision-page-navigation-warning')?.scrollIntoView({block:'center',behavior:'smooth'}));
+        return false;
+      }
       setDecisionCandidate(null);
     }
     setPendingEvidencePage(null);
     goToNotebookPage(page);
     return true;
+  }
+  function continueWithDecisionDraftPreserved(){
+    const next=pendingDecisionPage;
+    if(!next)return;
+    setPendingDecisionPage(null);
+    // Keep editor state in memory; navigation never creates a saved Decision.
+    goToNotebookPage(next);
   }
   function continueWithEvidenceDraftPreserved(){
     const next=pendingEvidencePage;
@@ -1813,6 +1828,7 @@ export function App(){
             <div className="formGrid">{(!quickMode||isUserRequired('decision.quality',requirementOverrides)||fieldPlacements['decision.quality']==='QUICK_AND_DETAILED')&&isFieldPresented('decision.quality',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="decision.quality" className={invalidClass('decision.quality')}>{fieldText['decision.quality']?.label?.trim()||'Decision quality'} <small>{requirementLabel('decision.quality',requirementOverrides)}</small>{fieldText['decision.quality']?.help&&<small title={fieldText['decision.quality'].help}>ⓘ</small>} <FieldHelp id="decision.quality" value={decisionQuality}/><select value={decisionQuality} onChange={e=>{setDecisionQuality(e.target.value as any);clearValidation('decision.quality')}}><option value="">Complete later</option>{['A','B','C','INVALID','UNCLEAR'].map(x=><option key={x}>{x}</option>)}</select></label>}{isFieldPresented('decision.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="decision.note" className={invalidClass('decision.note')}>{fieldText['decision.note']?.label?.trim()||'Decision note'}{isUserRequired('decision.note',requirementOverrides)?' (Required)':' (Optional)'}{fieldText['decision.note']?.help&&<small title={fieldText['decision.note'].help}>ⓘ</small>}<textarea value={decisionNote} onChange={e=>{setDecisionNote(e.target.value);clearValidation('decision.note')}} placeholder={isUserRequired('decision.note',requirementOverrides)?'Explain why this decision was made':'Optional: add useful decision context'}/></label>}</div>
             <div className="decisionSnapshot"><span><b>Planned intent</b>{decisionCandidate.directional_intent}</span><span><b>Status</b>{decisionCandidate.current_status}</span><span><b>Sources</b>{decisionCandidate.sources.slice(0,3).join(' · ')||'—'}</span></div>
             {decisionClosePrompt&&<div className="warningBox" id="decision-unsaved-close-warning" role="alertdialog" aria-label="Unsaved Decision" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Closing without keeping this draft loses your current inputs. Existing saved Decisions will not be changed.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setDecisionClosePrompt(false)}>Keep editing</button><button type="button" onClick={()=>resolveDecisionClose(true)}>Close and keep draft</button><button type="button" onClick={()=>resolveDecisionClose(false)}>Discard draft and close</button></div></div>}
+            {pendingDecisionPage&&<div className="warningBox" id="decision-page-navigation-warning" role="alertdialog" aria-label="Unsaved Decision navigation" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Go to another page without recording a Decision? This draft stays in the editor; return to Decision to continue.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setPendingDecisionPage(null)}>Keep editing</button><button type="button" onClick={continueWithDecisionDraftPreserved}>Continue and keep draft</button></div></div>}
             <div className="rowActions"><button type="button" disabled={decisionSaving} onClick={requestCloseDecisionEditor}>Cancel</button><button className="primary" disabled={decisionSaving||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" disabled={!canAcknowledgeVerifiedHistory(decisionSaveUncertainZoneId,decisionHistoryCheckedZoneId,decisionCandidate.candidate_id)} onClick={()=>{setDecisionSaveUncertainZoneId(null);setDecisionHistoryCheckedZoneId(null);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
             {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary>{candidateDecisions[decisionCandidate.candidate_id].slice(0,12).map(d=><details className="decisionHistory" key={d.decision_id}><summary>{d.occurred_at} · {d.decision_type}{d.intended_direction?' · '+d.intended_direction:''} · {d.reason_code||d.plan_alignment||'—'}</summary><p><b>Decision ID:</b> {d.decision_id}</p><p><b>Recorded reason:</b> {d.reason_code||'Not recorded'}</p><p><b>Decision note:</b> {d.reason_note||'No note recorded'}</p><p><b>Decision quality:</b> {d.decision_quality||'Not recorded'}</p>{d.plan_mismatch_reason&&<p><b>Opposite-plan reason:</b> {d.plan_mismatch_reason}</p>}<small>Read-only saved history; opening details does not edit or duplicate a Decision.</small></details>)}</details>}
           </div>}
