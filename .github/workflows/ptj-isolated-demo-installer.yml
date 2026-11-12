@@ -1,6 +1,11 @@
-name: PTJ isolated DEMO installer (manual only)
+name: PTJ isolated DEMO installer (release gate)
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/review-mistakes-field-manager-2026-11-12
+    paths:
+      - .github/workflows/ptj-isolated-demo-installer.yml
 permissions:
   contents: read
 jobs:
