@@ -19,6 +19,31 @@ pub struct SelectionSnapshot {
 fn invalid(message:&str)->AppError { AppError::Validation(message.into()) }
 fn valid_key(s:&str)->bool { !s.is_empty() && s.len()<=128 && !s.chars().any(char::is_control) }
 
+// Do not append a custom review answer after the corresponding review was finalized.
+// The check runs in the same transaction as the new immutable value event.
+fn ensure_review_writable(conn:&Connection,stage:&str,trade_id:&str)->Result<(),AppError>{
+    if stage=="session-review" {
+        let status:Option<String>=conn.query_row(
+            "SELECT status FROM session_reviews WHERE review_id=?1",
+            [trade_id],|row|row.get(0)
+        ).optional()?;
+        if status.as_deref()==Some("COMPLETED") {
+            return Err(invalid("completed session-review custom fields are locked"));
+        }
+        return Ok(());
+    }
+    if !matches!(stage,"post-trade-review"|"trade") {return Ok(());}
+    let status:Option<String>=conn.query_row(
+        "SELECT status FROM trade_reviews WHERE trade_id=?1",
+        [trade_id],|row|row.get(0)
+    ).optional()?;
+    if status.as_deref()==Some("COMPLETED") {
+        return Err(invalid("completed trade/review custom fields are locked"));
+    }
+    Ok(())
+}
+
+
 /// Creates one immutable event and its complete option snapshots in one transaction.
 /// Owner existence is validated within the same transaction before event insertion.
 pub fn record_select(conn:&mut Connection, input:&RecordSelectInput)->Result<(),AppError> {
@@ -49,6 +74,7 @@ pub fn record_select(conn:&mut Connection, input:&RecordSelectInput)->Result<(),
     if owner_exists.is_none() {
         return Err(invalid("custom-field owner does not exist"));
     }
+    ensure_review_writable(&tx,&input.owner_stage,&input.owner_id)?;
     let mut snapshots=Vec::new();
     for (index,id) in input.option_ids.iter().enumerate() {
         if !valid_key(id) || snapshots.iter().any(|(other,_,_) : &(String,String,i64)|other==id) {
@@ -224,6 +250,52 @@ pub fn edit_custom_field(conn:&mut Connection,field_id:&str,label:&str,help_text
     if changed!=1 {return Err(invalid("unknown custom field"));}
     Ok(())
 }
+/// Atomically move one custom field within its own stage. Reordering changes
+/// presentation metadata only; no event, answer or selection snapshot is edited.
+pub fn move_custom_field(conn:&mut Connection,field_id:&str,direction:i64)->Result<(),AppError>{
+    if !valid_key(field_id)||!matches!(direction,-1|1){return Err(invalid("invalid field move"));}
+    let tx=conn.transaction()?;
+    let stage:String=tx.query_row("SELECT stage FROM custom_field_definitions WHERE field_id=?1",
+        [field_id],|row|row.get(0)).map_err(|_|invalid("unknown custom field"))?;
+    let mut stmt=tx.prepare("SELECT field_id FROM custom_field_definitions WHERE stage=?1 ORDER BY display_order,field_id")?;
+    let mut ids=stmt.query_map([&stage],|row|row.get::<_,String>(0))?
+        .collect::<Result<Vec<_>,_>>()?;
+    drop(stmt);
+    let at=ids.iter().position(|id|id==field_id).ok_or_else(||invalid("custom field not in stage"))?;
+    let dest=at as i64+direction;
+    if dest<0||dest>=ids.len() as i64{return Err(invalid("custom field already at order boundary"));}
+    ids.swap(at,dest as usize);
+    for (order,id) in ids.iter().enumerate(){
+        tx.execute("UPDATE custom_field_definitions SET display_order=?1 WHERE field_id=?2",
+            params![order as i64,id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Atomically reorder options inside one select field, including retired
+/// options. Existing option IDs and immutable historical selection labels stay.
+pub fn move_custom_field_option(conn:&mut Connection,field_id:&str,option_id:&str,direction:i64)->Result<(),AppError>{
+    if !valid_key(field_id)||!valid_key(option_id)||!matches!(direction,-1|1){
+        return Err(invalid("invalid option move"));
+    }
+    let tx=conn.transaction()?;
+    let mut stmt=tx.prepare("SELECT option_id FROM custom_field_options WHERE field_id=?1 ORDER BY display_order,option_id")?;
+    let mut ids=stmt.query_map([field_id],|row|row.get::<_,String>(0))?
+        .collect::<Result<Vec<_>,_>>()?;
+    drop(stmt);
+    let at=ids.iter().position(|id|id==option_id).ok_or_else(||invalid("option does not belong to field"))?;
+    let dest=at as i64+direction;
+    if dest<0||dest>=ids.len() as i64{return Err(invalid("option already at order boundary"));}
+    ids.swap(at,dest as usize);
+    for (order,id) in ids.iter().enumerate(){
+        tx.execute("UPDATE custom_field_options SET display_order=?1 WHERE field_id=?2 AND option_id=?3",
+            params![order as i64,field_id,id])?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 pub fn list_custom_fields(conn:&Connection)->Result<Vec<ManagedField>,AppError>{
     let mut stmt=conn.prepare("SELECT field_id,stage,field_type,label,help_text,is_required,is_active,display_order FROM custom_field_definitions ORDER BY stage,display_order,field_id")?;
     let rows=stmt.query_map([],|r|Ok(ManagedField{
@@ -233,6 +305,48 @@ pub fn list_custom_fields(conn:&Connection)->Result<Vec<ManagedField>,AppError>{
     Ok(rows.collect::<Result<Vec<_>,_>>()?)
 }
 
+
+/// Read-only preflight: never delete an existing custom-field value or snapshot.
+#[derive(Serialize, PartialEq, Debug)]
+pub struct CleanupPreflight {
+    pub field_id: String,
+    pub label: String,
+    pub stage: String,
+    pub option_count: i64,
+    pub event_count: i64,
+    pub snapshot_count: i64,
+    pub eligible_unused_definition: bool,
+}
+pub fn cleanup_preflight(conn:&Connection,field_id:&str)->Result<CleanupPreflight,AppError>{
+    if !valid_key(field_id){return Err(invalid("invalid cleanup field ID"));}
+    let (label,stage):(String,String)=conn.query_row(
+        "SELECT label,stage FROM custom_field_definitions WHERE field_id=?1",
+        [field_id],|r|Ok((r.get(0)?,r.get(1)?))
+    ).map_err(|_|invalid("custom field not found"))?;
+    let option_count:i64=conn.query_row(
+        "SELECT COUNT(*) FROM custom_field_options WHERE field_id=?1",[field_id],|r|r.get(0))?;
+    let event_count:i64=conn.query_row(
+        "SELECT COUNT(*) FROM custom_field_value_events WHERE field_id=?1",[field_id],|r|r.get(0))?;
+    let snapshot_count:i64=conn.query_row(
+        "SELECT COUNT(*) FROM custom_field_selection_snapshots s JOIN custom_field_value_events e ON e.event_id=s.event_id WHERE e.field_id=?1",
+        [field_id],|r|r.get(0))?;
+    Ok(CleanupPreflight{field_id:field_id.to_string(),label,stage,option_count,event_count,snapshot_count,eligible_unused_definition:event_count==0&&snapshot_count==0})
+}
+/// Only unused field definitions may be physically removed. Recorded history is NEVER purged.
+/// Rechecking under a single write transaction prevents a stale preflight from deleting data.
+pub fn cleanup_unused_definition(conn:&mut Connection,field_id:&str,confirmation:&str)->Result<(),AppError>{
+    if confirmation!="DELETE"{return Err(invalid("type DELETE to confirm irreversible field deletion"));}
+    let tx=conn.transaction()?;
+    let report=cleanup_preflight(&tx,field_id)?;
+    if !report.eligible_unused_definition {
+        return Err(invalid("field has saved values: history is protected; use Deactivate. Historical test-data purge is not implemented"));
+    }
+    tx.execute("DELETE FROM custom_field_options WHERE field_id=?1",[field_id])?;
+    let n=tx.execute("DELETE FROM custom_field_definitions WHERE field_id=?1",[field_id])?;
+    if n!=1{return Err(invalid("field deletion did not affect exactly one definition"));}
+    tx.commit()?;
+    Ok(())
+}
 
 #[derive(Deserialize)]
 pub struct TypedValueInput {
@@ -302,6 +416,7 @@ pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(
     let owner_sql=canonical_owner_query(&input.owner_stage).ok_or_else(||invalid("unsupported owner stage"))?;
     let owner:Option<i64>=tx.query_row(owner_sql,[&input.owner_id],|r|r.get(0)).optional()?;
     if owner.is_none(){return Err(invalid("custom-field owner does not exist"));}
+    ensure_review_writable(&tx,&input.owner_stage,&input.owner_id)?;
     let text_value=if kind=="TEXT" {input.text_value.as_deref()} else {None};
     let number_value=if kind=="NUMBER" {input.number_value} else {None};
     let boolean_value=if kind=="BOOLEAN" {input.boolean_value.map(i64::from)} else {None};
@@ -482,5 +597,116 @@ mod tests {
         assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
         let count:i64=c.query_row("SELECT count(*) FROM custom_field_value_events",[],|r|r.get(0)).unwrap();
         assert_eq!(count,1);
+    }
+}
+
+#[cfg(test)]
+mod cleanup_safety_tests {
+    use super::*;
+    fn fixture()->Connection {
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        crate::db::migrate(&c).unwrap();
+        c.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label) VALUES('cleanup-demo','zone','SINGLE_SELECT','Test Zone Context')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_options(option_id,field_id,label) VALUES('support','cleanup-demo','Support')",[]).unwrap();
+        c
+    }
+    #[test]
+    fn unused_field_cleanup_removes_only_definition_and_options() {
+        let mut c=fixture();
+        let p=cleanup_preflight(&c,"cleanup-demo").unwrap();
+        assert_eq!((p.option_count,p.event_count,p.snapshot_count),(1,0,0));
+        assert!(p.eligible_unused_definition);
+        assert!(cleanup_unused_definition(&mut c,"cleanup-demo","wrong").is_err());
+        cleanup_unused_definition(&mut c,"cleanup-demo","DELETE").unwrap();
+        let remaining:i64=c.query_row("SELECT count(*) FROM custom_field_definitions WHERE field_id='cleanup-demo'",[],|r|r.get(0)).unwrap();
+        let options:i64=c.query_row("SELECT count(*) FROM custom_field_options WHERE field_id='cleanup-demo'",[],|r|r.get(0)).unwrap();
+        assert_eq!((remaining,options),(0,0));
+        assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+    #[test]
+    fn saved_value_and_snapshot_block_cleanup_without_side_effects() {
+        let mut c=fixture();
+        c.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type) VALUES('evt','cleanup-demo','zone','zone1','SINGLE_SELECT')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_selection_snapshots(event_id,option_id,label_at_selection,ordinal) VALUES('evt','support','Support',0)",[]).unwrap();
+        let p=cleanup_preflight(&c,"cleanup-demo").unwrap();
+        assert_eq!((p.event_count,p.snapshot_count),(1,1));
+        assert!(!p.eligible_unused_definition);
+        assert!(cleanup_unused_definition(&mut c,"cleanup-demo","DELETE").is_err());
+        for table in ["custom_field_definitions","custom_field_options","custom_field_value_events","custom_field_selection_snapshots"] {
+            let count:i64=c.query_row(&format!("SELECT count(*) FROM {table}"),[],|r|r.get(0)).unwrap();
+            assert_eq!(count,1,"preserve {table}");
+        }
+        assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
+
+#[cfg(test)]
+mod custom_review_lock_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn post_trade_custom_values_are_writable_before_review_completion_but_locked_after() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE trade_reviews (trade_id TEXT PRIMARY KEY,status TEXT NOT NULL);
+          INSERT INTO trade_reviews(trade_id,status) VALUES('trade-a','DRAFT'),('trade-b','COMPLETED');").unwrap();
+        assert!(ensure_review_writable(&db,"post-trade-review","trade-a").is_ok());
+        assert!(ensure_review_writable(&db,"post-trade-review","trade-new").is_ok());
+        assert!(ensure_review_writable(&db,"post-trade-review","trade-b").is_err());
+        assert!(ensure_review_writable(&db,"trade","trade-a").is_ok());
+        assert!(ensure_review_writable(&db,"trade","trade-new").is_ok());
+        assert!(ensure_review_writable(&db,"trade","trade-b").is_err());
+        // Session Review custom events remain writable in draft, but are locked at completion.
+        db.execute_batch("CREATE TABLE session_reviews (review_id TEXT PRIMARY KEY,status TEXT NOT NULL);
+          INSERT INTO session_reviews(review_id,status) VALUES('review-draft','DRAFT'),('review-locked','COMPLETED');").unwrap();
+        assert!(ensure_review_writable(&db,"session-review","review-draft").is_ok());
+        assert!(ensure_review_writable(&db,"session-review","review-locked").is_err());
+        // Existing Session, Pre-market, Zone and Execution semantics are not changed.
+        assert!(ensure_review_writable(&db,"zone","trade-b").is_ok());
+    }
+}
+
+#[cfg(test)]
+mod custom_order_transaction_tests {
+    use super::*;
+
+    #[test]
+    fn field_moves_within_stage_and_preserves_other_stages_and_value_events() {
+        let mut db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE custom_field_definitions(field_id TEXT PRIMARY KEY,stage TEXT,display_order INTEGER);
+            CREATE TABLE custom_field_options(option_id TEXT PRIMARY KEY,field_id TEXT,display_order INTEGER);
+            CREATE TABLE custom_field_value_events(event_id TEXT PRIMARY KEY,field_id TEXT);
+            INSERT INTO custom_field_definitions VALUES('a','session',0),('b','session',1),('c','session-review',0);
+            INSERT INTO custom_field_value_events VALUES('evt','a');
+        ").unwrap();
+        move_custom_field(&mut db,"b",-1).unwrap();
+        let a:i64=db.query_row("SELECT display_order FROM custom_field_definitions WHERE field_id='a'",[],|r|r.get(0)).unwrap();
+        let b:i64=db.query_row("SELECT display_order FROM custom_field_definitions WHERE field_id='b'",[],|r|r.get(0)).unwrap();
+        let c:i64=db.query_row("SELECT display_order FROM custom_field_definitions WHERE field_id='c'",[],|r|r.get(0)).unwrap();
+        assert_eq!((a,b,c),(1,0,0));
+        assert!(move_custom_field(&mut db,"b",-1).is_err());
+        let n:i64=db.query_row("SELECT COUNT(*) FROM custom_field_value_events",[],|r|r.get(0)).unwrap();
+        assert_eq!(n,1);
+    }
+
+    #[test]
+    fn option_moves_are_atomic_and_cannot_cross_field_ownership() {
+        let mut db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE custom_field_options(option_id TEXT PRIMARY KEY,field_id TEXT,display_order INTEGER);
+            CREATE TABLE custom_field_selection_snapshots(event_id TEXT,option_id TEXT,label_at_selection TEXT);
+            INSERT INTO custom_field_options VALUES('a','one',0),('b','one',1),('c','two',0);
+            INSERT INTO custom_field_selection_snapshots VALUES('evt','a','Original historical label');
+        ").unwrap();
+        move_custom_field_option(&mut db,"one","b",-1).unwrap();
+        let positions:Vec<(String,i64)>=db.prepare("SELECT option_id,display_order FROM custom_field_options WHERE field_id='one' ORDER BY display_order").unwrap()
+            .query_map([],|r|Ok((r.get(0)?,r.get(1)?))).unwrap()
+            .collect::<Result<Vec<_>,_>>().unwrap();
+        assert_eq!(positions,vec![("b".into(),0),("a".into(),1)]);
+        assert!(move_custom_field_option(&mut db,"two","a",1).is_err());
+        let label:String=db.query_row("SELECT label_at_selection FROM custom_field_selection_snapshots WHERE event_id='evt'",[],|r|r.get(0)).unwrap();
+        assert_eq!(label,"Original historical label");
     }
 }

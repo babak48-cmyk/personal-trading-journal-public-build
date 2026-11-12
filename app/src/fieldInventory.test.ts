@@ -176,9 +176,10 @@ describe('Field Manager inventory safety', () => {
     expect(isFieldPresented('session.instrument',true,{'session.instrument':false},{},{})).toBe(true);
   });
 
-  it('does not treat unmapped session reflections as formally user-required', () => {
+  it('requires newly connected Session Review answers to remain visible in Quick when user-required', () => {
     for (const id of ['sessionReview.wentWell','sessionReview.nextImprovement']) {
-      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(false);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+      expect(isFieldPresented(id,false,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
       expect(isFieldPresented(id,true,{[id]:false},{},{})).toBe(false);
     }
   });
@@ -225,7 +226,7 @@ describe('All-input connection audit and mandatory presentation invariants', () 
     expect(summary.CONNECTED+summary.VISIBILITY_ONLY+summary.PROTECTED+summary.PENDING).toBe(report.length);
     expect(report.find(x=>x.id==='candidate.trendRelationship')?.status).toBe('PROTECTED');
     expect(report.find(x=>x.id==='review.decisionQuality')?.status).toBe('CONNECTED');
-    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('VISIBILITY_ONLY');
+    expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('CONNECTED');
   });
 
   it('never conceals user-required, system-required or active conditional fields in Quick or Detailed', () => {
@@ -251,5 +252,20 @@ describe('All-input connection audit and mandatory presentation invariants', () 
       {'review.note':'DETAILED_ONLY'},{})).toBe(false);
     expect(isFieldPresented('review.note',false,{'review.note':true},
       {'review.note':'DETAILED_ONLY'},{})).toBe(true);
+  });
+});
+
+
+describe('Evidence field ordering in one persisted preference map', () => {
+  it('retains the default order and applies the saved two-field order', () => {
+    expect(orderFieldIdsWithinSection(['evidence.price','evidence.note'], {}))
+      .toEqual(['evidence.price','evidence.note']);
+    expect(orderFieldIdsWithinSection(['evidence.price','evidence.note'], {'evidence.price':1,'evidence.note':0}))
+      .toEqual(['evidence.note','evidence.price']);
+  });
+  it('never duplicates or discards observed inputs when order is changed', () => {
+    const keys=['evidence.price','evidence.note'];
+    const ordered=orderFieldIdsWithinSection(keys,{'evidence.note':0,'evidence.price':1});
+    expect(new Set(ordered)).toEqual(new Set(keys));
   });
 });

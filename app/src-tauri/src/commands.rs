@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::AppHandle;
-use crate::{diagnostics, attachments, backup, db, error::AppError, exports, paths::AppPaths, repository::{self, AddCandidateStatusInput, AddLiveCandidateInput, AddLiveCandidateResult, AddTradeFillInput, CandidateDecisionDto, ConfirmInitialPlanInput, ConfirmPlanResult, CreateCandidateDecisionInput, CreatePlanRevisionInput, CreateSessionInput, UpdateDraftSessionInput, InstrumentDto, CreateInstrumentInput, UpdateInstrumentInput, ReorderInstrumentsInput, CreateTradeExecutionInput, CurrentPlanDto, EvidenceObservationDto, EvidenceObservationInput, EvidenceTypeDto, LevelSourceTypeDto, CreateLevelSourceInput, UpdateLevelSourceInput, ReorderLevelSourcesInput, MoveStopInput, PlanConsistencyDto, ReviseCandidateInput, SessionSummary, TimelineEventDto, TradeDetailDto, TradeMetricsDto, MistakeTypeDto, SaveTradeReviewInput, TradeReviewDto, RuleDto, SaveTradeRuleCheckInput, TradeRuleCheckDto, SessionReviewSummaryDto, SaveSessionReviewInput, SessionReviewDto, JournalFilterInput, JournalTradeRowDto, AnalyticsSummaryDto, MistakeSummaryDto}, restore, runtime};
+use crate::{diagnostics, attachments, backup, db, error::AppError, exports, paths::AppPaths, repository::{self, AddCandidateStatusInput, AddLiveCandidateInput, AddLiveCandidateResult, AddTradeFillInput, CandidateDecisionDto, ConfirmInitialPlanInput, ConfirmPlanResult, CreateCandidateDecisionInput, CreatePlanRevisionInput, CreateSessionInput, UpdateDraftSessionInput, InstrumentDto, CreateInstrumentInput, UpdateInstrumentInput, ReorderInstrumentsInput, CreateTradeExecutionInput, CurrentPlanDto, EvidenceObservationDto, EvidenceObservationInput, EvidenceTypeDto, LevelSourceTypeDto, CreateLevelSourceInput, UpdateLevelSourceInput, ReorderLevelSourcesInput, MoveStopInput, PlanConsistencyDto, ReviseCandidateInput, SessionSummary, TimelineEventDto, TradeDetailDto, TradeMetricsDto, MistakeTypeDto, SaveTradeReviewInput, TradeReviewDto, RuleDto, SaveTradeRuleCheckInput, TradeRuleCheckDto, SessionReviewSummaryDto, SaveSessionReviewInput, SessionReviewDto, JournalFilterInput, JournalTradeRowDto, AnalyticsSummaryDto, MistakeSummaryDto, DecisionOnlyAnalyticsDto, DecisionReasonAnalyticsDto}, restore, runtime};
 
 /// Gate 3 read-only discovery. Never opens or migrates an existing journal for writing.
 fn open_custom_fields_readonly(app:&AppHandle)->Result<rusqlite::Connection,AppError>{
@@ -46,6 +46,17 @@ pub fn edit_custom_field_definition(app:AppHandle,field_id:String,label:String,h
     crate::custom_fields::edit_custom_field(&mut conn,&field_id,&label,&help_text,required,active,order)
 }
 #[tauri::command]
+pub fn move_custom_field(app:AppHandle,field_id:String,direction:i64)->Result<(),AppError>{
+    let mut conn=open_custom_fields_write(&app)?;
+    crate::custom_fields::move_custom_field(&mut conn,&field_id,direction)
+}
+#[tauri::command]
+pub fn move_custom_field_option(app:AppHandle,field_id:String,option_id:String,direction:i64)->Result<(),AppError>{
+    let mut conn=open_custom_fields_write(&app)?;
+    crate::custom_fields::move_custom_field_option(&mut conn,&field_id,&option_id,direction)
+}
+
+#[tauri::command]
 pub fn create_custom_field_option(app:AppHandle,input:crate::custom_fields::OptionDefinitionInput)->Result<(),AppError>{
     let mut conn=open_custom_fields_write(&app)?;
     crate::custom_fields::create_option(&mut conn,&input)
@@ -54,6 +65,27 @@ pub fn create_custom_field_option(app:AppHandle,input:crate::custom_fields::Opti
 pub fn edit_custom_field_option(app:AppHandle,field_id:String,option_id:String,label:String,active:bool,order:i64)->Result<(),AppError>{
     let mut conn=open_custom_fields_write(&app)?;
     crate::custom_fields::edit_option(&mut conn,&field_id,&option_id,&label,active,order)
+}
+
+#[tauri::command]
+pub fn custom_field_cleanup_preflight(app:AppHandle,field_id:String)->Result<crate::custom_fields::CleanupPreflight,AppError>{
+    let conn=open_custom_fields_readonly(&app)?;
+    crate::custom_fields::cleanup_preflight(&conn,&field_id)
+}
+#[tauri::command]
+pub fn cleanup_unused_custom_field(app:AppHandle,field_id:String,confirmation:String)->Result<String,AppError>{
+    if confirmation!="DELETE" {return Err(AppError::Validation("explicit DELETE confirmation required".into()));}
+    // Physical cleanup is restricted to the isolated test profile. Production remains append-only.
+    let paths=AppPaths::from_app(&app)?;
+    if paths.root.file_name().and_then(|s|s.to_str())!=Some("com.personaltradingjournal.desktop.demo"){
+        return Err(AppError::Validation("physical custom-field cleanup is restricted to the isolated DEMO profile".into()));
+    }
+    // A fresh, validated safety backup is required before the transaction.
+    let backup_path=backup::create_backup(&paths)?;
+    restore::validate_backup(&backup_path)?;
+    let mut conn=open_custom_fields_write(&app)?;
+    crate::custom_fields::cleanup_unused_definition(&mut conn,&field_id,&confirmation)?;
+    Ok(backup_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -260,6 +292,7 @@ pub fn save_appearance_preferences(app: AppHandle, json: String) -> Result<(), A
     valid("fontSize", &["COMPACT", "DEFAULT", "LARGE"])?;
     valid("fontFamily", &["SYSTEM", "SEGOE", "SERIF"])?;
     valid("backgroundTone", &["NEUTRAL", "COOL", "WARM"])?;
+    valid("accent", &["DEFAULT", "BLUE", "TEAL", "PURPLE", "AMBER"])?;
 
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
@@ -601,6 +634,20 @@ pub fn list_journal_trades(app: AppHandle, filter: JournalFilterInput) -> Result
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
     repository::list_journal_trades(&conn, filter)
+}
+
+#[tauri::command]
+pub fn list_decision_only_analytics(app: AppHandle, filter: JournalFilterInput) -> Result<Vec<DecisionOnlyAnalyticsDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::list_decision_only_analytics(&conn,filter)
+}
+
+#[tauri::command]
+pub fn list_decision_reason_analytics(app: AppHandle, filter: JournalFilterInput) -> Result<Vec<DecisionReasonAnalyticsDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::list_decision_reason_analytics(&conn,filter)
 }
 
 #[tauri::command]

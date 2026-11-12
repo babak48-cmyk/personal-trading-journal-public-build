@@ -297,3 +297,170 @@
 .journeyJump{grid-column:1/-1;margin-top:.35rem;padding:.35rem .4rem;font-size:.72rem;justify-self:stretch;cursor:pointer}
 .journeyJump:focus-visible{outline:2px solid var(--text);outline-offset:2px}
 #journal-current-plan,#journal-session-trades,#journal-session-review{scroll-margin-top:1rem}
+
+
+/* PTJ global button interaction feedback: presentation only, no action/DB changes.
+   Pressed means the pointer/key press registered; it does NOT claim a save succeeded. */
+.appShell button:not(:disabled){
+  box-shadow:0 2px 0 rgba(24,32,42,.18);
+  transition:transform 90ms ease,box-shadow 90ms ease,filter 90ms ease;
+}
+.appShell button:not(:disabled):active{
+  transform:translateY(2px);
+  box-shadow:0 0 0 rgba(24,32,42,0);
+  filter:brightness(.94);
+}
+.appShell button:focus-visible{
+  outline:2px solid var(--text, #18202a);
+  outline-offset:3px;
+}
+.appShell button:disabled{
+  cursor:not-allowed;
+  opacity:.65;
+  box-shadow:none;
+}
+.appShell button[aria-busy="true"]{
+  cursor:progress;
+  box-shadow:none;
+}
+@media (prefers-reduced-motion:reduce){
+  .appShell button{transition:none !important}
+}
+
+/* One navigation surface for existing required-field validation across all stages. */
+.requiredNavigator{margin-block:.75rem;border:1px solid rgba(198,40,40,.38)}
+.requiredNavigator .panelTitle{align-items:center}
+.requiredNavigator .requiredJump{
+  border:1px solid #b3261e;
+  border-radius:8px;
+  color:inherit;
+  background:rgba(198,40,40,.07);
+  text-align:left;
+  font-weight:650;
+  max-width:100%;
+  white-space:normal;
+}
+.requiredNavigator .requiredJump:focus-visible{outline:3px solid #b3261e;outline-offset:3px}
+.appShell[data-theme="dark"] .requiredNavigator .requiredJump{border-color:#ff8a80;background:rgba(255,138,128,.11)}
+
+
+/* Optional v1 appearance accent palette. Default has no overrides: legacy look unchanged.
+   Highlights are interactive-only; risk, trade-direction and validation colors stay semantic. */
+.appShell[data-accent="blue"]{--user-accent:#2457aa;--user-accent-ink:#fff}
+.appShell[data-accent="teal"]{--user-accent:#116b64;--user-accent-ink:#fff}
+.appShell[data-accent="purple"]{--user-accent:#6d42a5;--user-accent-ink:#fff}
+.appShell[data-accent="amber"]{--user-accent:#8b5600;--user-accent-ink:#fff}
+.appShell[data-theme="dark"][data-accent="blue"]{--user-accent:#88adf4;--user-accent-ink:#111b29}
+.appShell[data-theme="dark"][data-accent="teal"]{--user-accent:#79d7c7;--user-accent-ink:#102622}
+.appShell[data-theme="dark"][data-accent="purple"]{--user-accent:#c7a9f7;--user-accent-ink:#231731}
+.appShell[data-theme="dark"][data-accent="amber"]{--user-accent:#efc875;--user-accent-ink:#2a1b09}
+.appShell:not([data-accent="default"]) .primary,
+.appShell:not([data-accent="default"]) .activeMode,
+.appShell:not([data-accent="default"]) .selectedDecision{
+  background:var(--user-accent);color:var(--user-accent-ink);border-color:var(--user-accent);
+}
+.appShell:not([data-accent="default"]) .selectedButton{
+  outline-color:var(--user-accent);
+}
+.appShell:not([data-accent="default"]) :is(button,input,select,textarea):focus-visible{
+  outline:2px solid var(--user-accent);
+  outline-offset:2px;
+}
+
+
+/* PTJ workflow field relationships: functional orientation, not a decorative global palette.
+   Stable lifecycle families share their background and left rule even when fields are
+   nonadjacent or reordered by Field Manager. Colors never denote completed/confirmed. */
+.appShell {
+  --family-plan:#eef5fd;--family-plan-rule:#4979aa;
+  --family-zone:#eaf7f2;--family-zone-rule:#38846d;
+  --family-evidence:#f3f0fc;--family-evidence-rule:#8065ad;
+  --family-decision:#fff5e8;--family-decision-rule:#a97536;
+  --family-execution:#edf4fa;--family-execution-rule:#537e9c;
+  --family-review:#f7f0f5;--family-review-rule:#966786;
+  --family-session:#f0f3f6;--family-session-rule:#718497;
+}
+.appShell[data-theme="dark"] {
+  --family-plan:#223448;--family-plan-rule:#86afd6;
+  --family-zone:#203a31;--family-zone-rule:#83c9ac;
+  --family-evidence:#312b43;--family-evidence-rule:#b3a2e2;
+  --family-decision:#423321;--family-decision-rule:#dfb276;
+  --family-execution:#243847;--family-execution-rule:#99c0dd;
+  --family-review:#3d2c39;--family-review-rule:#d4a5c3;
+  --family-session:#29333d;--family-session-rule:#a1b0c2;
+}
+/* Every identified input has a boundary. The same family color connects related
+   values without implying the recorded business lifecycle is complete. */
+.appShell label[data-validation-id]:not(.validationFieldError),
+.appShell .formGrid > label:not([data-validation-id]),
+.appShell details[data-field-group] > .requirementGroup:not(.validationFieldError) {
+  border:1px solid var(--border);
+  border-inline-start:4px solid var(--field-family-rule,var(--family-session-rule));
+  border-radius:.65rem;
+  padding:.65rem .75rem;
+  background:var(--field-family-bg,var(--family-session));
+  min-width:0;
+}
+.appShell :is(label[data-validation-id^="plan."],label[data-validation-id^="planRevision."]){
+  --field-family-bg:var(--family-plan);--field-family-rule:var(--family-plan-rule);
+}
+.appShell :is(label[data-validation-id^="candidate"],label[data-validation-id^="zone"],label[data-validation-id^="liveZone."]){
+  --field-family-bg:var(--family-zone);--field-family-rule:var(--family-zone-rule);
+}
+.appShell label[data-validation-id^="evidence."]{
+  --field-family-bg:var(--family-evidence);--field-family-rule:var(--family-evidence-rule);
+}
+.appShell label[data-validation-id^="decision."]{
+  --field-family-bg:var(--family-decision);--field-family-rule:var(--family-decision-rule);
+}
+.appShell :is(label[data-validation-id^="trade."],label[data-validation-id^="fill."],label[data-validation-id^="management."]){
+  --field-family-bg:var(--family-execution);--field-family-rule:var(--family-execution-rule);
+}
+.appShell :is(label[data-validation-id^="review."],label[data-validation-id^="rule."],label[data-validation-id^="psychology."],label[data-validation-id^="sessionReview."]){
+  --field-family-bg:var(--family-review);--field-family-rule:var(--family-review-rule);
+}
+/* Custom fields use their *canonical owner stage*, never a guessed position.
+   Keep one consistent visual identity for candidate/zone and for review stages. */
+.appShell details[data-field-group="premarket-plan"]{--field-family-bg:var(--family-plan);--field-family-rule:var(--family-plan-rule)}
+.appShell details[data-field-group="candidate"],
+.appShell details[data-field-group="zone"]{--field-family-bg:var(--family-zone);--field-family-rule:var(--family-zone-rule)}
+.appShell details[data-field-group="execution"],
+.appShell details[data-field-group="trade"]{--field-family-bg:var(--family-execution);--field-family-rule:var(--family-execution-rule)}
+.appShell details[data-field-group="post-trade-review"],
+.appShell details[data-field-group="session-review"]{--field-family-bg:var(--family-review);--field-family-rule:var(--family-review-rule)}
+.appShell details[data-field-group="session"]{--field-family-bg:var(--family-session);--field-family-rule:var(--family-session-rule)}
+.appShell details[data-field-group]{
+  border-inline-start:4px solid var(--field-family-rule,var(--family-session-rule));
+  background:var(--field-family-bg,var(--family-session));
+}
+.appShell details[data-field-group] > .requirementGroup{margin-block:.5rem;}
+.appShell details[data-field-group] > .requirementGroup.validationFieldError{border:2px solid #c62828 !important;background:rgba(198,40,40,.08) !important;}
+.appShell[data-theme="dark"] details[data-field-group] > .requirementGroup.validationFieldError{border-color:#ef5350 !important;background:rgba(229,57,53,.12) !important;}
+.appShell label[data-validation-id]:focus-within:not(.validationFieldError),
+.appShell .formGrid > label:focus-within:not(.validationFieldError){
+  box-shadow:0 0 0 2px var(--field-family-rule,var(--family-session-rule));
+}
+/* Existing required/error red remains the strongest signal. */
+.appShell label[data-validation-id].validationFieldError{
+  background:rgba(198,40,40,.08) !important;
+  border-color:#c62828 !important;
+}
+.appShell[data-theme="dark"] label[data-validation-id].validationFieldError{
+  background:rgba(229,57,53,.12) !important;
+  border-color:#ef5350 !important;
+}
+@media (prefers-contrast:more){
+ .appShell label[data-validation-id],.appShell .formGrid > label{
+   border-width:2px;
+   border-inline-start-width:5px;
+ }
+}
+
+/* Weekly learning is a read-only analytics aid; keep copy text selectable. */
+.appShell .weeklyLearningCopy{display:flex;flex-direction:column;gap:.35rem;font-weight:600;font-size:.84rem;margin-top:.8rem}
+.appShell .weeklyLearningCopy textarea{display:block;width:100%;min-height:11rem;padding:.8rem;border:1px solid var(--border);border-radius:.65rem;background:var(--surface-soft);color:var(--text);resize:vertical;white-space:pre-wrap;font:inherit;line-height:1.5}
+
+/* Read-only weekly breakdown panels remain legible without implying a profitable signal. */
+.appShell .weeklyBreakdown{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.65rem;margin:.7rem 0}
+.appShell .weeklyBreakdownRow{display:flex;flex-direction:column;gap:.35rem;padding:.75rem;border:1px solid var(--border);border-inline-start:4px solid var(--family-review-rule,var(--border));border-radius:.55rem;background:var(--surface-soft);color:var(--text);font-size:.84rem}
+.appShell .weeklyBreakdownRow small{color:var(--text-muted);line-height:1.45}

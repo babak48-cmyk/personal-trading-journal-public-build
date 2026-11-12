@@ -307,16 +307,45 @@ pub fn ensure_default_workspace(conn: &Connection) -> Result<String, AppError> {
     Ok(workspace_id)
 }
 
+// Built-in catalog only. A symbol is inserted at most once; existing edits,
+// user-defined symbols, disabled instruments, and historical Session snapshots
+// are never rewritten. For an existing installation new presets append after
+// the trader's current instrument ordering, rather than renumbering it.
+const DEFAULT_INSTRUMENT_PROFILES: &[(&str,&str,&str,f64,f64,&str,&str)] = &[
+    ("instrument-ES","ES","E-mini S&P 500 Futures",0.25,50.0,"USD","FUTURES"),
+    ("instrument-GC","GC","Gold Futures (COMEX)",0.10,100.0,"USD","FUTURES"),
+    ("instrument-NQ","NQ","E-mini Nasdaq-100 Futures",0.25,20.0,"USD","FUTURES"),
+    ("instrument-RTY","RTY","E-mini Russell 2000 Futures",0.10,50.0,"USD","FUTURES"),
+    ("instrument-YM","YM","E-mini Dow Jones Futures",1.0,5.0,"USD","FUTURES"),
+    ("instrument-SI","SI","Silver Futures (COMEX, 5,000 oz)",0.005,5000.0,"USD","FUTURES"),
+    ("instrument-CL","CL","WTI Crude Oil Futures (NYMEX, 1,000 bbl)",0.01,1000.0,"USD","FUTURES"),
+    ("instrument-AAPL","AAPL","Apple Inc. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-MSFT","MSFT","Microsoft Corp. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-NVDA","NVDA","NVIDIA Corp. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-AMZN","AMZN","Amazon.com Inc. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-GOOGL","GOOGL","Alphabet Inc. Class A — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-META","META","Meta Platforms Inc. — US stock",0.01,1.0,"USD","STOCK"),
+    ("instrument-TSLA","TSLA","Tesla Inc. — US stock",0.01,1.0,"USD","STOCK"),
+];
+
 fn seed_default_instruments(conn: &Connection, workspace_id: &str) -> Result<(), AppError> {
-    let items = [
-        ("instrument-ES","ES","E-mini S&P 500",0.25,50.0,"USD","FUTURES",1_i64),
-        ("instrument-GC","GC","Gold Futures",0.10,100.0,"USD","FUTURES",2_i64),
-    ];
-    for (id,symbol,name,tick,point,currency,market_type,order) in items {
-        conn.execute(
-            "INSERT OR IGNORE INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES(?1,?2,?3,?4,?5,?6,?7,1,?8,?9,0)",
-            params![id,workspace_id,symbol,name,tick,point,currency,market_type,order],
+    // This is additive reference data, not a schema migration. The previous
+    // defaults and every user-created instrument keep their original identity.
+    let mut next_order:i64=conn.query_row(
+        "SELECT COALESCE(MAX(display_order),0)+1 FROM instruments WHERE workspace_id=?1",
+        [workspace_id],|row|row.get(0)
+    )?;
+    for &(id,symbol,name,tick,point,currency,market_type) in DEFAULT_INSTRUMENT_PROFILES {
+        let exists:bool=conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM instruments WHERE workspace_id=?1 AND (instrument_id=?2 OR symbol=?3))",
+            params![workspace_id,id,symbol],|row|row.get(0)
         )?;
+        if exists {continue;}
+        let created=conn.execute(
+            "INSERT OR IGNORE INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES(?1,?2,?3,?4,?5,?6,?7,1,?8,?9,0)",
+            params![id,workspace_id,symbol,name,tick,point,currency,market_type,next_order],
+        )?;
+        if created==1 {next_order+=1;}
     }
     Ok(())
 }
@@ -1075,6 +1104,24 @@ fn price_tick_aligned(price: f64, tick_size: f64) -> bool {
     (units - units.round()).abs() <= 1e-8
 }
 
+fn validate_execution_quantity(quantity: f64) -> Result<(), AppError> {
+    if !quantity.is_finite() || quantity <= 0.0 || quantity.fract() != 0.0 {
+        return Err(AppError::Validation("fill quantity must be a finite positive whole number".into()));
+    }
+    Ok(())
+}
+
+fn validate_execution_costs(commission: Option<f64>, fees: Option<f64>) -> Result<(), AppError> {
+    for (name,value) in [("commission",commission),("fees",fees)] {
+        if let Some(amount)=value {
+            if !amount.is_finite() || amount<0.0 {
+                return Err(AppError::Validation(format!("{name} must be a finite non-negative total per fill")));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_order_type(order_type: &Option<String>) -> Result<(), AppError> {
     if let Some(v) = order_type {
         if !matches!(v.as_str(), "MARKET"|"LIMIT"|"STOP"|"OTHER") {
@@ -1091,6 +1138,87 @@ fn instrument_spec_for_session(conn: &Connection, session_id: &str) -> Result<(f
     )?)
 }
 
+
+#[derive(Debug, Clone, Default)]
+struct ExecutionLedger {
+    entry_qty: f64,
+    exit_qty: f64,
+    open_qty: f64,
+    open_average_entry: Option<f64>,
+    last_average_entry: Option<f64>,
+    gross_realized: Option<f64>,
+    costs: f64,
+    unknown_cost_fields: usize,
+    fill_count: i64,
+}
+
+/// Chronological moving-average cost basis. Exit prices are evaluated using the
+/// cost basis that existed at the time of that exit; future entries must not
+/// retrospectively change realized P&L. Does not modify stored execution events.
+fn execution_ledger(events: &[(String,f64,f64,f64,f64)],direction:&str,point_value:f64)
+    -> Result<ExecutionLedger,AppError>
+{
+    if !matches!(direction,"LONG"|"SHORT") || !point_value.is_finite() || point_value<=0.0 {
+        return Err(AppError::Validation("invalid direction or instrument point value".into()));
+    }
+    let sign=if direction=="LONG"{1.0}else{-1.0};
+    let mut state=ExecutionLedger::default();
+    let mut avg=0.0_f64;
+    let mut gross=0.0_f64;
+    for (action,price,quantity,commission,fees) in events {
+        if !price.is_finite() || !quantity.is_finite() || *quantity<=0.0 ||
+           !commission.is_finite() || !fees.is_finite() {
+            return Err(AppError::Validation("invalid historical execution event; no derived P&L calculated".into()));
+        }
+        state.fill_count+=1;
+        state.costs+=commission+fees;
+        if action=="ENTRY" {
+            let next_qty=state.open_qty+quantity;
+            avg=(avg*state.open_qty+price*quantity)/next_qty;
+            state.open_qty=next_qty;
+            state.entry_qty+=quantity;
+            state.last_average_entry=Some(avg);
+        } else if action=="EXIT" {
+            if *quantity>state.open_qty+1e-9 {
+                return Err(AppError::Validation("historical exit exceeds quantity open".into()));
+            }
+            gross+=(price-avg)*sign*quantity*point_value;
+            state.open_qty=(state.open_qty-quantity).max(0.0);
+            state.exit_qty+=quantity;
+            state.gross_realized=Some(gross);
+            if state.open_qty<=1e-9 {
+                state.open_qty=0.0;
+                avg=0.0;
+            }
+        } else {
+            return Err(AppError::Validation("unknown historical fill action".into()));
+        }
+    }
+    state.open_average_entry=if state.open_qty>0.0{Some(avg)}else{None};
+    Ok(state)
+}
+
+fn trade_execution_ledger(conn:&Connection,trade_id:&str,direction:&str,point_value:f64)
+    -> Result<ExecutionLedger,AppError>
+{
+    // Keep NULL distinct from confirmed zero. Old/manual/imported execution rows
+    // with unknown charges must not appear as cost-accurate net P&L or R.
+    let mut stmt=conn.prepare("SELECT action,price,quantity,commission,fees FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
+    let rows=stmt.query_map([trade_id],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,
+        r.get::<_,Option<f64>>(3)?,r.get::<_,Option<f64>>(4)?
+    )))?;
+    let persisted=rows.collect::<Result<Vec<_>,_>>()?;
+    let unknown_cost_fields=persisted.iter()
+        .map(|(_,_,_,commission,fees)|usize::from(commission.is_none())+usize::from(fees.is_none()))
+        .sum();
+    let events=persisted.into_iter().map(|(action,price,quantity,commission,fees)|
+        (action,price,quantity,commission.unwrap_or(0.0),fees.unwrap_or(0.0))
+    ).collect::<Vec<_>>();
+    let mut ledger=execution_ledger(&events,direction,point_value)?;
+    ledger.unknown_cost_fields=unknown_cost_fields;
+    Ok(ledger)
+}
 fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,AppError> {
     let (session_id,candidate_id,direction,status):(String,Option<String>,String,String)=conn.query_row(
         "SELECT session_id,candidate_id,direction,status FROM trades WHERE trade_id=?1",
@@ -1098,14 +1226,9 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
     )?;
     let (_tick_size,point_value)=instrument_spec_for_session(conn,&session_id)?;
 
-    let mut stmt=conn.prepare("SELECT action,price,quantity,COALESCE(commission,0),COALESCE(fees,0) FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
-    let rows=stmt.query_map([trade_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,r.get::<_,f64>(3)?,r.get::<_,f64>(4)?)))?;
-    let mut entries:Vec<(f64,f64)>=Vec::new(); let mut exits:Vec<(f64,f64)>=Vec::new(); let mut costs=0.0; let mut fill_count=0_i64;
-    for row in rows { let (action,price,qty,comm,fees)=row?; fill_count+=1; costs += comm + fees; if action=="ENTRY" {entries.push((price,qty));} else {exits.push((price,qty));} }
-    let entry_qty: f64=entries.iter().map(|x|x.1).sum(); let exit_qty:f64=exits.iter().map(|x|x.1).sum();
-    let avg_entry=if entry_qty>0.0 {Some(entries.iter().map(|(p,q)|p*q).sum::<f64>()/entry_qty)} else {None};
-    let gross=if let Some(avg)=avg_entry { if exit_qty>0.0 { let sign=if direction=="LONG"{1.0}else{-1.0}; Some(exits.iter().map(|(p,q)|(p-avg)*sign*q*point_value).sum()) } else {None} } else {None};
-    let net=gross.map(|g|g-costs);
+    let state=trade_execution_ledger(conn,trade_id,&direction,point_value)?;
+    let gross=state.gross_realized;
+    let net=if state.unknown_cost_fields==0 {gross.map(|g|g-state.costs)} else {None};
     let initial_risk:Option<f64>=conn.query_row(
         "SELECT risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
         [trade_id], |r| r.get(0)
@@ -1115,11 +1238,12 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
         [trade_id], |r| r.get(0)
     ).optional()?;
     let rr=match(net,initial_risk){(Some(n),Some(r)) if r>0.0=>Some(n/r),_=>None};
-    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,direction,status,average_entry:avg_entry,total_entry_quantity:entry_qty,total_exit_quantity:exit_qty,open_quantity:(entry_qty-exit_qty).max(0.0),latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count})
+    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,direction,status,average_entry:state.open_average_entry.or(state.last_average_entry),total_entry_quantity:state.entry_qty,total_exit_quantity:state.exit_qty,open_quantity:state.open_qty,latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count:state.fill_count})
 }
 
 pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionInput)->Result<TradeDetailDto,AppError>{
-    if input.quantity<=0.0 {return Err(AppError::Validation("quantity must be greater than zero".into()));}
+    validate_execution_quantity(input.quantity)?;
+    validate_execution_costs(input.commission,input.fees)?;
     validate_order_type(&input.order_type)?;
     let tx=conn.transaction()?;
     let (session_id,candidate_id,decision_type,direction):(String,Option<String>,String,Option<String>)=tx.query_row(
@@ -1132,6 +1256,9 @@ pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionIn
     if existing.is_some(){return Err(AppError::Validation("this decision already has a trade".into()));}
     let (tick_size,point_value)=instrument_spec_for_session(&tx,&session_id)?;
     if !price_tick_aligned(input.entry_price,tick_size) || !price_tick_aligned(input.stop_price,tick_size) {return Err(AppError::Validation(format!("entry and stop must align to tick size {tick_size}")));}
+    if let Some(target)=input.planned_target_price {
+        if !price_tick_aligned(target,tick_size) {return Err(AppError::Validation(format!("planned target must align to tick size {tick_size}")));}
+    }
     if direction=="LONG" && input.stop_price>=input.entry_price {return Err(AppError::Validation("for a LONG trade, stop must be below entry".into()));}
     if direction=="SHORT" && input.stop_price<=input.entry_price {return Err(AppError::Validation("for a SHORT trade, stop must be above entry".into()));}
     let now=Utc::now().to_rfc3339(); let trade_id=Uuid::new_v4().to_string(); let fill_id=Uuid::new_v4().to_string(); let risk_id=Uuid::new_v4().to_string();
@@ -1148,7 +1275,8 @@ pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionIn
 }
 
 pub fn add_trade_fill(conn:&mut Connection,input:AddTradeFillInput)->Result<TradeDetailDto,AppError>{
-    if input.quantity<=0.0{return Err(AppError::Validation("quantity must be greater than zero".into()));}
+    validate_execution_quantity(input.quantity)?;
+    validate_execution_costs(input.commission,input.fees)?;
     if !matches!(input.action.as_str(),"ENTRY"|"EXIT"){return Err(AppError::Validation("action must be ENTRY or EXIT".into()));}
     validate_order_type(&input.order_type)?;
     let tx=conn.transaction()?;
@@ -1167,9 +1295,11 @@ pub fn add_trade_fill(conn:&mut Connection,input:AddTradeFillInput)->Result<Trad
     if input.action=="ENTRY" {
         let latest_stop:Option<f64>=tx.query_row("SELECT stop_price FROM risk_snapshots WHERE trade_id=?1 AND stop_price IS NOT NULL ORDER BY occurred_at DESC,rowid DESC LIMIT 1",[&input.trade_id],|r|r.get(0)).optional()?;
         if let Some(stop)=latest_stop {
-            let avg_entry:f64=tx.query_row("SELECT SUM(price*quantity)/SUM(quantity) FROM execution_fills WHERE trade_id=?1 AND action='ENTRY'",[&input.trade_id],|r|r.get(0))?;
-            let rid=Uuid::new_v4().to_string(); let risk=(avg_entry-stop).abs()*point_value*new_entry;
-            tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,change_reason,provenance) VALUES(?1,?2,?3,'MODIFIED',?4,?5,?6,'Position size changed','NATIVE')",params![rid,input.trade_id,now,stop,new_entry,risk])?;
+            let ledger=trade_execution_ledger(&tx,&input.trade_id,&direction,point_value)?;
+            let avg_entry=ledger.open_average_entry.ok_or_else(||AppError::Validation("no open position for risk snapshot".into()))?;
+            let rid=Uuid::new_v4().to_string();
+            let risk=(avg_entry-stop).abs()*point_value*ledger.open_qty;
+            tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,change_reason,provenance) VALUES(?1,?2,?3,'MODIFIED',?4,?5,?6,'Position size changed','NATIVE')",params![rid,input.trade_id,now,stop,ledger.open_qty,risk])?;
         }
     }
     tx.commit()?; get_trade_detail(conn,&input.trade_id)
@@ -1180,10 +1310,13 @@ pub fn move_trade_stop(conn:&mut Connection,input:MoveStopInput)->Result<TradeDe
     let (session_id,direction,status):(String,String,String)=tx.query_row("SELECT session_id,direction,status FROM trades WHERE trade_id=?1",[&input.trade_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
     if matches!(status.as_str(),"CLOSED"|"CANCELLED"){return Err(AppError::Validation("cannot move stop on a closed/cancelled trade".into()));}
     let (tick_size,point_value)=instrument_spec_for_session(&tx,&session_id)?; if !price_tick_aligned(input.stop_price,tick_size){return Err(AppError::Validation(format!("stop must align to tick size {tick_size}")));}
-    let (entry_qty,exit_qty,avg_entry):(f64,f64,f64)=tx.query_row("SELECT COALESCE(SUM(CASE WHEN action='ENTRY' THEN quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN action='EXIT' THEN quantity ELSE 0 END),0),COALESCE(SUM(CASE WHEN action='ENTRY' THEN price*quantity ELSE 0 END)/NULLIF(SUM(CASE WHEN action='ENTRY' THEN quantity ELSE 0 END),0),0) FROM execution_fills WHERE trade_id=?1",[&input.trade_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-    if direction=="LONG" && input.stop_price>=avg_entry { /* BE/profit stops are valid; no rejection */ }
-    if direction=="SHORT" && input.stop_price<=avg_entry { /* BE/profit stops are valid; no rejection */ }
-    let open=(entry_qty-exit_qty).max(0.0); let risk=(avg_entry-input.stop_price).abs()*point_value*open; let now=Utc::now().to_rfc3339(); let id=Uuid::new_v4().to_string();
+    let ledger=trade_execution_ledger(&tx,&input.trade_id,&direction,point_value)?;
+    let avg_entry=ledger.open_average_entry.ok_or_else(||AppError::Validation("cannot move stop without an open position".into()))?;
+    // A stop at breakeven or in profit remains permitted. Snapshot captures
+    // the actual OPEN quantity and contemporary average cost, not lifetime entries.
+    let open=ledger.open_qty;
+    let risk=(avg_entry-input.stop_price).abs()*point_value*open;
+    let now=Utc::now().to_rfc3339(); let id=Uuid::new_v4().to_string();
     tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,change_reason,was_rule_compliant,provenance) VALUES(?1,?2,?3,'MODIFIED',?4,?5,?6,?7,?8,'NATIVE')",params![id,input.trade_id,now,input.stop_price,open,risk,input.reason,input.was_rule_compliant.map(|x|if x{1}else{0})])?;
     tx.commit()?; get_trade_detail(conn,&input.trade_id)
 }
@@ -1280,7 +1413,9 @@ fn validate_review_input(input:&SaveTradeReviewInput)->Result<(),AppError>{
     if input.emotion_affected==Some(false) && (input.psychology_state.is_some() || input.psychology_intensity.is_some() || input.psychology_stage.is_some()) {
         return Err(AppError::Validation("psychology details should be empty when emotion did not affect the trade".into()));
     }
-    if input.emotion_affected==Some(true) {
+    // Review Pending is deliberately incomplete: only finalization requires
+    // full emotion details. Do not weaken value/domain checks or immutable history.
+    if input.finalize==Some(true) && input.emotion_affected==Some(true) {
         if input.psychology_state.as_deref().unwrap_or("").trim().is_empty() {
             return Err(AppError::Validation("psychology state is required when emotion affected the trade".into()));
         }
@@ -1517,6 +1652,42 @@ pub fn save_session_review(conn:&mut Connection,input:SaveSessionReviewInput)->R
     }
     let existing:Option<(String,String)>=tx.query_row("SELECT review_id,status FROM session_reviews WHERE session_id=?1",[&input.session_id],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
     if let Some((_,s))=&existing {if s=="COMPLETED" {return Err(AppError::Validation("completed session review is immutable".into()));}}
+    if input.finalize==Some(true) {
+        // Enforce custom-field completion at the persistence boundary too, not only in React.
+        // A review_id must already exist to allow custom events to be attached to it.
+        let mut query=tx.prepare(
+            "SELECT field_id,field_type,label FROM custom_field_definitions WHERE stage='session-review' AND is_required=1 AND is_active=1 ORDER BY display_order,field_id"
+        )?;
+        let required=query.query_map([],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?)))?
+            .collect::<Result<Vec<_>,_>>()?;
+        drop(query);
+        if !required.is_empty() && existing.is_none() {
+            return Err(AppError::Validation("save a session review draft before completing required custom fields".into()));
+        }
+        if let Some((review_id,_))=&existing {
+            for (field_id,field_type,label) in required {
+                let present=match field_type.as_str() {
+                    "SINGLE_SELECT" | "MULTI_SELECT" =>
+                        crate::custom_fields::read_current_selection(&tx,"session-review",review_id,&field_id)?
+                            .is_some_and(|value|!value.options.is_empty()),
+                    "TEXT" | "NUMBER" | "BOOLEAN" | "DATE" => {
+                        let value=crate::custom_fields::read_current_typed_value(&tx,"session-review",review_id,&field_id)?;
+                        value.is_some_and(|v|match field_type.as_str(){
+                            "TEXT"=>v.text_value.is_some_and(|s|!s.trim().is_empty()),
+                            "NUMBER"=>v.number_value.is_some_and(|n|n.is_finite()),
+                            "BOOLEAN"=>v.boolean_value.is_some(),
+                            "DATE"=>v.date_value.is_some_and(|s|!s.trim().is_empty()),
+                            _=>false
+                        })
+                    },
+                    _=>false
+                };
+                if !present {
+                    return Err(AppError::Validation(format!("required Session Review custom field missing: {label}")));
+                }
+            }
+        }
+    }
     let now=Utc::now().to_rfc3339(); let review_id=existing.as_ref().map(|x|x.0.clone()).unwrap_or_else(||Uuid::new_v4().to_string());
     let review_status=if input.finalize==Some(true){"COMPLETED"}else{"DRAFT"}; let completed=if review_status=="COMPLETED"{Some(now.clone())}else{None};
     if existing.is_some(){
@@ -1618,6 +1789,94 @@ fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String
         params![evidence_type_id,trade_id,candidate_id], |r|r.get(0)
     )?;
     Ok(n>0)
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct DecisionOnlyAnalyticsDto {
+    pub session_date: String,
+    pub instrument_symbol: String,
+    pub no_trade_count: i64,
+    pub missed_count: i64,
+    pub reason_missing_count: i64,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct DecisionReasonAnalyticsDto {
+    pub session_date: String,
+    pub instrument_symbol: String,
+    pub decision_type: String,
+    /// Existing structured reason code, or an explicit marker for uncoded notes/missing.
+    /// Raw free-text reason notes are never returned in aggregated analytics.
+    pub reason_code: String,
+    pub decision_count: i64,
+}
+
+/// Read-only descriptive aggregation. Never infer missed validity from a reason.
+pub fn list_decision_reason_analytics(
+    conn: &Connection,
+    filter: JournalFilterInput,
+)->Result<Vec<DecisionReasonAnalyticsDto>,AppError>{
+    let mut stmt=conn.prepare(
+        "SELECT s.session_date, COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                cd.decision_type,
+                CASE
+                  WHEN TRIM(COALESCE(cd.reason_code,''))<>'' THEN TRIM(cd.reason_code)
+                  WHEN TRIM(COALESCE(cd.reason_note,''))<>'' THEN '[FREE_TEXT_ONLY]'
+                  ELSE '[NO_REASON]'
+                END AS reason_group,
+                COUNT(*)
+         FROM candidate_decisions cd
+         JOIN sessions s ON s.session_id=cd.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         WHERE cd.decision_type IN ('NO_TRADE','MISSED')
+           AND (?1 IS NULL OR s.session_date>=?1)
+           AND (?2 IS NULL OR s.session_date<=?2)
+           AND (?3 IS NULL OR COALESCE(s.instrument_symbol_snapshot,i.symbol)=?3)
+         GROUP BY s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                  cd.decision_type,reason_group
+         ORDER BY s.session_date DESC,COUNT(*) DESC,cd.decision_type,reason_group"
+    )?;
+    let rows=stmt.query_map(
+        params![filter.date_from,filter.date_to,filter.instrument_symbol],
+        |row|Ok(DecisionReasonAnalyticsDto{
+            session_date:row.get(0)?,instrument_symbol:row.get(1)?,
+            decision_type:row.get(2)?,reason_code:row.get(3)?,
+            decision_count:row.get(4)?,
+        })
+    )?.collect::<Result<Vec<_>,_>>()?;
+    Ok(rows)
+}
+
+/// Read-only and intentionally scoped to session dates and instrument. Other trade
+/// filters (R, rule checks, evidence, direction) do not apply to unexecuted decisions.
+pub fn list_decision_only_analytics(
+    conn: &Connection,
+    filter: JournalFilterInput,
+)->Result<Vec<DecisionOnlyAnalyticsDto>,AppError>{
+    let mut stmt=conn.prepare(
+        "SELECT s.session_date, COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                SUM(CASE WHEN cd.decision_type='NO_TRADE' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN cd.decision_type='MISSED' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN TRIM(COALESCE(cd.reason_code,''))='' AND TRIM(COALESCE(cd.reason_note,''))='' THEN 1 ELSE 0 END)
+         FROM candidate_decisions cd
+         JOIN sessions s ON s.session_id=cd.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         WHERE cd.decision_type IN ('NO_TRADE','MISSED')
+           AND (?1 IS NULL OR s.session_date>=?1)
+           AND (?2 IS NULL OR s.session_date<=?2)
+           AND (?3 IS NULL OR COALESCE(s.instrument_symbol_snapshot,i.symbol)=?3)
+         GROUP BY s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol)
+         ORDER BY s.session_date DESC,COALESCE(s.instrument_symbol_snapshot,i.symbol)"
+    )?;
+    let rows=stmt.query_map(
+        params![filter.date_from,filter.date_to,filter.instrument_symbol],
+        |row|Ok(DecisionOnlyAnalyticsDto{
+            session_date:row.get(0)?,instrument_symbol:row.get(1)?,
+            no_trade_count:row.get(2)?,missed_count:row.get(3)?,
+            reason_missing_count:row.get(4)?,
+        })
+    )?.collect::<Result<Vec<_>,_>>()?;
+    Ok(rows)
 }
 
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
@@ -1778,6 +2037,20 @@ mod review_pending_validation_tests {
     }
 
     #[test]
+    fn review_pending_allows_only_one_psychology_detail() {
+        let mut input = review(false);
+        input.psychology_state = Some("hesitation".into());
+        assert!(validate_review_input(&input).is_ok());
+    }
+
+    #[test]
+    fn review_pending_still_rejects_invalid_psychology_stage() {
+        let mut input = review(false);
+        input.psychology_stage = Some("NOT_A_REAL_STAGE".into());
+        assert!(validate_review_input(&input).is_err());
+    }
+
+    #[test]
     fn completed_review_rejects_missing_psychology_details() {
         assert!(validate_review_input(&review(true)).is_err());
     }
@@ -1863,5 +2136,443 @@ mod decision_mismatch_persistence_tests {
         let history=list_candidate_decisions(&db,"zone1").unwrap();
         assert_eq!(history.len(),2);
         assert!(history.iter().all(|row| row.plan_mismatch_reason.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod expanded_instrument_catalog_tests {
+    use super::*;
+
+    fn test_db()->Connection {
+        let conn=Connection::open_in_memory().expect("isolated in-memory SQLite");
+        crate::db::migrate(&conn).expect("schema v9");
+        conn
+    }
+
+    #[test]
+    fn fresh_catalog_has_all_preset_contracts_and_stock_profiles() {
+        let db=test_db();
+        let instruments=list_all_instruments(&db).unwrap();
+        assert_eq!(instruments.len(),DEFAULT_INSTRUMENT_PROFILES.len());
+        for &(_,symbol,_,tick,point,currency,kind) in DEFAULT_INSTRUMENT_PROFILES {
+            let profile=instruments.iter().find(|i|i.symbol==symbol).expect("missing preset");
+            assert!((profile.tick_size-tick).abs()<1e-9,"wrong tick for {symbol}");
+            assert!((profile.point_value-point).abs()<1e-9,"wrong point value for {symbol}");
+            assert_eq!(profile.currency,currency);
+            assert_eq!(profile.market_type.as_deref(),Some(kind));
+            assert!(profile.active);
+            assert!(!profile.user_defined);
+            assert!((profile.tick_size*profile.point_value)>0.0);
+        }
+        assert_eq!(instruments[0].symbol,"ES");
+        assert_eq!(instruments[1].symbol,"GC");
+    }
+
+    #[test]
+    fn reopening_never_restores_deactivated_or_overwrites_edited_presets() {
+        let db=test_db();
+        let first=list_all_instruments(&db).unwrap();
+        let nq=first.iter().find(|i|i.symbol=="NQ").unwrap().clone();
+        let changed=UpdateInstrumentInput {
+            instrument_id:nq.instrument_id.clone(),
+            symbol:nq.symbol.clone(),display_name:Some("MY CUSTOM NQ LABEL".into()),
+            tick_size:0.5,point_value:22.0,currency:"USD".into(),
+            market_type:Some("FUTURES".into()),active:false,display_order:321,
+        };
+        update_instrument(&db,changed).unwrap();
+        let second=list_all_instruments(&db).unwrap();
+        assert_eq!(first.len(),second.len());
+        let preserved=second.iter().find(|i|i.symbol=="NQ").unwrap();
+        assert!(!preserved.active);
+        assert_eq!(preserved.tick_size,0.5);
+        assert_eq!(preserved.point_value,22.0);
+        assert_eq!(preserved.display_name.as_deref(),Some("MY CUSTOM NQ LABEL"));
+        assert_eq!(preserved.display_order,321);
+        assert!(!list_instruments(&db).unwrap().iter().any(|i|i.symbol=="NQ"));
+    }
+
+    #[test]
+    fn old_two_symbol_catalog_grows_without_rewriting_existing_or_custom_order() {
+        let db=test_db();
+        db.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('default-workspace','Existing','2026-10-15')",[]).unwrap();
+        for (id,symbol,order) in [("instrument-ES","ES",20_i64),("instrument-GC","GC",2_i64)] {
+            db.execute(
+                "INSERT INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES(?1,'default-workspace',?2,'Original user value',0.5,80,'USD',1,'FUTURES',?3,0)",
+                params![id,symbol,order],
+            ).unwrap();
+        }
+        db.execute("INSERT INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES('custom-1','default-workspace','CUSTOM','Custom symbol',0.01,1,'USD',1,'STOCK',75,1)",[]).unwrap();
+        let rows=list_all_instruments(&db).unwrap();
+        assert_eq!(rows.len(),DEFAULT_INSTRUMENT_PROFILES.len()+1);
+        let old_es=rows.iter().find(|i|i.symbol=="ES").unwrap();
+        assert_eq!(old_es.display_order,20);
+        assert_eq!(old_es.tick_size,0.5);
+        assert_eq!(old_es.point_value,80.0);
+        let custom=rows.iter().find(|i|i.symbol=="CUSTOM").unwrap();
+        assert_eq!(custom.display_order,75);
+        assert!(custom.user_defined);
+        let added=rows.iter().find(|i|i.symbol=="NQ").unwrap();
+        assert!(added.display_order>75);
+        assert_eq!(list_all_instruments(&db).unwrap().len(),rows.len());
+    }
+
+    #[test]
+    fn trader_owned_ticker_is_not_replaced_by_same_symbol_catalog_entry() {
+        let db=test_db();
+        db.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('default-workspace','Existing','2026-10-15')",[]).unwrap();
+        db.execute("INSERT INTO instruments(instrument_id,workspace_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined) VALUES('user-symbol','default-workspace','NVDA','Trader chosen symbol',0.05,1,'USD',0,'STOCK',10,1)",[]).unwrap();
+        let rows=list_all_instruments(&db).unwrap();
+        assert_eq!(rows.len(),DEFAULT_INSTRUMENT_PROFILES.len());
+        let nvda=rows.iter().find(|i|i.symbol=="NVDA").unwrap();
+        assert_eq!(nvda.instrument_id,"user-symbol");
+        assert_eq!(nvda.tick_size,0.05);
+        assert!(!nvda.active);
+        assert!(nvda.user_defined);
+    }
+    #[test]
+    fn new_futures_and_stock_sessions_snapshot_correct_preset_values() {
+        let db=test_db();
+        for (symbol,tick,point,environment) in [
+            ("NQ",0.25,20.0,"DEMO"),
+            ("RTY",0.1,50.0,"FORWARD_TEST"),
+            ("SI",0.005,5000.0,"DEMO"),
+            ("CL",0.01,1000.0,"DEMO"),
+            ("AAPL",0.01,1.0,"DEMO"),
+        ] {
+            let session=create_draft_session(&db,CreateSessionInput {
+                session_date:"2026-11-09".into(),
+                instrument_symbol:symbol.into(),environment:environment.into(),session_label:None,
+            }).expect("valid preset draft session");
+            assert_eq!(session.instrument_symbol,symbol);
+            assert!((session.instrument_tick_size-tick).abs()<1e-9);
+            assert!((session.instrument_point_value-point).abs()<1e-9);
+            assert_eq!(session.instrument_currency,"USD");
+            let snapshot:(f64,f64)=db.query_row(
+                "SELECT instrument_tick_size_snapshot,instrument_point_value_snapshot FROM sessions WHERE session_id=?1",
+                [&session.session_id],|row|Ok((row.get(0)?,row.get(1)?))
+            ).unwrap();
+            assert_eq!(snapshot,(tick,point));
+        }
+    }
+
+}
+
+#[cfg(test)]
+mod execution_input_safety_regressions {
+    use super::*;
+
+    #[test]
+    fn backend_rejects_fractional_zero_negative_nonfinite_quantities() {
+        for quantity in [0.0,-1.0,1.5,f64::NAN,f64::INFINITY,f64::NEG_INFINITY] {
+            assert!(validate_execution_quantity(quantity).is_err(),"unexpected acceptance: {quantity:?}");
+        }
+        for quantity in [1.0,2.0,100.0] {
+            assert!(validate_execution_quantity(quantity).is_ok());
+        }
+    }
+
+    #[test]
+    fn backend_distinguishes_confirmed_zero_cost_from_unknown_and_rejects_negative() {
+        assert!(validate_execution_costs(None,None).is_ok());
+        assert!(validate_execution_costs(Some(0.0),Some(0.0)).is_ok());
+        assert!(validate_execution_costs(Some(2.75),Some(0.35)).is_ok());
+        for amount in [-1.0,f64::NAN,f64::INFINITY,f64::NEG_INFINITY] {
+            assert!(validate_execution_costs(Some(amount),None).is_err());
+            assert!(validate_execution_costs(None,Some(amount)).is_err());
+        }
+    }
+
+    #[test]
+    fn backend_validates_optional_planned_target_price_grid() {
+        assert!(price_tick_aligned(6025.25,0.25));
+        assert!(!price_tick_aligned(6025.3,0.25));
+    }
+}
+
+#[cfg(test)]
+mod chronological_trade_accounting_tests {
+    use super::*;
+
+    fn events(rows:&[(&str,f64,f64,f64,f64)]) -> Vec<(String,f64,f64,f64,f64)> {
+        rows.iter().map(|(action,price,qty,commission,fees)|
+            (action.to_string(),*price,*qty,*commission,*fees)).collect()
+    }
+
+    #[test]
+    fn later_entry_does_not_rewrite_prior_realized_long_profit() {
+        let first=events(&[("ENTRY",100.0,2.0,1.0,0.5),("EXIT",110.0,1.0,1.0,0.5)]);
+        let before=execution_ledger(&first,"LONG",50.0).unwrap();
+        assert_eq!(before.gross_realized,Some(500.0));
+        assert_eq!(before.open_average_entry,Some(100.0));
+        let after=events(&[
+            ("ENTRY",100.0,2.0,1.0,0.5),
+            ("EXIT",110.0,1.0,1.0,0.5),
+            ("ENTRY",120.0,1.0,1.0,0.5),
+            ("EXIT",130.0,1.0,1.0,0.5),
+        ]);
+        let ledger=execution_ledger(&after,"LONG",50.0).unwrap();
+        // second exit uses average of remaining 100 + new 120 = 110.
+        assert_eq!(ledger.gross_realized,Some(1500.0));
+        assert_eq!(ledger.open_qty,1.0);
+        assert_eq!(ledger.open_average_entry,Some(110.0));
+        assert_eq!(ledger.entry_qty,3.0);
+        assert_eq!(ledger.exit_qty,2.0);
+        assert_eq!(ledger.costs,6.0);
+        assert_eq!(ledger.gross_realized.map(|n|n-ledger.costs),Some(1494.0));
+    }
+
+    #[test]
+    fn short_partial_exit_then_scale_in_keeps_chronological_realized_pnl() {
+        let fills=events(&[
+            ("ENTRY",100.0,2.0,0.0,0.0),
+            ("EXIT",90.0,1.0,0.0,0.0),
+            ("ENTRY",80.0,1.0,0.0,0.0),
+            ("EXIT",70.0,2.0,0.0,0.0),
+        ]);
+        let ledger=execution_ledger(&fills,"SHORT",5.0).unwrap();
+        // 1 at 100 -> 90 = +10; 2 at avg 90 -> 70 = +40, * 5 = 250.
+        assert_eq!(ledger.gross_realized,Some(250.0));
+        assert_eq!(ledger.open_qty,0.0);
+        assert_eq!(ledger.last_average_entry,Some(90.0));
+    }
+
+    #[test]
+    fn open_trade_without_exit_has_no_realized_pnl_even_with_entry_cost() {
+        let ledger=execution_ledger(&events(&[("ENTRY",100.0,2.0,4.0,0.0)]),"LONG",50.0).unwrap();
+        assert_eq!(ledger.gross_realized,None);
+        assert_eq!(ledger.costs,4.0);
+    }
+
+    #[test]
+    fn invalid_historical_fill_sequence_fails_closed_without_modifying_records() {
+        let bad=events(&[("ENTRY",100.0,1.0,0.0,0.0),("EXIT",110.0,2.0,0.0,0.0)]);
+        assert!(execution_ledger(&bad,"LONG",50.0).is_err());
+        assert!(execution_ledger(&events(&[("ENTRY",f64::NAN,1.0,0.0,0.0)]),"LONG",50.0).is_err());
+    }
+}
+
+#[cfg(test)]
+mod execution_sqlite_reconciliation_tests {
+    use super::*;
+
+    #[test]
+    fn immutable_sqlite_fills_drive_chronological_pnl_and_open_position_risk() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        let session=create_draft_session(&db,CreateSessionInput{
+            session_date:"2026-11-09".into(),instrument_symbol:"ES".into(),
+            environment:"DEMO".into(),session_label:None,
+        }).unwrap();
+        db.execute(
+            "INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('decision-test',?1,'2026-11-09T08:00:00Z','TRADE','LONG')",
+            [&session.session_id],
+        ).unwrap();
+        let input=CreateTradeExecutionInput{
+            decision_id:"decision-test".into(),entry_price:100.0,stop_price:95.0,
+            quantity:2.0,order_type:Some("MARKET".into()),
+            planned_target_price:Some(130.0),commission:Some(1.0),fees:Some(0.5),
+        };
+        let created=create_trade_with_entry(&mut db,input).unwrap();
+        let trade_id=created.metrics.trade_id.clone();
+        let add=|db:&mut Connection,action:&str,price:f64,qty:f64| {
+            add_trade_fill(db,AddTradeFillInput {
+                trade_id:trade_id.clone(),action:action.into(),price,quantity:qty,
+                order_type:Some("MARKET".into()),commission:Some(1.0),fees:Some(0.5),note:None,
+            }).unwrap()
+        };
+        let first=add(&mut db,"EXIT",110.0,1.0);
+        assert_eq!(first.metrics.gross_realized_pnl,Some(500.0));
+        assert_eq!(first.metrics.open_quantity,1.0);
+        let second=add(&mut db,"ENTRY",120.0,1.0);
+        assert_eq!(second.metrics.gross_realized_pnl,Some(500.0));
+        assert_eq!(second.metrics.open_quantity,2.0);
+        assert_eq!(second.metrics.average_entry,Some(110.0));
+        let latest:(f64,f64)=db.query_row(
+            "SELECT quantity,risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='MODIFIED' ORDER BY rowid DESC LIMIT 1",
+            [&trade_id],|r|Ok((r.get(0)?,r.get(1)?)),
+        ).unwrap();
+        assert_eq!(latest,(2.0,1500.0));
+        let stop=move_trade_stop(&mut db,MoveStopInput{
+            trade_id:trade_id.clone(),stop_price:105.0,reason:Some("Trailing structure".into()),
+            was_rule_compliant:Some(true),
+        }).unwrap();
+        assert_eq!(stop.metrics.latest_stop_price,Some(105.0));
+        let updated:(f64,f64)=db.query_row(
+            "SELECT quantity,risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='MODIFIED' ORDER BY rowid DESC LIMIT 1",
+            [&trade_id],|r|Ok((r.get(0)?,r.get(1)?)),
+        ).unwrap();
+        assert_eq!(updated,(2.0,500.0));
+        let last=add(&mut db,"EXIT",130.0,1.0);
+        assert_eq!(last.metrics.gross_realized_pnl,Some(1500.0));
+        assert_eq!(last.metrics.net_realized_pnl,Some(1494.0));
+        assert!((last.metrics.realized_r.unwrap()-2.988).abs()<1e-9);
+        assert_eq!(last.metrics.open_quantity,1.0);
+        assert_eq!(last.fills.len(),4);
+        let count:i64=db.query_row("SELECT COUNT(*) FROM execution_fills WHERE trade_id=?1",[&trade_id],|r|r.get(0)).unwrap();
+        assert_eq!(count,4);
+    }
+}
+
+#[cfg(test)]
+mod unknown_cost_accounting_integrity_tests {
+    use super::*;
+
+    #[test]
+    fn persisted_unknown_cost_keeps_gross_but_excludes_net_and_analytics_r() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        let session=create_draft_session(&db,CreateSessionInput{
+            session_date:"2026-11-09".into(),instrument_symbol:"ES".into(),
+            environment:"DEMO".into(),session_label:None,
+        }).unwrap();
+        db.execute(
+            "INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('unknown-cost-decision',?1,'2026-11-09T08:00:00Z','TRADE','LONG')",
+            [&session.session_id],
+        ).unwrap();
+        let first=create_trade_with_entry(&mut db,CreateTradeExecutionInput {
+            decision_id:"unknown-cost-decision".into(),entry_price:100.0,stop_price:95.0,
+            quantity:1.0,order_type:None,planned_target_price:None,
+            commission:None,fees:Some(0.0),
+        }).unwrap();
+        let id=first.metrics.trade_id;
+        let closed=add_trade_fill(&mut db,AddTradeFillInput {
+            trade_id:id.clone(),action:"EXIT".into(),price:110.0,
+            quantity:1.0,order_type:None,commission:Some(1.5),fees:Some(0.25),note:None,
+        }).unwrap();
+        assert_eq!(closed.metrics.status,"CLOSED");
+        assert_eq!(closed.metrics.gross_realized_pnl,Some(500.0));
+        assert_eq!(closed.metrics.net_realized_pnl,None);
+        assert_eq!(closed.metrics.realized_r,None);
+        assert_eq!(closed.fills[0].commission,None);
+        assert_eq!(closed.fills[0].fees,Some(0.0));
+
+        let filtered=JournalFilterInput::default();
+        let summary=get_analytics_summary(&db,filtered.clone()).unwrap();
+        assert_eq!(summary.trade_count,1);
+        assert_eq!(summary.eligible_r_count,0);
+        assert_eq!(summary.net_r,None);
+        assert_eq!(summary.net_pnl,None);
+        assert_eq!(summary.win_rate,None);
+        let journal=list_journal_trades(&db,filtered).unwrap();
+        assert_eq!(journal.len(),1);
+        assert_eq!(journal[0].realized_r,None);
+        assert_eq!(journal[0].net_realized_pnl,None);
+        let persisted_count:i64=db.query_row(
+            "SELECT COUNT(*) FROM execution_fills WHERE trade_id=?1",[&id],|row|row.get(0)
+        ).unwrap();
+        assert_eq!(persisted_count,2);
+    }
+
+    #[test]
+    fn confirmed_zero_costs_are_eligible_for_net_r() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        let session=create_draft_session(&db,CreateSessionInput{
+            session_date:"2026-11-09".into(),instrument_symbol:"NQ".into(),
+            environment:"DEMO".into(),session_label:None,
+        }).unwrap();
+        db.execute("INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('confirmed-zero',?1,'2026-11-09T08:00:00Z','TRADE','SHORT')",
+            [&session.session_id]).unwrap();
+        let created=create_trade_with_entry(&mut db,CreateTradeExecutionInput{
+            decision_id:"confirmed-zero".into(),entry_price:20000.0,
+            stop_price:20001.0,quantity:1.0,order_type:None,
+            planned_target_price:None,commission:Some(0.0),fees:Some(0.0),
+        }).unwrap();
+        let closed=add_trade_fill(&mut db,AddTradeFillInput{
+            trade_id:created.metrics.trade_id,action:"EXIT".into(),price:19999.0,
+            quantity:1.0,order_type:None,commission:Some(0.0),fees:Some(0.0),note:None
+        }).unwrap();
+        assert_eq!(closed.metrics.gross_realized_pnl,Some(20.0));
+        assert_eq!(closed.metrics.net_realized_pnl,Some(20.0));
+        assert_eq!(closed.metrics.realized_r,Some(1.0));
+        let summary=get_analytics_summary(&db,JournalFilterInput::default()).unwrap();
+        assert_eq!(summary.eligible_r_count,1);
+        assert_eq!(summary.net_r,Some(1.0));
+        assert_eq!(summary.net_pnl,Some(20.0));
+    }
+}
+
+#[cfg(test)]
+mod decision_only_analytics_tests {
+    use super::*;
+
+    #[test]
+    fn counts_nonexecuted_decision_events_without_any_trade_or_fill_table() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT);
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,instrument_symbol_snapshot TEXT);
+            CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,decision_type TEXT,reason_code TEXT,reason_note TEXT);
+            INSERT INTO instruments VALUES('i-es','ES'),('i-gc','GC');
+            INSERT INTO sessions VALUES('s1','i-es','2026-11-09','ES'),('s2','i-gc','2026-11-10','GC'),('s3','i-es','2026-11-02','ES');
+            INSERT INTO candidate_decisions VALUES
+                ('d1','s1','NO_TRADE','MISSING_CONFIRMATION',NULL),
+                ('d2','s1','MISSED','', 'Could not execute in time'),
+                ('d3','s1','TRADE',NULL,NULL),
+                ('d4','s2','MISSED','ENTRY_DELAY',NULL),
+                ('d5','s3','MISSED','PRIOR_WEEK',NULL);
+        ").unwrap();
+        let all=list_decision_only_analytics(&db,JournalFilterInput{
+            date_from:Some("2026-11-09".into()),
+            date_to:Some("2026-11-15".into()),
+            ..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(all.len(),2);
+        let es=all.iter().find(|x|x.instrument_symbol=="ES").unwrap();
+        assert_eq!((es.no_trade_count,es.missed_count,es.reason_missing_count),(1,1,0));
+        let gc=all.iter().find(|x|x.instrument_symbol=="GC").unwrap();
+        assert_eq!((gc.no_trade_count,gc.missed_count),(0,1));
+
+        let es_only=list_decision_only_analytics(&db,JournalFilterInput{
+            instrument_symbol:Some("ES".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(es_only.len(),2); // Two separate ES dates, not conflated into one.
+        assert_eq!(es_only.iter().map(|x|x.missed_count).sum::<i64>(),2);
+    }
+
+    #[test]
+    fn groups_original_decision_codes_without_inventing_text_categories() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT);
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,instrument_symbol_snapshot TEXT);
+            CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,decision_type TEXT,reason_code TEXT,reason_note TEXT);
+            INSERT INTO instruments VALUES('i-es','ES'),('i-gc','GC');
+            INSERT INTO sessions VALUES('s1','i-es','2026-11-09','ES'),('s2','i-gc','2026-11-09','GC'),('s3','i-es','2026-11-02','ES');
+            INSERT INTO candidate_decisions VALUES
+                ('d1','s1','NO_TRADE','MISSING_CONFIRMATION',NULL),
+                ('d2','s1','NO_TRADE','MISSING_CONFIRMATION',NULL),
+                ('d3','s1','MISSED','', 'Discretionary note retained in source only'),
+                ('d4','s1','MISSED',NULL,NULL),
+                ('d5','s2','MISSED','NO_TIME',NULL),
+                ('d6','s1','TRADE','MISSING_CONFIRMATION',NULL),
+                ('d7','s3','NO_TRADE','PRIOR_WEEK',NULL);
+        ").unwrap();
+        let rows=list_decision_reason_analytics(&db,JournalFilterInput{
+            date_from:Some("2026-11-09".into()),date_to:Some("2026-11-15".into()),
+            instrument_symbol:Some("ES".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(rows.len(),3);
+        assert!(rows.iter().any(|x|x.decision_type=="NO_TRADE"&&x.reason_code=="MISSING_CONFIRMATION"&&x.decision_count==2));
+        assert!(rows.iter().any(|x|x.decision_type=="MISSED"&&x.reason_code=="[FREE_TEXT_ONLY]"&&x.decision_count==1));
+        assert!(rows.iter().any(|x|x.decision_type=="MISSED"&&x.reason_code=="[NO_REASON]"&&x.decision_count==1));
+        assert!(rows.iter().all(|x|x.instrument_symbol=="ES"&&x.session_date=="2026-11-09"));
+        assert!(rows.iter().all(|x|!x.reason_code.contains("Discretionary note")));
+    }
+
+    #[test]
+    fn missing_reason_is_observed_missing_data_not_invented_context() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT);
+            CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,instrument_symbol_snapshot TEXT);
+            CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,decision_type TEXT,reason_code TEXT,reason_note TEXT);
+            INSERT INTO instruments VALUES('i','ES');
+            INSERT INTO sessions VALUES('s','i','2026-11-09','ES');
+            INSERT INTO candidate_decisions VALUES('d1','s','MISSED',' ',NULL),('d2','s','NO_TRADE',NULL,'No setup');
+        ").unwrap();
+        let rows=list_decision_only_analytics(&db,JournalFilterInput::default()).unwrap();
+        assert_eq!(rows.len(),1);
+        assert_eq!((rows[0].no_trade_count,rows[0].missed_count,rows[0].reason_missing_count),(1,1,1));
     }
 }

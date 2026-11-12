@@ -1,5 +1,5 @@
 export type RequirementDefault = 'SYSTEM_REQUIRED'|'OPTIONAL'|'CONDITIONAL';
-export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Decision'|'Trade'|'Review'|'Psychology';
+export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview'|'Attachment';
 
 export type FieldDefinition = {
   id:string;
@@ -33,6 +33,9 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'plan.preSessionState',group:'Plan',label:'Pre-session state',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'A quick check of your mental/physical state before trading.',helpExample:'FOCUSED, TIRED or DISTRACTED.',helpLong:'This is intentionally lightweight. It helps find patterns without turning psychology logging into a long questionnaire.'},
 
+  {id:'plan.preSessionStateIntensity',group:'Plan',label:'Pre-session intensity',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Optional 1–5 rating of your pre-session state. This is descriptive, not a trading edge or threshold.',helpExample:'3 means a moderate intensity of the state you selected.'},
+
   {id:'candidate.intent',group:'Candidate',label:'Directional intent',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
     helpShort:'What the level/zone is currently being watched for.',helpExample:'LONG means the zone is a candidate area for a long thesis, not that a trade is already approved.',optionHelp:{LONG:'Watch for a long-side opportunity.',SHORT:'Watch for a short-side opportunity.',CONDITIONAL:'Direction depends on how price interacts with the area.',WATCH:'Important location to monitor without a directional commitment.',UNKNOWN:'Intent is not clear yet.'}},
   {id:'candidate.trendRelationship',group:'Candidate',label:'Role vs trend',defaultRequirement:'OPTIONAL',systemLocked:true,requirementManaged:false,
@@ -49,6 +52,17 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
     helpShort:'What must happen at the location before the trade becomes acceptable.',helpExample:'Price rejects the level, absorption appears, then delta shifts in the intended direction.',helpLong:'Keep this as observable conditions. It is your pre-commitment filter against entering just because price reached a level.'},
   {id:'candidate.invalidationConditions',group:'Candidate',label:'Abandon if',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'What would invalidate the candidate thesis before or around entry.',helpExample:'Price accepts above the zone and holds there; the original rejection thesis is no longer valid.',helpLong:'Invalidation is not the same as a stop distance. It describes when the market thesis itself is no longer valid.'},
+
+  {id:'planRevision.evidence',group:'Plan',label:'New evidence summary for plan revision',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Summarize observed information behind a timestamped change to the market plan, without replacing the original plan.',helpExample:'A sustained acceptance above the previously watched resistance prompted a new plan revision.'},
+
+  {id:'evidence.direction',group:'Evidence',label:'Observed direction',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Direction of this actual observation, not the planned Zone direction. Neutral remains the existing fallback when you leave this optional field unanswered.',helpExample:'BUY for observed buy-side activity, SELL for sell-side, or NEUTRAL if no directional interpretation is justified.'},
+
+  {id:'evidence.price',group:'Evidence',label:'Observed price',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Market price where the evidence was actually observed, if known.',helpExample:'ES 6025.25 for a contemporaneous absorption observation; do not invent a price.'},
+  {id:'evidence.note',group:'Evidence',label:'Evidence note',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Short description of what you actually observed at this moment.',helpExample:'Sellers repeatedly hit the bid but price held; observed evidence is not premarket provenance.'},
 
   {id:'decision.type',group:'Decision',label:'Decision',defaultRequirement:'OPTIONAL',systemLocked:true,requirementManaged:false,
     helpShort:'What you actually decided when the candidate became actionable.',helpExample:'NO_TRADE if the level was reached but required confirmation never appeared.',optionHelp:{TRADE:'You decided to enter and will record execution separately.',NO_TRADE:'You deliberately chose not to trade.',MISSED:'A valid opportunity may have existed, but you did not execute it.'}},
@@ -68,6 +82,14 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'trade.plannedTarget',group:'Trade',label:'Planned target',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'The target you intended at entry, if you use a predefined target.',helpExample:'6463.00 for a long from 6451.00.',helpLong:'Leave it optional when the setup legitimately uses discretionary or structure-based exits.'},
 
+  {id:'attachment.caption',group:'Attachment',label:'Screenshot caption',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Optional explanation attached to a newly imported screenshot; make it Required only if every new screenshot should carry context.',helpExample:'Before entry: ES bid absorption at the level. Older screenshots keep their original captions.'},
+
+  {id:'fill.reason',group:'Trade',label:'Fill reason',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Reason for this additional entry or exit fill, captured with its execution event rather than as a retrospective review.',helpExample:'Partial exit at first target; leave empty unless useful or explicitly configured Required.'},
+  {id:'management.reason',group:'Trade',label:'Stop management reason',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Why the stop was revised, separately from original stop price and thesis invalidation.',helpExample:'Moved to breakeven after structure changed; this does not overwrite the original risk snapshot.'},
+
   {id:'review.exitReason',group:'Review',label:'Exit reason',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Why the position was closed; record an observed reason, not a planned target.',helpExample:'STOP or TARGET, only when that describes the actual exit.'},
   {id:'review.exitNote',group:'Review',label:'Exit note',defaultRequirement:'OPTIONAL',systemLocked:false,
@@ -81,8 +103,33 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'review.managementQuality',group:'Review',label:'Management quality',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'How well you managed the open trade after entry.',helpExample:'NEEDS IMPROVEMENT if you widened the stop or exited early without evidence.',optionHelp:{GOOD:'Management followed the intended process well.',ACCEPTABLE:'Mostly sound with a minor issue.',NEEDS_IMPROVEMENT:'A meaningful management mistake occurred.',UNCLEAR:'Not enough information to judge.'}},
 
+  {id:'sessionReview.wentWell',group:'SessionReview',label:'What went well?',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Identify a useful behavior or decision to repeat.',helpExample:'Followed the planned risk limit despite a losing trade.'},
+  {id:'sessionReview.nextImprovement',group:'SessionReview',label:'One thing to improve next session',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Name one concrete action to try in the next session.',helpExample:'Wait for the specified entry confirmation before committing.'},
+  {id:'sessionReview.wentPoorly',group:'SessionReview',label:'What went poorly?',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Record the most important process weakness without duplicating every trade note.',helpExample:'Entered early before the level reaction was established.'},
+  {id:'sessionReview.bestDecision',group:'SessionReview',label:'Best decision',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'A disciplined decision can be a no-trade or a losing trade.',helpExample:'Skipped a trade because invalidation had already occurred.'},
+  {id:'sessionReview.biggestMistake',group:'SessionReview',label:'Biggest mistake',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Capture the most significant process error, if one occurred.',helpExample:'Moved the initial stop without a valid management reason.'},
+  {id:'sessionReview.marketLearning',group:'SessionReview',label:'What did the market teach me?',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Capture one observation that may inform the next plan, not a proven edge.',helpExample:'Acceptance above the prior level challenged my rejection hypothesis.'},
+
+  {id:'sessionReview.overall',group:'SessionReview',label:'Overall session assessment',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Your overall session process assessment, separate from net P&L.',helpExample:'ACCEPTABLE if you followed most of the plan with one execution slip.'},
+  {id:'sessionReview.planQuality',group:'SessionReview',label:'Plan quality',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Evaluate whether the plan was clear and useful before judging the outcome.',helpExample:'GOOD if the plan defined clear zones, conditions and invalidation.'},
+  {id:'sessionReview.discipline',group:'SessionReview',label:'Discipline',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Assess adherence to planned rules and risk limits independently of profit.',helpExample:'NEEDS_IMPROVEMENT if a trade broke your pre-committed risk cap.'},
+
+  {id:'rule.note',group:'Review',label:'Rule violation note',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'A concise explanation only if a rule violation was reported. The absence of a violation never requires a note.',helpExample:'Entered before the planned confirmation despite the original rule.'},
+
   {id:'psychology.emotionAffected',group:'Psychology',label:'Did emotion affect the trade?',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Only mark Yes when emotion materially changed entry, management or exit.',helpExample:'Yes if FOMO made you chase; No if you felt nervous but still followed the plan.'},
+  {id:'psychology.intensity',group:'Psychology',label:'Emotion intensity',defaultRequirement:'OPTIONAL',systemLocked:false,
+    helpShort:'Optional 1–5 intensity only when emotion affected this trade. It measures experience, not profitability.',helpExample:'4 when FOMO strongly influenced your entry.'},
   {id:'psychology.state',group:'Psychology',label:'Psychology state',defaultRequirement:'CONDITIONAL',systemLocked:true,conditionalText:'Required when emotion affected the trade',
     helpShort:'The main emotional/mental state that influenced the trade.',helpExample:'Hesitation, FOMO, frustration, revenge or overconfidence.'},
   {id:'psychology.stage',group:'Psychology',label:'Affected stage',defaultRequirement:'CONDITIONAL',systemLocked:true,conditionalText:'Required when emotion affected the trade',

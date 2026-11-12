@@ -4,6 +4,7 @@ export type CustomTypedValue = {event_id:string;value_type:string;text_value:str
 export type CustomTypedInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;text_value:string|null;number_value:number|null;boolean_value:boolean|null;date_value:string|null};
 export type CustomSelection = {event_id:string;options:{option_id:string;label_at_selection:string;ordinal:number}[]};
 export type CustomSelectionInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;option_ids:string[]};
+export type CustomFieldCleanupPreflight = {field_id:string;label:string;stage:string;option_count:number;event_count:number;snapshot_count:number;eligible_unused_definition:boolean};
 export type CustomFieldDefinitionInput = {field_id:string;stage:string;field_type:string;label:string;help_text:string;required:boolean;display_order:number};
 export type CustomFieldOptionInput = {option_id:string;field_id:string;label:string;display_order:number};
 export type CustomFieldDefinition = {field_id:string;stage:string;field_type:string;label:string;help_text:string;required:boolean;active:boolean;display_order:number};
@@ -92,6 +93,8 @@ export type SessionReview = SaveSessionReviewInput & { review_id:string; status:
 
 export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null };
 export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number };
+export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:string;no_trade_count:number;missed_count:number;reason_missing_count:number};
+export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
 export type AnalyticsSummary = { trade_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
 export type MistakeSummary = { mistake_type_id:string; label:string; count:number };
 
@@ -104,6 +107,8 @@ export type ExportResult = { path:string; row_count:number; created_at:string };
 export const localApi = {
   createCustomFieldDefinition: (input:CustomFieldDefinitionInput) => invoke<void>('create_custom_field_definition',{input}),
   editCustomFieldDefinition: (fieldId:string,label:string,helpText:string,required:boolean,active:boolean,order:number) => invoke<void>('edit_custom_field_definition',{fieldId,label,helpText,required,active,order}),
+  moveCustomField: (fieldId:string,direction:-1|1) => invoke<void>('move_custom_field',{fieldId,direction}),
+  moveCustomFieldOption: (fieldId:string,optionId:string,direction:-1|1) => invoke<void>('move_custom_field_option',{fieldId,optionId,direction}),
   createCustomFieldOption: (input:CustomFieldOptionInput) => invoke<void>('create_custom_field_option',{input}),
   editCustomFieldOption: (fieldId:string,optionId:string,label:string,active:boolean,order:number) => invoke<void>('edit_custom_field_option',{fieldId,optionId,label,active,order}),
   recordCustomFieldTypedValue: (input:CustomTypedInput) => invoke<void>('record_custom_field_typed_value',{input}),
@@ -111,6 +116,8 @@ export const localApi = {
   recordCustomFieldSelection: (input:CustomSelectionInput) => invoke<void>('record_custom_field_selection',{input}),
   currentCustomFieldSelection: (ownerStage:string,ownerId:string,fieldId:string) => invoke<CustomSelection|null>('current_custom_field_selection',{ownerStage,ownerId,fieldId}),
   listCustomFieldDefinitions: () => invoke<CustomFieldDefinition[]>('list_custom_field_definitions'),
+  customFieldCleanupPreflight: (fieldId:string) => invoke<CustomFieldCleanupPreflight>('custom_field_cleanup_preflight',{fieldId}),
+  cleanupUnusedCustomField: (fieldId:string,confirmation:string) => invoke<string>('cleanup_unused_custom_field',{fieldId,confirmation}),
   listCustomFieldOptions: (fieldId:string) => invoke<CustomFieldOption[]>('list_custom_field_options',{fieldId}),
 
   health: () => invoke<DatabaseHealth>('database_health'),
@@ -177,6 +184,8 @@ export const localApi = {
   saveSessionReview: (input:SaveSessionReviewInput) => invoke<SessionReview>('save_session_review',{input}),
   getSessionReview: (sessionId:string) => invoke<SessionReview|null>('get_session_review',{sessionId}),
   listJournalTrades: (filter:JournalFilter={}) => invoke<JournalTradeRow[]>('list_journal_trades',{filter}),
+
+  listDecisionReasonAnalytics: (filter:JournalFilter={}) => invoke<DecisionReasonAnalyticsRow[]>('list_decision_reason_analytics',{filter}),  listDecisionOnlyAnalytics: (filter:JournalFilter={}) => invoke<DecisionOnlyAnalyticsRow[]>('list_decision_only_analytics',{filter}),
   getAnalyticsSummary: (filter:JournalFilter={}) => invoke<AnalyticsSummary>('get_analytics_summary',{filter}),
   listMistakeSummary: (filter:JournalFilter={}) => invoke<MistakeSummary[]>('list_mistake_summary',{filter}),
   importAttachment: (input:ImportAttachmentInput) => invoke<Attachment>('import_attachment',{input}),
