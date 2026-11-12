@@ -1205,6 +1205,8 @@ export function App(){
       }
       try { setTimeline(await localApi.listPlanTimeline(active.session_id)); }
       catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
+      delete decisionDraftsRef.current[decisionDraftKey(decisionCandidate.candidate_id,decisionType)];
+      setDecisionClosePrompt(false);
       if(isTrade){ setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); focusQuickEntryInput(); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
@@ -1293,6 +1295,8 @@ export function App(){
       setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);applyRuleCheck(null);
       setReviewVerifiedTradeId(detail.metrics.trade_id);setReviewFeedback('');
       setEntryOutcomeUncertainDecisionId(null);setEntryHistoryCheckedDecisionId(null);
+      delete entryDraftsRef.current[entryDraftKey(pendingTradeDecision.decision_id)];
+      setEntryClosePrompt(false);
       setPendingTradeDecision(null);setUnexecutedRefreshToken(v=>v+1);setReviewQueue(null);setEntryCommissionInput('');setEntryFeesInput('');
       setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');setTradeOpeningFeedback('Entry and initial risk saved.');
       if(active)try{setSessionTrades(await localApi.listSessionTrades(active.session_id));}
