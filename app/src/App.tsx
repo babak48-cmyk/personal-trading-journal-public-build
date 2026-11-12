@@ -6,7 +6,7 @@ import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
-import { directionFromZoneIntent, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
+import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEntryInputs, hasUnsavedManagementInputs, hasUnsavedReviewChanges } from './quickUnsavedCapture';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -1015,7 +1015,7 @@ export function App(){
     if(!active||!decisionCandidate||decisionSavingRef.current||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id))return;
     const isTrade=decisionType==='TRADE';
     const decisionMissing:ValidationIssue[]=[];
-    if(isTrade&&!decisionDirection)decisionMissing.push({id:'decision.direction',label:'Choose the actual LONG or SHORT direction for this trade decision'});
+    if(missingTradeDirection(decisionDirection,decisionType))decisionMissing.push({id:'decision.direction',label:'Choose the actual LONG or SHORT direction for this trade decision'});
     if(!isTrade&&!decisionReason.trim()&&!decisionNote.trim())decisionMissing.push({id:'decision.reason',label:'Decision reason'});
     if(isUserRequired('decision.quality',requirementOverrides)&&!decisionQuality)decisionMissing.push({id:'decision.quality',label:'Decision quality'});
     if(isUserRequired('decision.note',requirementOverrides)&&!decisionNote.trim())decisionMissing.push({id:'decision.note',label:'Decision note'});
