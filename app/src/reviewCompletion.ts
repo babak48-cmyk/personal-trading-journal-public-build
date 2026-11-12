@@ -7,6 +7,7 @@ export type ReviewCompletionInput = Readonly<{
   exitReason:string;
   exitNote:string;
   reviewNote:string;
+  mistakeIds:readonly string[];
   ruleNote:string;
   ruleViolationReported:boolean|null;
   emotionAffected:boolean|null;
@@ -30,6 +31,7 @@ export function reviewCompletionIssues(
     ['review.exitReason',!!values.exitReason.trim()],
     ['review.exitNote',!!values.exitNote.trim()],
     ['review.note',!!values.reviewNote.trim()],
+    ['review.mistakes',values.mistakeIds.length>0],
     ['psychology.emotionAffected',values.emotionAffected!==null],
   ];
   const issues=fields.filter(([id,present])=>isUserRequired(id,overrides)&&!present)
