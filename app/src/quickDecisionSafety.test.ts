@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {directionFromZoneIntent,hasUnsavedDecisionCapture,type ExplicitTradeDirection} from './quickDecisionSafety';
+import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,type ExplicitTradeDirection} from './quickDecisionSafety';
 
 describe('Quick Decision explicit direction and edit preservation',()=>{
   it('prefills ONLY a clearly directional Zone and never copies a previous direction',()=>{
@@ -7,6 +7,13 @@ describe('Quick Decision explicit direction and edit preservation',()=>{
     expect(directionFromZoneIntent('SHORT')).toBe('SHORT');
     for(const intent of ['CONDITIONAL','WATCH','UNKNOWN','MIXED','',null,undefined])
       expect(directionFromZoneIntent(intent)).toBe('');
+  });
+  it('requires an actual side only for TRADE, never No-trade or Missed',()=>{
+    expect(missingTradeDirection('','TRADE')).toBe(true);
+    expect(missingTradeDirection('LONG','TRADE')).toBe(false);
+    expect(missingTradeDirection('SHORT','TRADE')).toBe(false);
+    expect(missingTradeDirection('','NO_TRADE')).toBe(false);
+    expect(missingTradeDirection('','MISSED')).toBe(false);
   });
   const draft={
     note:'',reason:'',quality:'',mismatchReason:'',
