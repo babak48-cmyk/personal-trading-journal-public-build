@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reviewCompletionIssues, type ReviewCompletionInput } from './reviewCompletion';
 const blank:ReviewCompletionInput={
-  decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',ruleNote:'',ruleViolationReported:null,emotionAffected:true,
+  decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',mistakeIds:[],ruleNote:'',ruleViolationReported:null,emotionAffected:true,
   psychologyState:'',psychologyStage:'',psychologyIntensity:null,
 };
 
@@ -50,6 +50,13 @@ describe('Review Pending and finalization boundaries',()=>{
     expect(reviewCompletionIssues(true,overrides,{...values,ruleNote:'Moved stop outside plan'})).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:false})).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:null})).toEqual([]);
+  });
+  it('requires at least one mistake only if the trader explicitly marks mistakes Required',()=>{
+    const values={...blank,emotionAffected:false};
+    expect(reviewCompletionIssues(false,{'review.mistakes':true},values)).toEqual([]);
+    expect(reviewCompletionIssues(true,{},values)).toEqual([]);
+    expect(reviewCompletionIssues(true,{'review.mistakes':true},values).map(x=>x.id)).toEqual(['review.mistakes']);
+    expect(reviewCompletionIssues(true,{'review.mistakes':true},{...values,mistakeIds:['early-entry']})).toEqual([]);
   });
   it('does not invent a requirement when emotion flag is optional',()=>{
     expect(reviewCompletionIssues(true,{}, {...blank,emotionAffected:null})).toEqual([]);
