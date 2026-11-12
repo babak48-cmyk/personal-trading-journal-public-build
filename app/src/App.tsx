@@ -1063,7 +1063,7 @@ export function App(){
       }
       try { setTimeline(await localApi.listPlanTimeline(active.session_id)); }
       catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
-      if(isTrade){ setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})); }
+      if(isTrade){ setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); focusQuickEntryInput(); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
     }catch(e){
@@ -1268,6 +1268,13 @@ export function App(){
     setPsychStage((r?.psychology_stage as any)||''); setReviewMistakes(r?.mistake_type_ids||[]); setReviewNote(r?.note||'');
   }
   function loadReviewPending(){setReviewQueueRefreshToken(v=>v+1);}
+  function focusQuickEntryInput(){
+    window.requestAnimationFrame(()=>{
+      const panel=document.getElementById('journal-quick-entry');
+      panel?.scrollIntoView({behavior:'smooth',block:'start'});
+      panel?.querySelector<HTMLInputElement>('[data-validation-id="trade.entryPrice"] input')?.focus({preventScroll:true});
+    });
+  }
   function resumeUnexecutedTradeDecision(decision:CandidateDecision){
     if(!active||active.status!=='ACTIVE'||decision.decision_type!=='TRADE'||!['LONG','SHORT'].includes(decision.intended_direction??'')){
       setMessage('This saved Decision cannot be resumed as an active trade entry. Inspect its history.');
@@ -1285,7 +1292,7 @@ export function App(){
     setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
     setEntryCommissionInput('');setEntryFeesInput('');setTradeOpeningFeedback('');
     setMessage('Resumed original saved Decision '+decision.decision_id+'. No new Decision was created. Record actual entry only.');
-    window.requestAnimationFrame(()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'}));
+    focusQuickEntryInput();
   }
   function beginSameZoneReentry(t:TradeMetrics){
     if(!plan||!t.candidate_id||t.status!=='CLOSED')return;
