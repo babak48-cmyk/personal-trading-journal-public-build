@@ -1149,11 +1149,16 @@ export function App(){
     ];
     if(blockMissing(missing)){setTradeOpeningFeedback('Complete the highlighted trade-entry fields.');return;}
     if(entryPrice==null||stopPrice==null||!entryCommission.valid||!entryFees.valid)return;
+    // Another trade's unsubmitted Review or management inputs must never be
+    // silently reassigned when this Decision becomes a real execution.
+    if(!confirmDiscardUnsavedTradeCapture('to the newly recorded trade',false))return;
     tradeOpeningRef.current=true;setTradeOpening(true);setTradeOpeningFeedback('Recording entry and initial risk…');
     try{
       const detail=await localApi.createTradeWithEntry({decision_id:pendingTradeDecision.decision_id,entry_price:entryPrice,stop_price:stopPrice,quantity:tradeQty,order_type:'MARKET',planned_target_price:plannedTarget,commission:entryCommission.value,fees:entryFees.value});
       reviewSelectionRequestRef.current++;
-      setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);setReviewVerifiedTradeId(detail.metrics.trade_id);setReviewFeedback('');
+      resetManagementCapture();
+      setActiveTrade(detail);applyReview(null,detail.metrics.trade_id);applyRuleCheck(null);
+      setReviewVerifiedTradeId(detail.metrics.trade_id);setReviewFeedback('');
       setEntryOutcomeUncertainDecisionId(null);setEntryHistoryCheckedDecisionId(null);
       setPendingTradeDecision(null);setUnexecutedRefreshToken(v=>v+1);setReviewQueue(null);setEntryCommissionInput('');setEntryFeesInput('');
       setMessage('Trade opened. Entry and initial risk are recorded with timestamps.');setTradeOpeningFeedback('Entry and initial risk saved.');
@@ -1319,6 +1324,9 @@ export function App(){
     if(pendingTradeDecision?.decision_id!==decision.decision_id &&
         pendingTradeDecision && unsavedEntryCapture() &&
         !window.confirm('Switching to another saved TRADE decision will discard unsaved entry fields, including a modified quantity. Continue?'))return;
+    if(!confirmDiscardUnsavedTradeCapture('to the saved TRADE Decision',false))return;
+    reviewSelectionRequestRef.current++;
+    resetManagementCapture();applyReview(null,null);applyRuleCheck(null);setReviewVerifiedTradeId(null);
     setPendingTradeDecision(decision);
     setActiveTrade(null);setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
     setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
