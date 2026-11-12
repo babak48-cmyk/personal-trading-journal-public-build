@@ -1,5 +1,5 @@
 name: PTJ isolated DEMO installer (release gate)
-# One isolated Windows acceptance candidate: in-app unsaved Evidence gate, readable history, shortcut registration visibility. Approved icon preserved.
+# One consolidated native Windows acceptance candidate after baseline comparison: in-app Evidence navigation/Close gates, explicit database-save status, readable history, OS shortcut delivery diagnostic. Original approved icon preserved.
 on:
   workflow_dispatch:
   push:
