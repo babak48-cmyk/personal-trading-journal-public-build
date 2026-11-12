@@ -6,6 +6,7 @@ import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
+import { hasUnsavedEntryInputs, hasUnsavedManagementInputs, hasUnsavedReviewChanges } from './quickUnsavedCapture';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
 import { pendingReviewTrades } from './reviewPending';
@@ -535,13 +536,60 @@ export function App(){
   }
   async function openAnalysis(){setShowSafety(false);setShowSettings(false);setShowAnalysis(true);window.scrollTo(0,0);await refreshAnalytics();}
   function patchJournalFilter(p:Partial<JournalFilter>){setJournalFilter(v=>({...v,...p}));}
+  function unsavedEntryCapture():boolean{
+    return !!pendingTradeDecision&&hasUnsavedEntryInputs({
+      entryPrice,stopPrice,quantity:tradeQty,target:plannedTarget,
+      commission:entryCommissionInput,fees:entryFeesInput,
+    });
+  }
+  function unsavedManagementCapture():boolean{
+    return !!activeTrade&&hasUnsavedManagementInputs({
+      fillPrice,fillQuantity:fillQty,fillReason,
+      fillCommission:fillCommissionInput,fillFees:fillFeesInput,
+      newStop,stopReason,
+    });
+  }
+  function unsavedReviewCapture():boolean{
+    return !!activeTrade&&activeTrade.metrics.status==='CLOSED'
+      &&reviewOwnerTradeId===activeTrade.metrics.trade_id
+      &&reviewVerifiedTradeId===activeTrade.metrics.trade_id
+      &&!isCompletedReviewForTrade(tradeReview,reviewOwnerTradeId,activeTrade.metrics.trade_id)
+      &&hasUnsavedReviewChanges({
+        decisionQuality:reviewDecisionQuality,executionQuality:reviewExecutionQuality,
+        managementQuality:reviewManagementQuality,exitReason:reviewExitReason,
+        exitNote:reviewExitNote,emotionAffected,psychologyState:psychState,
+        psychologyIntensity:psychIntensity,psychologyStage:psychStage,
+        mistakes:reviewMistakes,note:reviewNote,ruleViolationReported,
+        violatedRuleIds,ruleNote,
+      },tradeReview,tradeRuleCheck);
+  }
+  function resetManagementCapture(){
+    setFillAction('EXIT');setFillPrice(null);setFillQty(1);setFillReason('');
+    setFillCommissionInput('');setFillFeesInput('');
+    setNewStop(null);setStopReason('');
+  }
+  function confirmDiscardUnsavedTradeCapture(context:string):boolean{
+    if(reviewSavingRef.current||fillSavingRef.current||stopSavingRef.current){
+      setMessage('A trade/Review save is still in progress. Finish it before switching '+context+'.');return false;
+    }
+    const parts:string[]=[];
+    if(unsavedEntryCapture())parts.push('unsubmitted entry price / stop / quantity / target / costs');
+    if(unsavedManagementCapture())parts.push('unsubmitted fill or stop change');
+    if(unsavedReviewCapture())parts.push('unsaved Review or rule answers');
+    if(!parts.length)return true;
+    return window.confirm('Switch '+context+'? The following UNSAVED inputs will be discarded: '+parts.join('; ')+'. Previously saved Decision, execution, risk and Review history will NOT be deleted. Continue?');
+  }
+
   async function loadActive(s:SessionSummary){
-    setShowDraftSetup(false);setValidationErrors([]);
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
+      if(!confirmDiscardUnsavedTradeCapture('sessions'))return;
+      resetManagementCapture();
+      setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
       setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
+    setShowDraftSetup(false);setValidationErrors([]);
     setReviewQueue(null);setActive(s);rememberOpenedSession(s.session_id);
     if(s.status==='DRAFT'){
       setPlan(null);setTimeline([]);setConsistency(null);setSessionTrades([]);
@@ -1194,8 +1242,8 @@ export function App(){
       return;
     }
     if(pendingTradeDecision?.decision_id!==decision.decision_id &&
-        pendingTradeDecision && (entryPrice!==null||stopPrice!==null||plannedTarget!==null||entryCommissionInput.trim()||entryFeesInput.trim()) &&
-        !window.confirm('Switching to another saved TRADE decision will discard unsaved entry fields. Continue?'))return;
+        pendingTradeDecision && unsavedEntryCapture() &&
+        !window.confirm('Switching to another saved TRADE decision will discard unsaved entry fields, including a modified quantity. Continue?'))return;
     setPendingTradeDecision(decision);
     setActiveTrade(null);setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
     setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
@@ -1208,12 +1256,16 @@ export function App(){
     const zone=plan.candidates.find(c=>c.candidate_id===t.candidate_id);
     if(!zone){setMessage('The original Zone is not in the current plan. Check its history before a new decision.');return;}
     if(pendingTradeDecision){setMessage('A saved TRADE decision is awaiting execution. Finish or inspect it before creating another.');return;}
+    if(!confirmDiscardUnsavedTradeCapture('to a same-Zone re-entry'))return;
+    resetManagementCapture();
     reviewSelectionRequestRef.current++;
     setActiveTrade(null);applyReview(null,null);setReviewVerifiedTradeId(null);setReviewFeedback('');
     setQuickZoneId(zone.candidate_id);
     void openDecision(zone,'TRADE');
   }
   async function openTradeDetail(t:TradeMetrics){
+    if(!confirmDiscardUnsavedTradeCapture('trades / refresh Review'))return;
+    if(activeTrade?.metrics.trade_id!==t.trade_id)resetManagementCapture();
     const request=++reviewSelectionRequestRef.current;
     setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
     setActiveTrade(null);applyReview(null,t.trade_id);setReviewVerifiedTradeId(null);setReviewFeedback('');
