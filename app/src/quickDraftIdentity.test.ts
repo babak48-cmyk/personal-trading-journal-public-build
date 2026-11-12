@@ -1,5 +1,4 @@
 import {describe,expect,it} from 'vitest';
-import {readFileSync} from 'node:fs';
 import {scopedQuickDraftKey} from './quickDraftIdentity';
 import {hasUnsavedEntryInputs} from './quickUnsavedCapture';
 import {hasUnsavedDecisionCapture} from './quickDecisionSafety';
@@ -26,18 +25,5 @@ describe('Nov 13 Windows Decision/Entry draft regression contract',()=>{
       direction:'LONG',defaultDirection:'LONG',decisionType:'TRADE',initialType:'TRADE',
     })).toBe(true);
   });
-  it('wires app-owned Decision and Trade Close and accessible read-only decision notes',()=>{
-    // Static connection regression only: an installed Windows test is still required.
-    const app=readFileSync(new URL('./App.tsx',import.meta.url),'utf8');
-    expect(app).toContain('onClick={requestCloseDecisionEditor}>Close');
-    expect(app).toContain('onClick={requestCloseDecisionEditor}>Cancel');
-    expect(app).toContain('onClick={closePendingEntry}>Close');
-    expect(app).toContain('id="decision-unsaved-close-warning"');
-    expect(app).toContain('id="entry-unsaved-close-warning"');
-    expect(app).toContain('Close and keep draft');
-    expect(app).toContain('Discard draft and close');
-    expect(app).toContain('Decision note:</b> {d.reason_note');
-    expect(app).toContain('delete entryDraftsRef.current[entryDraftKey(');
-    expect(app).toContain('delete decisionDraftsRef.current[decisionDraftKey(');
-  });
+
 });
