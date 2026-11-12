@@ -12,7 +12,7 @@ describe('Quick Evidence draft navigation safeguards',()=>{
  });
  it('protects observations, classification, price including zero, direction and notes',()=>{
    expect(hasUnsavedEvidenceDraft({...empty,selectedIds:['DOM_IMBALANCE']})).toBe(true);
-   expect(hasUnsavedEvidenceDraft({...empty,stances:{x:'CONTRADICTING_EVIDENCE'}})).toBe(true);
+   expect(hasUnsavedEvidenceDraft({...empty,stances:{x:'CONTRADICTING_EVIDENCE'}})).toBe(false); // Deselected chip cannot be persisted.
    expect(hasUnsavedEvidenceDraft({...empty,price:0})).toBe(true);
    expect(hasUnsavedEvidenceDraft({...empty,price:6011.25})).toBe(true);
    expect(hasUnsavedEvidenceDraft({...empty,direction:'NEUTRAL'})).toBe(true);
