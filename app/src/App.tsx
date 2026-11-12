@@ -585,6 +585,9 @@ export function App(){
     if(active?.session_id!==s.session_id){
       if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Switch sessions?'))return;
       if(!confirmDiscardUnsavedTradeCapture('sessions'))return;
+      // Invalidate any in-flight Review fetch before changing the session owner.
+      reviewSelectionRequestRef.current++;
+      applyReview(null,null);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('');
       resetManagementCapture();
       setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
       setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
