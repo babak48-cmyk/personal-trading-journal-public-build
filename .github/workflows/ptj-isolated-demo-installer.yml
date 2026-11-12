@@ -1,10 +1,11 @@
 name: PTJ isolated DEMO installer (release gate)
-# One consolidated native Windows acceptance candidate after baseline comparison: in-app Evidence navigation/Close gates, explicit database-save status, readable history, OS shortcut delivery diagnostic. Original approved icon preserved.
+# One authorized isolated acceptance candidate for Decision/Trade unsaved draft safeguards and read-only Decision history. Existing approved icon and DEMO profile preserved.
 on:
   workflow_dispatch:
   push:
     branches:
       - feature/review-mistakes-field-manager-2026-11-12
+      - fix/decision-trade-draft-guard-2026-11-13
     paths:
       - .github/workflows/ptj-isolated-demo-installer.yml
       - app/src-tauri/icons/approved-icon-source.webp
