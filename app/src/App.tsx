@@ -954,20 +954,20 @@ export function App(){
     }
     return true;
   }
-  function discardEvidenceEditorDraft(){
+  function discardEvidenceEditorDraft():boolean{
     if(evidenceSavingRef.current||(evidenceCandidate&&hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id))){
       setEvidenceFeedback('Cannot close: Evidence save is running or its outcome is UNKNOWN. Verify saved history first.');
-      return;
+      return false;
     }
     setPendingEvidencePage(null);setEvidenceClosePrompt(false);
     setEvidenceCandidate(null);setSelectedEvidenceIds([]);setEvidenceStances({});
     setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceDirection('');
     setEvidencePrice(null);setEvidenceNote('');setEvidenceFeedback('');
+    return true;
   }
   function closeEvidenceEditor():boolean{
     if(!confirmCloseEvidenceEditor())return false;
-    discardEvidenceEditorDraft();
-    return true;
+    return discardEvidenceEditorDraft();
   }
   function goToNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'){
     setNotebookPage(page);
