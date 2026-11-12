@@ -410,7 +410,7 @@ export function App(){
   const [analytics,setAnalytics]=useState<AnalyticsSummary|null>(null);
   const [mistakeSummary,setMistakeSummary]=useState<MistakeSummary[]>([]);
   const [runtimeReadiness,setRuntimeReadiness]=useState<RuntimeReadiness|null>(null);
-  const [quickShortcutReport,setQuickShortcutReport]=useState<{registered:boolean;error:string|null}|null>(null);
+  const [quickShortcutReport,setQuickShortcutReport]=useState<{registered:boolean;error:string|null;trigger_count:number}|null>(null);
   const [showSafety,setShowSafety]=useState(false);
   const [betaSelfTest,setBetaSelfTest]=useState<BetaSelfTestResult|null>(null);
   const [betaSelfTestBusy,setBetaSelfTestBusy]=useState(false);
@@ -429,7 +429,7 @@ export function App(){
     localApi.listMistakeTypes().then(setMistakeTypes).catch(()=>{});
     localApi.listRules().then(setRules).catch(()=>{});
     localApi.runtimeReadiness().then(setRuntimeReadiness).catch(()=>{});
-    invoke<{registered:boolean;error:string|null}>('quick_shortcut_report').then(setQuickShortcutReport).catch(()=>{});
+    void refreshQuickShortcutReport();
   },[]);
 
   useEffect(()=>{
@@ -506,6 +506,14 @@ export function App(){
     return true;
   }
   async function refreshSafety(){try{setRuntimeReadiness(await localApi.runtimeReadiness());}catch(e){setMessage(String(e));}}
+  async function refreshQuickShortcutReport(){
+    try{
+      const result=await invoke<{registered:boolean;error:string|null;trigger_count:number}>('quick_shortcut_report');
+      setQuickShortcutReport(result);
+    }catch(e){
+      setQuickShortcutReport({registered:false,error:'Diagnostic unavailable: '+String(e),trigger_count:0});
+    }
+  }
   async function runBetaSelfTest(){
     try{
       setBetaSelfTestBusy(true);setBetaSelfTest(null);
@@ -1589,6 +1597,12 @@ export function App(){
         <button className={showSafety?'activeMode':''} onClick={async()=>{setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}}>Safety</button>
         <button className={showSettings?'activeMode':''} onClick={()=>{setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}>Settings</button>
         <button onClick={createBackupWithFeedback} disabled={backupBusy}>{backupBusy?'Creating backup…':'Create backup'}</button>
+        <div className="panel" aria-label="Windows quick shortcut diagnosis" style={{padding:9,overflowWrap:'anywhere'}}>
+          <strong>Quick shortcut</strong>
+          <p className="subtle">{quickShortcutReport===null?'Checking Windows registration…':quickShortcutReport.registered?'Ctrl+Alt+J: registered with Windows':'Ctrl+Alt+J: unavailable'}</p>
+          {quickShortcutReport&&<p className="subtle">Detected key presses: {quickShortcutReport.trigger_count}{quickShortcutReport.error?' · '+quickShortcutReport.error:''}</p>}
+          <button type="button" onClick={()=>void refreshQuickShortcutReport()}>Check shortcut status</button>
+        </div>
 
         <button className={showRoadmap?'activeMode':''} onClick={()=>{setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}>Feature Roadmap</button>
         <div className="recent"><strong id="ptj-recent-heading">Recent</strong><div className="recentList" role="region" aria-labelledby="ptj-recent-heading" tabIndex={0}>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" disabled={active?.session_id===lastOpenedSessionId} onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div></div>
