@@ -1123,7 +1123,7 @@ export function App(){
       setMessage('Decision save outcome UNKNOWN. Verify saved history before closing.');return;
     }
     if(decisionEditorHasUnsavedInput()){setDecisionClosePrompt(true);return;}
-    setDecisionCandidate(null);setDecisionClosePrompt(false);
+    setDecisionCandidate(null);setDecisionClosePrompt(false);setPendingDecisionPage(null);
   }
   function resolveDecisionClose(keep:boolean){
     if(!decisionCandidate||decisionSavingRef.current||decisionSaving
@@ -1139,7 +1139,7 @@ export function App(){
       delete decisionDraftsRef.current[key];
       setMessage('Unsaved Decision draft discarded. Previously saved Decisions were not changed.');
     }
-    setDecisionCandidate(null);setDecisionClosePrompt(false);
+    setDecisionCandidate(null);setDecisionClosePrompt(false);setPendingDecisionPage(null);
   }
   function decisionEditorHasUnsavedInput():boolean{
     return !!decisionCandidate&&hasUnsavedDecisionCapture({
@@ -1161,7 +1161,7 @@ export function App(){
     if(notebookPage==='EVIDENCE'&&evidenceCandidate&&!closeEvidenceEditor())return;
     if(!confirmCloseDecisionEditor())return;
     const savedDraft=decisionDraftsRef.current[decisionDraftKey(c.candidate_id,type)];
-    setDecisionClosePrompt(false);
+    setDecisionClosePrompt(false);setPendingDecisionPage(null);
     setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c);
     setDecisionType(savedDraft?.decisionType??type);setDecisionInitialType(type);
     setDecisionReason(savedDraft?.reason??'');setDecisionNote(savedDraft?.note??'');
@@ -1222,7 +1222,7 @@ export function App(){
       try { setTimeline(await localApi.listPlanTimeline(active.session_id)); }
       catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
       delete decisionDraftsRef.current[decisionDraftKey(decisionCandidate.candidate_id,decisionType)];
-      setDecisionClosePrompt(false);
+      setDecisionClosePrompt(false);setPendingDecisionPage(null);
       if(isTrade){ setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); focusQuickEntryInput(); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
