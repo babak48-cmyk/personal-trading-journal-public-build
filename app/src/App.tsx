@@ -943,11 +943,25 @@ export function App(){
     }
     return true;
   }
-  function closeEvidenceEditor(){
-    if(!confirmCloseEvidenceEditor())return;
+  function closeEvidenceEditor():boolean{
+    if(!confirmCloseEvidenceEditor())return false;
     setEvidenceCandidate(null);setSelectedEvidenceIds([]);setEvidenceStances({});
     setSavedEvidenceIds([]);setEvidenceSaved(false);setEvidenceDirection('');
     setEvidencePrice(null);setEvidenceNote('');setEvidenceFeedback('');
+    return true;
+  }
+  function navigateNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'){
+    if(page===notebookPage)return;
+    // All operator page controls must use the same guard as Evidence Close.
+    // Hiding a page is NOT permission to discard an observed, unsaved batch.
+    if(notebookPage==='EVIDENCE'&&evidenceCandidate&&!closeEvidenceEditor())return;
+    if(notebookPage==='DECISION'&&decisionCandidate){
+      if(!confirmCloseDecisionEditor())return;
+      setDecisionCandidate(null);
+    }
+    setNotebookPage(page);
+    setNotebookMaxPage(v=>Math.max(v,['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'].indexOf(page)));
+    window.scrollTo({top:0,behavior:'smooth'});
   }
   async function openEvidence(c:CurrentCandidate){
     if(evidenceCandidate?.candidate_id===c.candidate_id){
@@ -1038,6 +1052,8 @@ export function App(){
     return !decisionEditorHasUnsavedInput()||window.confirm('Discard UN-SAVED Decision details? The existing saved Decision history will remain intact.');
   }
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
+    // Evidence-to-Decision buttons also navigate away; protect unfinished capture.
+    if(notebookPage==='EVIDENCE'&&evidenceCandidate&&!closeEvidenceEditor())return;
     if(!confirmCloseDecisionEditor())return;
     setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type);setDecisionInitialType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
     setDecisionDirection(directionFromZoneIntent(c.directional_intent));
@@ -1617,11 +1633,11 @@ export function App(){
 
         {active&&plan&&<>
           {quickMode&&<nav className="panel" aria-label="Quick notebook pages" style={{padding:12,marginBottom:12}}>
-            <strong>Journal pages</strong><p className="subtle">One page at a time. Previously entered values stay in place.</p>{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={()=>{setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));}}>Review saved decisions</button></div>}
+            <strong>Journal pages</strong><p className="subtle">One page at a time. Previously entered values stay in place.</p>{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={()=>navigateNotebookPage('EXECUTION')}>Review saved decisions</button></div>}
             <div className="rowActions" style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).map((page,i)=><button key={page} type="button" className={notebookPage===page?'primary':''} aria-current={notebookPage===page?'page':undefined} onClick={()=>{setNotebookPage(page);window.scrollTo({top:0,behavior:'smooth'});}}>{i+1}. {page==='PLAN'?'Zones':page==='DECISION'?'Decision':page==='EVIDENCE'?'Evidence':page==='EXECUTION'?'Trade':'Review'}</button>)}
+              {(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).map((page,i)=><button key={page} type="button" className={notebookPage===page?'primary':''} aria-current={notebookPage===page?'page':undefined} onClick={()=>navigateNotebookPage(page)}>{i+1}. {page==='PLAN'?'Zones':page==='DECISION'?'Decision':page==='EVIDENCE'?'Evidence':page==='EXECUTION'?'Trade':'Review'}</button>)}
             </div>
-            <div className="rowActions"><button type="button" disabled={notebookPage==='PLAN'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;setNotebookPage(pages[Math.max(0,pages.indexOf(notebookPage)-1)]);window.scrollTo(0,0);}}>← Previous</button><button type="button" disabled={notebookPage==='REVIEW'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;const nextIndex=Math.min(4,pages.indexOf(notebookPage)+1);setNotebookPage(pages[nextIndex]);setNotebookMaxPage(v=>Math.max(v,nextIndex));window.scrollTo(0,0);}}>Next page →</button></div>
+            <div className="rowActions"><button type="button" disabled={notebookPage==='PLAN'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;navigateNotebookPage(pages[Math.max(0,pages.indexOf(notebookPage)-1)]);}}>← Previous</button><button type="button" disabled={notebookPage==='REVIEW'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;const nextIndex=Math.min(4,pages.indexOf(notebookPage)+1);navigateNotebookPage(pages[nextIndex]);}}>Next page →</button></div>
           </nav>}
           <div style={{display:!quickMode||notebookPage==='PLAN'?'block':'none'}}>
           <div id="journal-current-plan" className="panel"><div className="panelTitle"><div><h2>Current plan</h2><p className="subtle">Revision {plan.revision_number} · updated {timeLabel(plan.created_at)}</p></div><div className="headerActions"><button onClick={()=>setShowLiveCandidate(v=>!v)}>+ Add live zone</button><button className="primary" onClick={()=>setShowPlanUpdate(v=>!v)}>Revise plan</button></div></div>
