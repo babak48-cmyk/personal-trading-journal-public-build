@@ -17,3 +17,11 @@ export function hasUnsavedEvidenceDraft(draft:QuickEvidenceDraft):boolean{
   // Stance values for deselected chips are inert; they cannot be saved as observations.
   return false;
 }
+
+/** Pure contract for the in-app navigation gate; never depend on OS dialogs. */
+export function shouldPromptEvidencePageLeave(
+  currentPage:string,targetPage:string,editorOpen:boolean,draft:QuickEvidenceDraft,
+):boolean{
+  return currentPage==='EVIDENCE'&&targetPage!=='EVIDENCE'&&editorOpen
+    &&hasUnsavedEvidenceDraft(draft);
+}
