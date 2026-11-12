@@ -15,6 +15,7 @@ mod runtime;
 struct QuickShortcutReport {
     registered: bool,
     error: Option<String>,
+    trigger_count: u64,
 }
 
 struct QuickShortcutState(std::sync::Mutex<QuickShortcutReport>);
@@ -39,6 +40,7 @@ pub fn run() {
         .manage(QuickShortcutState(std::sync::Mutex::new(QuickShortcutReport {
             registered: false,
             error: Some("Registration not yet attempted".to_string()),
+            trigger_count: 0,
         })))
         .setup(|app| {
             use tauri_plugin_global_shortcut::{
@@ -56,6 +58,9 @@ pub fn run() {
                     .with_handler(move |handle, triggered, event| {
                         if triggered != &shortcut || event.state() != ShortcutState::Pressed {
                             return;
+                        }
+                        if let Ok(mut status) = handle.state::<QuickShortcutState>().0.lock() {
+                            status.trigger_count = status.trigger_count.saturating_add(1);
                         }
                         if let Some(window) = handle.get_webview_window("main") {
                             if window.is_focused().unwrap_or(false) {
@@ -77,12 +82,14 @@ pub fn run() {
                 Ok(()) => QuickShortcutReport {
                     registered: true,
                     error: None,
+                    trigger_count: 0,
                 },
                 Err(error) => {
                     eprintln!("QW-1A Ctrl+Alt+J shortcut unavailable: {error}");
                     QuickShortcutReport {
                         registered: false,
                         error: Some(error.to_string()),
+                        trigger_count: 0,
                     }
                 }
             };
