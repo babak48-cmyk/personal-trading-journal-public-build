@@ -11,12 +11,35 @@ mod repository;
 mod restore;
 mod runtime;
 
+#[derive(Clone, serde::Serialize)]
+struct QuickShortcutReport {
+    registered: bool,
+    error: Option<String>,
+}
+
+struct QuickShortcutState(std::sync::Mutex<QuickShortcutReport>);
+
+#[tauri::command]
+fn quick_shortcut_report(
+    state: tauri::State<'_, QuickShortcutState>,
+) -> Result<QuickShortcutReport, String> {
+    state
+        .0
+        .lock()
+        .map(|s| s.clone())
+        .map_err(|_| "Quick shortcut status unavailable".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri::Manager;
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(QuickShortcutState(std::sync::Mutex::new(QuickShortcutReport {
+            registered: false,
+            error: Some("Registration not yet attempted".to_string()),
+        })))
         .setup(|app| {
             use tauri_plugin_global_shortcut::{
                 Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
@@ -49,12 +72,27 @@ pub fn run() {
             )?;
             // Registration can fail if NinjaTrader/Windows owns this combination.
             // A failure leaves the ordinary taskbar workflow available.
-            if let Err(error) = app.global_shortcut().register(shortcut) {
-                eprintln!("QW-1A Ctrl+Alt+J shortcut unavailable: {error}");
+            let result = app.global_shortcut().register(shortcut);
+            let report = match result {
+                Ok(()) => QuickShortcutReport {
+                    registered: true,
+                    error: None,
+                },
+                Err(error) => {
+                    eprintln!("QW-1A Ctrl+Alt+J shortcut unavailable: {error}");
+                    QuickShortcutReport {
+                        registered: false,
+                        error: Some(error.to_string()),
+                    }
+                }
+            };
+            if let Ok(mut current) = app.state::<QuickShortcutState>().0.lock() {
+                *current = report;
             }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            quick_shortcut_report,
             commands::database_health,
             commands::list_custom_field_definitions,
             commands::custom_field_cleanup_preflight,
