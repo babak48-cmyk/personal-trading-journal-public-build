@@ -96,6 +96,17 @@ describe('All-input coverage regression boundaries', () => {
   });
 });
 
+describe('Review mistakes Field Manager connection', () => {
+  it('supports optional hide and user-required Quick/Detailed visibility', () => {
+    const id='review.mistakes';
+    expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{})).toBe(false);
+    expect(isFieldPresented(id,true,{[id]:false},{},{})).toBe(false);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    expect(isFieldPresented(id,false,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+});
+
 describe('Plan, Zone and Review required-field presentation gate', () => {
   const fields = [
     'plan.mainScenario',
