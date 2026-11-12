@@ -16,7 +16,7 @@ describe('Quick Evidence draft navigation safeguards',()=>{
    expect(hasUnsavedEvidenceDraft({...empty,price:0})).toBe(true);
    expect(hasUnsavedEvidenceDraft({...empty,price:6011.25})).toBe(true);
    expect(hasUnsavedEvidenceDraft({...empty,direction:'NEUTRAL'})).toBe(true);
-   expect(hasUnsavedEvidenceDraft({...empty,note:'observed absorption'}})).toBe(true);
+   expect(hasUnsavedEvidenceDraft({...empty,note:'observed absorption'})).toBe(true);
  });
  it('does not represent an acknowledged atomic batch as unsaved',()=>{
    expect(hasUnsavedEvidenceDraft({...empty,selectedIds:['x'],note:'saved',acknowledgedSaved:true})).toBe(false);
