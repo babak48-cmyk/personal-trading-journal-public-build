@@ -458,25 +458,24 @@ export function App(){
   function invalidClass(id:string){return validationErrors.includes(id)?'validationFieldError':'';}
   function jumpToRequiredField(id:string){
     const route=quickValidationRoute(id,active?.status==='DRAFT',!!plan);
+    let targetPage=route.notebookPage;
+    // Custom required inputs navigate to the actual owner. Preserve any
+    // previous Evidence capture before changing the notebook page.
+    if(id.startsWith('custom-required-')){
+      if(id.startsWith('custom-required-candidate-')||id.startsWith('custom-required-zone-'))targetPage='PLAN';
+      if(id.startsWith('custom-required-trade-')||id.startsWith('custom-required-post-trade-review-'))targetPage='EXECUTION';
+      if(id.startsWith('custom-required-premarket-plan-')&&active?.status!=='DRAFT')targetPage='PLAN';
+      if(id.startsWith('custom-required-session-review-'))targetPage='REVIEW';
+      if(id.startsWith('custom-required-session-')&&active?.status!=='DRAFT')targetPage='PLAN';
+    }
+    if(targetPage!==null&&!navigateNotebookPage(targetPage))return;
     if(route.draftStep!==null)setDraftStep(route.draftStep);
     if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
     if(route.draftZonePage!==null)setDraftZonePage(route.draftZonePage);
-    if(route.notebookPage!==null)setNotebookPage(route.notebookPage);
-    // Opening the Review page must not refresh persisted values over an unsaved draft.
-    if(route.notebookPage==='REVIEW')setShowSessionReview(true);
-    // Custom fields follow the canonical owner rather than a generic field name.
-    if(id.startsWith('custom-required-')){
-      if(id.startsWith('custom-required-candidate-')||id.startsWith('custom-required-zone-'))setNotebookPage('PLAN');
-      if(id.startsWith('custom-required-trade-')||id.startsWith('custom-required-post-trade-review-'))setNotebookPage('EXECUTION');
-      if(id.startsWith('custom-required-premarket-plan-')){
-        if(active?.status==='DRAFT')setDraftStep(1);
-        else setNotebookPage('PLAN');
-      }
-      if(id.startsWith('custom-required-session-review-'))setNotebookPage('REVIEW');
-      if(id.startsWith('custom-required-session-')){
-        if(active?.status==='DRAFT'){setDraftStep(1);setDraftPlanPage(0);}
-        else setNotebookPage('PLAN');
-      }
+    if(targetPage==='REVIEW')setShowSessionReview(true);
+    if(id.startsWith('custom-required-premarket-plan-')&&active?.status==='DRAFT')setDraftStep(1);
+    if(id.startsWith('custom-required-session-')&&active?.status==='DRAFT'){
+      setDraftStep(1);setDraftPlanPage(0);
     }
     const focusVisible=(attempt:number)=>{
       const candidates=[
