@@ -982,13 +982,13 @@ export function App(){
     setNotebookMaxPage(v=>Math.max(v,['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'].indexOf(page)));
     window.scrollTo({top:0,behavior:'smooth'});
   }
-  function navigateNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'){
-    if(page===notebookPage)return;
+  function navigateNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'):boolean{
+    if(page===notebookPage)return true;
     // Native confirm dialogs are not a reliable visible navigation gate on every
     // installed Windows WebView. Ask inside the app; never reset the draft here.
     if(notebookPage==='EVIDENCE'&&evidenceCandidate){
       if(evidenceSavingRef.current||hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id)){
-        setEvidenceFeedback('Finish or verify the Evidence save before switching pages.');return;
+        setEvidenceFeedback('Finish or verify the Evidence save before switching pages.');return false;
       }
       if(shouldPromptEvidencePageLeave(notebookPage,page,!!evidenceCandidate,{
         selectedIds:selectedEvidenceIds,stances:evidenceStances,direction:evidenceDirection,
@@ -996,16 +996,17 @@ export function App(){
       })){
         setPendingEvidencePage(page);
         window.requestAnimationFrame(()=>document.getElementById('evidence-page-navigation-warning')?.scrollIntoView({block:'center',behavior:'smooth'}));
-        return;
+        return false;
       }
-      if(!closeEvidenceEditor())return;
+      if(!closeEvidenceEditor())return false;
     }
     if(notebookPage==='DECISION'&&decisionCandidate){
-      if(!confirmCloseDecisionEditor())return;
+      if(!confirmCloseDecisionEditor())return false;
       setDecisionCandidate(null);
     }
     setPendingEvidencePage(null);
     goToNotebookPage(page);
+    return true;
   }
   function continueWithEvidenceDraftPreserved(){
     const next=pendingEvidencePage;
@@ -1584,8 +1585,8 @@ export function App(){
         <div className={plan ? 'journeyStep journeyDone' : active ? 'journeyStep journeyCurrent' : 'journeyStep'}><span>02</span><b>Plan & Zones</b><small>{plan ? 'Confirmed' : active ? 'Draft / confirm' : 'Next'}</small>{active?.status==='DRAFT' && !plan && <div className="journeyDraftLinks"><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(1)}>Plan</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(2)}>Zones</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(3)}>Review</button></div>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'})}>Select zone ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'})}>Select zone ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>05</span><b>Execution</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>{setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));window.requestAnimationFrame(()=>document.getElementById('journal-session-trades')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>View trades ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>{setNotebookPage('REVIEW');if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>document.getElementById('journal-session-review')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>Session review ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>05</span><b>Execution</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('EXECUTION'))window.requestAnimationFrame(()=>document.getElementById('journal-session-trades')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>View trades ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('REVIEW')){if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>document.getElementById('journal-session-review')?.scrollIntoView({behavior:'smooth',block:'start'}));}}}>Session review ↓</button>}</div>
       </div>
       <p className="journeyNote">Only confirmed stages are marked complete. Later stages are available to document actual events; they are not automatically complete.</p>
     </div>}
