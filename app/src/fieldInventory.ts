@@ -88,7 +88,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('psychology.intensity','Emotion intensity','post-trade-review','journal-field',true,'psychology.intensity'),
   entry('review.exitReason','Exit reason','post-trade-review','journal-field',true,'review.exitReason'),
   entry('review.exitNote','Exit reason detail','post-trade-review','journal-field',true,'review.exitNote'),
-  entry('review.mistakes','Recorded mistakes','post-trade-review','journal-field',true),
+  entry('review.mistakes','Recorded mistakes','post-trade-review','journal-field',true,'review.mistakes'),
   entry('rule.violationReported','Rule violation reported','post-trade-review','conditional-journal-field',false,undefined,'Affects rule adherence classification'),
   entry('rule.violatedIds','Violated rules','post-trade-review','conditional-journal-field',false,undefined,'Mandatory when rule violation is reported'),
   entry('rule.note','Rule violation note','post-trade-review','journal-field',true,'rule.note'),
