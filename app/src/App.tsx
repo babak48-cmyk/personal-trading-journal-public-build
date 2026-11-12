@@ -6,6 +6,7 @@ import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
+import { directionFromZoneIntent, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEntryInputs, hasUnsavedManagementInputs, hasUnsavedReviewChanges } from './quickUnsavedCapture';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -232,7 +233,8 @@ export function App(){
   const [notebookPage,setNotebookPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'>('PLAN');
   const [notebookMaxPage,setNotebookMaxPage]=useState(0);
   const [decisionType,setDecisionType]=useState<'TRADE'|'NO_TRADE'|'MISSED'>('TRADE');
-  const [decisionDirection,setDecisionDirection]=useState<'LONG'|'SHORT'>('LONG');
+  const [decisionDirection,setDecisionDirection]=useState<ExplicitTradeDirection>('');
+  const [decisionInitialType,setDecisionInitialType]=useState<'TRADE'|'NO_TRADE'|'MISSED'>('TRADE');
   const [decisionReason,setDecisionReason]=useState('');
   const [decisionNote,setDecisionNote]=useState('');
   const [decisionQuality,setDecisionQuality]=useState<'A'|'B'|'C'|'INVALID'|'UNCLEAR'|''>('');
@@ -717,7 +719,8 @@ export function App(){
 
     setDecisionCandidate(null);
     setDecisionType('TRADE');
-    setDecisionDirection('LONG');
+    setDecisionDirection('');
+    setDecisionInitialType('TRADE');
     setDecisionReason('');
     setDecisionNote('');
     setDecisionQuality('');
@@ -986,16 +989,32 @@ export function App(){
     }finally{setEvidenceHistoryVerifying(false);}
   }
 
+  function decisionEditorHasUnsavedInput():boolean{
+    return !!decisionCandidate&&hasUnsavedDecisionCapture({
+      note:decisionNote,reason:decisionReason,quality:decisionQuality,mismatchReason,
+      direction:decisionDirection,defaultDirection:directionFromZoneIntent(decisionCandidate.directional_intent),
+      decisionType,initialType:decisionInitialType,
+    });
+  }
+  function confirmCloseDecisionEditor():boolean{
+    if(decisionSavingRef.current){setMessage('Finish the Decision save before leaving this editor.');return false;}
+    if(decisionCandidate&&hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)){
+      setMessage('Decision save outcome is UNKNOWN. Refresh and verify saved history before leaving this editor.');
+      return false;
+    }
+    return !decisionEditorHasUnsavedInput()||window.confirm('Discard UN-SAVED Decision details? The existing saved Decision history will remain intact.');
+  }
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
-    if(decisionSavingRef.current)return;
-    setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
-    if(c.directional_intent==='LONG'||c.directional_intent==='SHORT') setDecisionDirection(c.directional_intent);
+    if(!confirmCloseDecisionEditor())return;
+    setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c); setDecisionType(type);setDecisionInitialType(type); setDecisionReason(''); setDecisionNote(''); setDecisionQuality(''); setMismatchReason('');
+    setDecisionDirection(directionFromZoneIntent(c.directional_intent));
     try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
   }
   async function saveDecision(){
     if(!active||!decisionCandidate||decisionSavingRef.current||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id))return;
     const isTrade=decisionType==='TRADE';
     const decisionMissing:ValidationIssue[]=[];
+    if(isTrade&&!decisionDirection)decisionMissing.push({id:'decision.direction',label:'Choose the actual LONG or SHORT direction for this trade decision'});
     if(!isTrade&&!decisionReason.trim()&&!decisionNote.trim())decisionMissing.push({id:'decision.reason',label:'Decision reason'});
     if(isUserRequired('decision.quality',requirementOverrides)&&!decisionQuality)decisionMissing.push({id:'decision.quality',label:'Decision quality'});
     if(isUserRequired('decision.note',requirementOverrides)&&!decisionNote.trim())decisionMissing.push({id:'decision.note',label:'Decision note'});
@@ -1031,7 +1050,7 @@ export function App(){
       return;
     }
     try{
-      const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?decisionDirection:null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:opposite?(mismatchReason||null):null});
+      const saved=await localApi.createCandidateDecision({session_id:active.session_id,candidate_id:decisionCandidate.candidate_id,decision_type:decisionType,intended_direction:isTrade?(decisionDirection||null):null,reason_code:decisionReason||null,reason_note:decisionNote||null,decision_quality:decisionQuality||null,decision_quality_note:null,plan_mismatch_reason:opposite?(mismatchReason||null):null});
       // Once the backend acknowledges a decision, do not report a later history-refresh
       // failure as a failed save: retrying could create a duplicate decision.
       try {
@@ -1569,12 +1588,12 @@ export function App(){
           {lastDecisionNotice&&!decisionCandidate&&<p role="status" className="okBox">{lastDecisionNotice}</p>}
           {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision"><div className="panelTitle"><div><h2>Decision · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button onClick={()=>setDecisionCandidate(null)}>Close</button></div>
             <div className="fieldHelpLine"><b>Decision</b><FieldHelp id="decision.type" value={decisionType}/></div><div className="decisionChoice"><button className={decisionType==='TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='TRADE'){setDecisionType('TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}>TRADE</button><button className={decisionType==='NO_TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='NO_TRADE'){setDecisionType('NO_TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}>NO-TRADE</button><button className={decisionType==='MISSED'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='MISSED'){setDecisionType('MISSED');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}>MISSED</button></div>
-            {decisionType==='TRADE'&&<div className="formGrid"><label>Direction<select value={decisionDirection} onChange={e=>{setDecisionDirection(e.target.value as 'LONG'|'SHORT');setMismatchReason('');clearValidation('decision.mismatchReason');}}><option>LONG</option><option>SHORT</option></select></label>{['LONG','SHORT'].includes(decisionCandidate.directional_intent)&&decisionDirection!==decisionCandidate.directional_intent&&<label data-validation-id="decision.mismatchReason" className={`warningField ${invalidClass('decision.mismatchReason')}`}>Why are you going opposite to the plan?<select value={mismatchReason} onChange={e=>{setMismatchReason(e.target.value);clearValidation('decision.mismatchReason')}}><option value="">Select</option><option value="NEW_EVIDENCE">New evidence</option><option value="SCENARIO_INVALIDATED">Original scenario invalidated</option><option value="PLANNED_COUNTERTREND">Planned counter-trend setup</option><option value="PLAN_NOT_UPDATED">Plan not updated yet</option><option value="UNPLANNED_IMPULSE">Unplanned / impulsive</option><option value="OTHER">Other</option></select>{validationErrors.includes('decision.mismatchReason')&&<small role="alert">Required: choose a reason for trading opposite to this Zone's planned direction.</small>}</label>}</div>}
+            {decisionType==='TRADE'&&<div className="formGrid"><label data-validation-id="decision.direction" className={invalidClass('decision.direction')}>Direction <small>{decisionCandidate.directional_intent==='LONG'||decisionCandidate.directional_intent==='SHORT'?'From the saved Zone intent; change only if you intend the opposite side.':'Choose explicitly — the Zone has no committed LONG/SHORT direction.'}</small><select value={decisionDirection} onChange={e=>{setDecisionDirection(e.target.value as ExplicitTradeDirection);setMismatchReason('');clearValidation('decision.mismatchReason');clearValidation('decision.direction');}}><option value="">Choose direction</option><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select></label>{['LONG','SHORT'].includes(decisionCandidate.directional_intent)&&decisionDirection!==decisionCandidate.directional_intent&&<label data-validation-id="decision.mismatchReason" className={`warningField ${invalidClass('decision.mismatchReason')}`}>Why are you going opposite to the plan?<select value={mismatchReason} onChange={e=>{setMismatchReason(e.target.value);clearValidation('decision.mismatchReason')}}><option value="">Select</option><option value="NEW_EVIDENCE">New evidence</option><option value="SCENARIO_INVALIDATED">Original scenario invalidated</option><option value="PLANNED_COUNTERTREND">Planned counter-trend setup</option><option value="PLAN_NOT_UPDATED">Plan not updated yet</option><option value="UNPLANNED_IMPULSE">Unplanned / impulsive</option><option value="OTHER">Other</option></select>{validationErrors.includes('decision.mismatchReason')&&<small role="alert">Required: choose a reason for trading opposite to this Zone's planned direction.</small>}</label>}</div>}
             {decisionType==='NO_TRADE'&&<div data-validation-id="decision.reason" className={`quickReasons ${invalidClass('decision.reason')}`}><span>Why no trade? <FieldHelp id="decision.reason"/></span>{['MISSING_CONFIRMATION','CONTRADICTING_EVIDENCE','INVALIDATION','RISK_UNACCEPTABLE','CONTEXT_WRONG','RULE_PREVENTED','OTHER'].map(x=><button key={x} className={decisionReason===x?'chip selected':'chip'} onClick={()=>{setDecisionReason(x);clearValidation('decision.reason')}}>{x.replaceAll('_',' ')}</button>)}</div>}
             {decisionType==='MISSED'&&<div data-validation-id="decision.reason" className={`quickReasons ${invalidClass('decision.reason')}`}><span>Why missed? <FieldHelp id="decision.reason"/></span>{['HESITATION','DID_NOT_NOTICE','TOO_LATE','OPERATIONAL_ISSUE','DISTRACTED','RISK_LIMIT_REACHED','PLATFORM_ISSUE','OTHER'].map(x=><button key={x} className={decisionReason===x?'chip selected':'chip'} onClick={()=>{setDecisionReason(x);clearValidation('decision.reason')}}>{x.replaceAll('_',' ')}</button>)}</div>}
             <div className="formGrid">{(!quickMode||isUserRequired('decision.quality',requirementOverrides)||fieldPlacements['decision.quality']==='QUICK_AND_DETAILED')&&isFieldPresented('decision.quality',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="decision.quality" className={invalidClass('decision.quality')}>{fieldText['decision.quality']?.label?.trim()||'Decision quality'} <small>{requirementLabel('decision.quality',requirementOverrides)}</small>{fieldText['decision.quality']?.help&&<small title={fieldText['decision.quality'].help}>ⓘ</small>} <FieldHelp id="decision.quality" value={decisionQuality}/><select value={decisionQuality} onChange={e=>{setDecisionQuality(e.target.value as any);clearValidation('decision.quality')}}><option value="">Complete later</option>{['A','B','C','INVALID','UNCLEAR'].map(x=><option key={x}>{x}</option>)}</select></label>}{isFieldPresented('decision.note',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="decision.note" className={invalidClass('decision.note')}>{fieldText['decision.note']?.label?.trim()||'Decision note'}{isUserRequired('decision.note',requirementOverrides)?' (Required)':' (Optional)'}{fieldText['decision.note']?.help&&<small title={fieldText['decision.note'].help}>ⓘ</small>}<textarea value={decisionNote} onChange={e=>{setDecisionNote(e.target.value);clearValidation('decision.note')}} placeholder={isUserRequired('decision.note',requirementOverrides)?'Explain why this decision was made':'Optional: add useful decision context'}/></label>}</div>
             <div className="decisionSnapshot"><span><b>Planned intent</b>{decisionCandidate.directional_intent}</span><span><b>Status</b>{decisionCandidate.current_status}</span><span><b>Sources</b>{decisionCandidate.sources.slice(0,3).join(' · ')||'—'}</span></div>
-            <div className="rowActions"><button disabled={decisionSaving} onClick={()=>setDecisionCandidate(null)}>Cancel</button><button className="primary" disabled={decisionSaving||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" disabled={!canAcknowledgeVerifiedHistory(decisionSaveUncertainZoneId,decisionHistoryCheckedZoneId,decisionCandidate.candidate_id)} onClick={()=>{setDecisionSaveUncertainZoneId(null);setDecisionHistoryCheckedZoneId(null);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
+            <div className="rowActions"><button disabled={decisionSaving} onClick={()=>{if(confirmCloseDecisionEditor())setDecisionCandidate(null)}}>Cancel</button><button className="primary" disabled={decisionSaving||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" disabled={!canAcknowledgeVerifiedHistory(decisionSaveUncertainZoneId,decisionHistoryCheckedZoneId,decisionCandidate.candidate_id)} onClick={()=>{setDecisionSaveUncertainZoneId(null);setDecisionHistoryCheckedZoneId(null);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
             {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary>{candidateDecisions[decisionCandidate.candidate_id].slice(0,12).map(d=><div className="decisionHistory" key={d.decision_id}><time title={d.occurred_at}>{d.occurred_at}</time><b>{d.decision_type}{d.intended_direction?` · ${d.intended_direction}`:''}</b><small>{d.reason_code||d.plan_alignment||'—'}</small>{d.plan_mismatch_reason&&<small>Opposite-plan reason: {d.plan_mismatch_reason}</small>}</div>)}</details>}
           </div>}
 
