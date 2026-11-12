@@ -1,4 +1,5 @@
 import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { quickValidationRoute } from './quickValidationRoute';
 import { tradeEntryIssues } from './tradeEntryValidation';
@@ -407,6 +408,7 @@ export function App(){
   const [analytics,setAnalytics]=useState<AnalyticsSummary|null>(null);
   const [mistakeSummary,setMistakeSummary]=useState<MistakeSummary[]>([]);
   const [runtimeReadiness,setRuntimeReadiness]=useState<RuntimeReadiness|null>(null);
+  const [quickShortcutReport,setQuickShortcutReport]=useState<{registered:boolean;error:string|null}|null>(null);
   const [showSafety,setShowSafety]=useState(false);
   const [betaSelfTest,setBetaSelfTest]=useState<BetaSelfTestResult|null>(null);
   const [betaSelfTestBusy,setBetaSelfTestBusy]=useState(false);
@@ -425,6 +427,7 @@ export function App(){
     localApi.listMistakeTypes().then(setMistakeTypes).catch(()=>{});
     localApi.listRules().then(setRules).catch(()=>{});
     localApi.runtimeReadiness().then(setRuntimeReadiness).catch(()=>{});
+    invoke<{registered:boolean;error:string|null}>('quick_shortcut_report').then(setQuickShortcutReport).catch(()=>{});
   },[]);
 
   useEffect(()=>{
@@ -1518,7 +1521,7 @@ export function App(){
   const activeTheme=resolvedTheme(appearance.theme,prefersDark);
 
   return <main className="appShell" data-theme={activeTheme.toLowerCase()} data-font-size={appearance.fontSize.toLowerCase()} data-font-family={appearance.fontFamily.toLowerCase()} data-background-tone={appearance.backgroundTone.toLowerCase()} data-accent={appearance.accent.toLowerCase()}>
-    <header className="topbar"><div><p className="eyebrow">Personal Trading Journal</p><h1>Planning + Decisions + Execution</h1></div><div className="topActions"><button onClick={()=>setShowGuide(true)}>Guide</button><button className={quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(true)}>Quick</button><button className={!quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(false)}>Detailed</button><span className="statusText">{message}</span></div></header>
+    <header className="topbar"><div><p className="eyebrow">Personal Trading Journal</p><h1>Planning + Decisions + Execution</h1></div><div className="topActions"><button onClick={()=>setShowGuide(true)}>Guide</button><button className={quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(true)}>Quick</button><button className={!quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(false)}>Detailed</button><span className="statusText">{message}</span>{quickShortcutReport&&<small role="status" title={quickShortcutReport.error??'Registered with Windows'}>{quickShortcutReport.registered?'Ctrl+Alt+J registered':'Ctrl+Alt+J unavailable — use the Taskbar (check for key conflicts)'}</small>}</div></header>
     {validationErrors.length>0&&!showAnalysis&&!showSettings&&<section className="panel requiredNavigator" role="alert" aria-label="Required fields to complete">
       <div className="panelTitle"><strong>Complete {validationErrors.length} highlighted required field{validationErrors.length===1?'':'s'}</strong><button type="button" onClick={()=>setValidationErrors([])}>Dismiss</button></div>
       <div className="rowActions">{validationErrors.map(id=><button key={id} type="button" className="requiredJump" onClick={()=>jumpToRequiredField(id)}>{validationIssueLabels[id]??FIELD_DEFINITION_BY_ID[id]?.label??id}</button>)}</div>
