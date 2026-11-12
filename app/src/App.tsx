@@ -568,12 +568,12 @@ export function App(){
     setFillCommissionInput('');setFillFeesInput('');
     setNewStop(null);setStopReason('');
   }
-  function confirmDiscardUnsavedTradeCapture(context:string):boolean{
+  function confirmDiscardUnsavedTradeCapture(context:string,includeEntry=true):boolean{
     if(reviewSavingRef.current||fillSavingRef.current||stopSavingRef.current){
       setMessage('A trade/Review save is still in progress. Finish it before switching '+context+'.');return false;
     }
     const parts:string[]=[];
-    if(unsavedEntryCapture())parts.push('unsubmitted entry price / stop / quantity / target / costs');
+    if(includeEntry&&unsavedEntryCapture())parts.push('unsubmitted entry price / stop / quantity / target / costs');
     if(unsavedManagementCapture())parts.push('unsubmitted fill or stop change');
     if(unsavedReviewCapture())parts.push('unsaved Review or rule answers');
     if(!parts.length)return true;
@@ -1264,8 +1264,8 @@ export function App(){
     void openDecision(zone,'TRADE');
   }
   async function openTradeDetail(t:TradeMetrics){
-    if(!confirmDiscardUnsavedTradeCapture('trades / refresh Review'))return;
-    if(activeTrade?.metrics.trade_id!==t.trade_id)resetManagementCapture();
+    if(!confirmDiscardUnsavedTradeCapture('trades / refresh Review',false))return;
+    resetManagementCapture();
     const request=++reviewSelectionRequestRef.current;
     setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
     setActiveTrade(null);applyReview(null,t.trade_id);setReviewVerifiedTradeId(null);setReviewFeedback('');
