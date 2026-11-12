@@ -14,5 +14,6 @@ export function hasUnsavedEvidenceDraft(draft:QuickEvidenceDraft):boolean{
   if(draft.acknowledgedSaved)return false;
   if(draft.selectedIds.length>0)return true;
   if(draft.price!==null||draft.direction!==''||draft.note.trim()!=='')return true;
-  return Object.values(draft.stances).some(role=>role!=='GENERAL_OBSERVATION');
+  // Stance values for deselected chips are inert; they cannot be saved as observations.
+  return false;
 }
