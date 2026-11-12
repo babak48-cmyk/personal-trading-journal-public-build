@@ -51,6 +51,10 @@ describe('Review Pending and finalization boundaries',()=>{
     expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:false})).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:null})).toEqual([]);
   });
+  it('never forces a mistake to be invented when none occurred',()=>{
+    const values={...blank,emotionAffected:false};
+    expect(reviewCompletionIssues(true,{'review.mistakes':true},values)).toEqual([]);
+  });
   it('does not invent a requirement when emotion flag is optional',()=>{
     expect(reviewCompletionIssues(true,{}, {...blank,emotionAffected:null})).toEqual([]);
   });

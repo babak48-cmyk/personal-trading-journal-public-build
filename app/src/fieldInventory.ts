@@ -88,7 +88,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('psychology.intensity','Emotion intensity','post-trade-review','journal-field',true,'psychology.intensity'),
   entry('review.exitReason','Exit reason','post-trade-review','journal-field',true,'review.exitReason'),
   entry('review.exitNote','Exit reason detail','post-trade-review','journal-field',true,'review.exitNote'),
-  entry('review.mistakes','Recorded mistakes','post-trade-review','journal-field',true),
+  entry('review.mistakes','Recorded mistakes','post-trade-review','journal-field',true,'review.mistakes'),
   entry('rule.violationReported','Rule violation reported','post-trade-review','conditional-journal-field',false,undefined,'Affects rule adherence classification'),
   entry('rule.violatedIds','Violated rules','post-trade-review','conditional-journal-field',false,undefined,'Mandatory when rule violation is reported'),
   entry('rule.note','Rule violation note','post-trade-review','journal-field',true,'rule.note'),
@@ -220,6 +220,48 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'sessionReview.overall',
   'sessionReview.planQuality',
   'sessionReview.discipline',
+] as const;
+
+
+/** Fields whose live form labels/help actually read the saved text preferences.
+ * Restrict editable text settings to verifiably consumed UI controls.
+ * Other inventoried controls remain visible for audit, without fake customization. */
+export const RENDERED_FIELD_TEXT_IDS = [
+  'attachment.caption',
+  'candidate.invalidationConditions',
+  'candidate.label',
+  'candidate.requiredConditions',
+  'candidate.sources',
+  'decision.note',
+  'decision.quality',
+  'evidence.direction',
+  'evidence.note',
+  'evidence.price',
+  'fill.reason',
+  'management.reason',
+  'plan.alternativeScenario',
+  'plan.mainScenario',
+  'plan.preSessionStateIntensity',
+  'planRevision.evidence',
+  'psychology.intensity',
+  'review.decisionQuality',
+  'review.executionQuality',
+  'review.exitNote',
+  'review.exitReason',
+  'review.managementQuality',
+  'review.mistakes',
+  'review.note',
+  'rule.note',
+  'sessionReview.bestDecision',
+  'sessionReview.biggestMistake',
+  'sessionReview.discipline',
+  'sessionReview.marketLearning',
+  'sessionReview.nextImprovement',
+  'sessionReview.overall',
+  'sessionReview.planQuality',
+  'sessionReview.wentPoorly',
+  'sessionReview.wentWell',
+  'trade.plannedTarget',
 ] as const;
 
 /** Report stale or duplicated active setting IDs before enabling them in Settings. */

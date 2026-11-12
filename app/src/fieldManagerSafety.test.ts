@@ -30,7 +30,7 @@ describe('Field Manager integration safety', () => {
     expect(report.find(x => x.id === 'evidence.price')?.status).toBe('CONNECTED');
     expect(report.find(x => x.id === 'evidence.direction')?.status).toBe('CONNECTED');
     expect(report.find(x => x.id === 'review.note')?.status).toBe('CONNECTED');
-    expect(fieldConnectionSummary().VISIBILITY_ONLY).toBeGreaterThan(0);
+    expect(fieldConnectionSummary().VISIBILITY_ONLY).toBe(0);
   });
 
   it('does not conceal a conditionally required field in Quick', () => {
@@ -93,6 +93,19 @@ describe('All-input coverage regression boundaries', () => {
   it('never turns unknown controls into hidden controls', () => {
     expect(isFieldPresented('future.unmapped', true, { 'future.unmapped': false },
       { 'future.unmapped': 'DETAILED_ONLY' }, {})).toBe(true);
+  });
+});
+
+describe('Review mistakes Field Manager connection', () => {
+  it('customizes visibility without forcing a trader to invent a mistake', () => {
+    const id='review.mistakes';
+    expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('CONNECTED');
+    expect(isUserRequired(id,{})).toBe(false);
+    expect(isUserRequired(id,{[id]:true})).toBe(false);
+    expect(isFieldPresented(id,true,{[id]:false},{},{})).toBe(false);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(false);
+    expect(isFieldPresented(id,false,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(false);
+    expect(isFieldPresented(id,true,{}, {}, {})).toBe(true);
   });
 });
 

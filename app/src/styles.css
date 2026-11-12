@@ -495,3 +495,11 @@
     border-radius:.35rem;
   }
 }
+
+/* Recent Evidence: protect observed timestamps and multiline text against grid overflow. */
+.appShell .evidenceHistory{min-width:0;max-width:100%;overflow:hidden}
+.appShell .evidenceRow{display:grid;grid-template-columns:minmax(0,96px) minmax(0,1fr);gap:.75rem;align-items:start;min-width:0}
+.appShell .evidenceRow time{display:block;min-width:0;white-space:normal;overflow-wrap:anywhere;line-height:1.4;font-size:.75rem}
+.appShell .evidenceRow>div{min-width:0;display:flex;flex-direction:column;gap:.2rem}
+.appShell .evidenceRow b,.appShell .evidenceRow small,.appShell .evidenceRow span{display:block;position:static;width:auto;max-width:100%;overflow-wrap:anywhere;white-space:normal;line-height:1.45}
+.appShell .evidenceRow span{white-space:pre-wrap}

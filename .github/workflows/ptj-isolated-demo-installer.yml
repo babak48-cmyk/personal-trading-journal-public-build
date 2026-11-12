@@ -1,6 +1,15 @@
-name: PTJ isolated DEMO installer (manual only)
+name: PTJ isolated DEMO installer (release gate)
+# One consolidated native Windows acceptance candidate after baseline comparison: in-app Evidence navigation/Close gates, explicit database-save status, readable history, OS shortcut delivery diagnostic. Original approved icon preserved.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/review-mistakes-field-manager-2026-11-12
+    paths:
+      - .github/workflows/ptj-isolated-demo-installer.yml
+      - app/src-tauri/icons/approved-icon-source.webp
+      - app/src-tauri/tauri.conf.json
+      - app/scripts/build-approved-icon.py
 permissions:
   contents: read
 jobs:
@@ -26,6 +35,18 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: node scripts/verify-demo-config.mjs
+      - name: Rebuild verified, user-approved Windows icon (no replacement art)
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check Pillow==11.3.0
+          python scripts/build-approved-icon.py
+      - name: Verify approved icon is the configured installer and executable icon
+        shell: pwsh
+        run: |
+          if (!(Test-Path src-tauri/icons/icon.ico)) { throw 'Approved icon.ico missing' }
+          $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if ($config.bundle.icon -notcontains 'icons/icon.ico') { throw 'EXE icon is not the approved ICO' }
+          if ($config.bundle.windows.nsis.installerIcon -ne 'icons/icon.ico') { throw 'NSIS installer icon is not approved ICO' }
       - name: Build DEMO only (never install into live data)
         run: npm run tauri build -- --config src-tauri/tauri.demo.conf.json --bundles nsis
       - name: Verify isolated DEMO installer output

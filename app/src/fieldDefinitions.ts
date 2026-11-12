@@ -94,6 +94,8 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
     helpShort:'Why the position was closed; record an observed reason, not a planned target.',helpExample:'STOP or TARGET, only when that describes the actual exit.'},
   {id:'review.exitNote',group:'Review',label:'Exit note',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Optional context about the actual exit.',helpExample:'Reduced exposure after observed market conditions changed.'},
+  {id:'review.mistakes',group:'Review',label:'Recorded mistakes',defaultRequirement:'OPTIONAL',systemLocked:false,requirementManaged:false,
+    helpShort:'Select actual process mistakes observed in this trade. Optional by default.',helpExample:'Chasing entry or moving a protective stop without a valid reason. Do not infer mistakes from P&L alone.'},
   {id:'review.note',group:'Review',label:'Review note',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'Concise post-trade learning note, separate from the original plan.',helpExample:'Followed the setup but managed the exit early.'},
   {id:'review.decisionQuality',group:'Review',label:'Decision quality',defaultRequirement:'OPTIONAL',systemLocked:false,

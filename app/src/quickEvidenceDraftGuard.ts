@@ -1,0 +1,27 @@
+/** Pure unsaved-observation check for Quick Evidence.
+ * No selection is pre-confirmed; a missing note or role is not invented.
+ * A batch already acknowledged as saved is immutable, not an unsaved draft. */
+export type QuickEvidenceDraft=Readonly<{
+  selectedIds:readonly string[];
+  stances:Readonly<Record<string,string>>;
+  direction:string;
+  price:number|null;
+  note:string;
+  acknowledgedSaved:boolean;
+}>;
+
+export function hasUnsavedEvidenceDraft(draft:QuickEvidenceDraft):boolean{
+  if(draft.acknowledgedSaved)return false;
+  if(draft.selectedIds.length>0)return true;
+  if(draft.price!==null||draft.direction!==''||draft.note.trim()!=='')return true;
+  // Stance values for deselected chips are inert; they cannot be saved as observations.
+  return false;
+}
+
+/** Pure contract for the in-app navigation gate; never depend on OS dialogs. */
+export function shouldPromptEvidencePageLeave(
+  currentPage:string,targetPage:string,editorOpen:boolean,draft:QuickEvidenceDraft,
+):boolean{
+  return currentPage==='EVIDENCE'&&targetPage!=='EVIDENCE'&&editorOpen
+    &&hasUnsavedEvidenceDraft(draft);
+}

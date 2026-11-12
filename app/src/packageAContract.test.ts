@@ -29,7 +29,8 @@ describe('Package A cross-stage delivery gate',()=>{
       expect(report.find(x=>x.id===id)?.status).toBe('PROTECTED');
     }
     // Mistakes are exception-based; absence of a mistake is a valid review.
-    expect(report.find(x=>x.id==='review.mistakes')?.status).toBe('VISIBILITY_ONLY');
+    expect(report.find(x=>x.id==='review.mistakes')?.status).toBe('CONNECTED');
+    expect(isUserRequired('review.mistakes',{'review.mistakes':true})).toBe(false);
     expect(report.some(x=>x.status==='PENDING')).toBe(false);
   });
 
@@ -37,7 +38,7 @@ describe('Package A cross-stage delivery gate',()=>{
     const connected=fieldConnectionReport().filter(x=>x.status==='CONNECTED');
     const manageable=connected.filter(x=>{
       const def=FIELD_DEFINITIONS.find(d=>d.id===x.id);
-      return def?.defaultRequirement==='OPTIONAL' && !def.systemLocked;
+      return def?.defaultRequirement==='OPTIONAL' && !def.systemLocked && def.requirementManaged!==false;
     });
     const overrides=Object.fromEntries(manageable.map(x=>[x.id,true]));
     const hidden=Object.fromEntries(ACTIVE_VISIBILITY_FIELD_IDS.map(id=>[id,false]));
