@@ -960,12 +960,6 @@ export function App(){
     setNotebookMaxPage(v=>Math.max(v,['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'].indexOf(page)));
     window.scrollTo({top:0,behavior:'smooth'});
   }
-  function evidenceDraftHasInputs():boolean{
-    return !!evidenceCandidate&&hasUnsavedEvidenceDraft({
-      selectedIds:selectedEvidenceIds,stances:evidenceStances,direction:evidenceDirection,
-      price:evidencePrice,note:evidenceNote,acknowledgedSaved:evidenceSaved,
-    });
-  }
   function navigateNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'){
     if(page===notebookPage)return;
     // Native confirm dialogs are not a reliable visible navigation gate on every
