@@ -1041,12 +1041,13 @@ export function App(){
     if(!navigateNotebookPage('PLAN'))return;
     window.requestAnimationFrame(()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'}));
   }
-  function navigateToExecutionWork(){
-    // Reveal the Quick execution page before moving to the pending entry or
-    // verified saved TRADE decisions. Never touch capture state or persistence.
+  function navigateToExecutionWork(target:'ENTRY'|'SAVED_DECISIONS'|'TRADES'='ENTRY'){
+    // All Quick execution shortcuts must first honor unsaved Evidence/Decision
+    // navigation guards, then focus the specific existing work they advertise.
     if(!navigateNotebookPage('EXECUTION'))return;
-    if(pendingTradeDecision){focusQuickEntryInput();return;}
-    window.requestAnimationFrame(()=>document.getElementById('journal-pending-trade-decisions')?.scrollIntoView({behavior:'smooth',block:'start'}));
+    if(target==='ENTRY'&&pendingTradeDecision){focusQuickEntryInput();return;}
+    const id=target==='TRADES'?'journal-session-trades':'journal-pending-trade-decisions';
+    window.requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}));
   }
   function navigateToLiveZone(){
     if(!navigateNotebookPage('PLAN'))return;
@@ -1787,7 +1788,7 @@ export function App(){
               const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);
               if(zone)void openDecision(zone,type);
             }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
-            {pendingTradeDecision&&<button type="button" className="primary" onClick={navigateToExecutionWork}>Continue trade entry</button>}
+            {pendingTradeDecision&&<button type="button" className="primary" onClick={()=>navigateToExecutionWork('ENTRY')}>Continue trade entry</button>}
           </div>}
           <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
         </section>}
@@ -1833,7 +1834,7 @@ export function App(){
 
         {active&&plan&&<>
           {quickMode&&<nav className="panel" aria-label="Quick notebook pages" style={{padding:12,marginBottom:12}}>
-            <strong>Daily journal route</strong><p className="subtle">Decision = intent; Execution = actual trade and its review; Session review = whole trading day. Your saved entries stay in place.</p>{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={navigateToExecutionWork}>Review saved decisions</button></div>}
+            <strong>Daily journal route</strong><p className="subtle">Decision = intent; Execution = actual trade and its review; Session review = whole trading day. Your saved entries stay in place.</p>{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={()=>navigateToExecutionWork('SAVED_DECISIONS')}>Review saved decisions</button></div>}
             {(()=>{const next=workflowNextAction({
               sessionTradeCount:sessionTrades.length,
               sessionZoneCount:plan.candidates.length,
@@ -1850,7 +1851,7 @@ export function App(){
                 }
                 if(next.destination==='PLAN'&&plan.candidates.length===0){navigateToLiveZone();return;}
                 if(next.destination==='PLAN'){navigateToZoneActions();return;}
-                if(next.destination==='EXECUTION'){navigateToExecutionWork();return;}
+                if(next.destination==='EXECUTION'){navigateToExecutionWork(next.label==='View recorded trades'?'TRADES':'SAVED_DECISIONS');return;}
                 navigateNotebookPage(next.destination);
               }}>{next.label} →</button>
             </div>;})()}
