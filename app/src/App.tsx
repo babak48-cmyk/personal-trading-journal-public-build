@@ -1653,7 +1653,7 @@ export function App(){
           ].join(', ')+'.');
           setReviewFeedback('Save the named required custom fields before completing.');
           setNotebookPage('EXECUTION');
-          window.setTimeout(()=>focusRequiredCustomField(first.fieldId,firstStage,savingTradeId,()=>setReviewFeedback('Required custom field is not visible for the selected Trade. Reopen this Trade to load its saved custom field controls; no Review was completed.')),120);
+          window.setTimeout(()=>focusRequiredCustomField(first.fieldId,firstStage,savingTradeId,()=>{if(reviewSelectionRequestRef.current===reviewRequestAtStart)setReviewFeedback('Required custom field is not visible for the selected Trade. Reopen this Trade to load its saved custom field controls; no Review was completed.');}),120);
           return;
         }
       }catch(e){setReviewFeedback('Required field check failed. Verify existing values before retrying.');setMessage('Review not completed: required custom fields could not be verified. '+String(e));return;}
