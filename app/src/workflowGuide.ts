@@ -76,7 +76,7 @@ export function workflowNextAction(s:WorkflowSituation):NextAction{
   };
   return {
     label:'Choose a zone and record a decision',
-    description:'The Trade button on a zone records an intention; it does not execute or create a trade. Actual entries belong under Execution.',
+    description:'Decide: TRADE records an intention, not an executed trade or fill. Actual entries belong under Execution.',
     destination:'PLAN',action:'NAVIGATE',
   };
 }
