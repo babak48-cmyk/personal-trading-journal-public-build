@@ -6,6 +6,7 @@ on:
     branches:
       - feature/review-mistakes-field-manager-2026-11-12
       - fix/decision-trade-draft-guard-2026-11-13
+      - feature/decision-history-execution-readability-2026-11-13
     paths:
       - .github/workflows/ptj-isolated-demo-installer.yml
       - app/src-tauri/icons/approved-icon-source.webp
