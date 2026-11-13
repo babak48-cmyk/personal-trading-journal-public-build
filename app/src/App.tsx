@@ -1762,29 +1762,25 @@ export function App(){
         
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&plan&&(!quickMode||notebookPage==='DECISION')&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
           <div className="panelTitle"><div><h2>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p>{quickShortcutReport&&<p className="subtle" role="status">Windows shortcut: {quickShortcutReport.registered?'Ctrl+Alt+J registered':'Ctrl+Alt+J unavailable (another app may own it)'}</p>}</div></div>
-          <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
-            <button type="button" onClick={()=>{if(active.status==='DRAFT')setDraftStep(2);else navigateToZoneActions();}} disabled={active.status!=='DRAFT'&&!plan}>View Zones</button>
-            {active.status!=='DRAFT'&&plan&&<>
-              <label htmlFor="quick-zone-choice">Zone</label>
-              <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>{
-                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Change Zone?'))return;
-                setQuickZoneId(e.target.value);setDecisionCandidate(null);
-              }}><option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}</select>
-              <button type="button" disabled={!quickZoneId||evidenceSaving||decisionSaving} onClick={()=>{
-                const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
-                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Discard unsaved decision details and record fresh observed evidence?'))return;
-                setDecisionCandidate(null);
-                void openEvidence(zone);
-              }}>Record evidence</button>
-              {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId} onClick={()=>{
-                const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
-                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&decisionCandidate.candidate_id!==zone.candidate_id&&!window.confirm('Discard unsaved decision details?'))return;
-                if(decisionCandidate?.candidate_id===zone.candidate_id){setDecisionType(type);}else{void openDecision(zone,type);}
-                window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
-              }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
-            </>}
+          {decisionCandidate ? <div className="rowActions" role="status">
+            <span>Decision editor open for <b>{decisionCandidate.label||'selected Zone'}</b>. Save the decision below, or use its Close control to keep/discard the unsaved draft before selecting another Zone.</span>
+            <button type="button" onClick={()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'})}>Continue decision</button>
+          </div> : <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
+            <button type="button" onClick={navigateToZoneActions}>View Zones</button>
+            <label htmlFor="quick-zone-choice">Zone</label>
+            <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>setQuickZoneId(e.target.value)}>
+              <option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}
+            </select>
+            <button type="button" disabled={!quickZoneId||evidenceSaving||decisionSaving} onClick={()=>{
+              const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);
+              if(zone)void openEvidence(zone);
+            }}>Record evidence</button>
+            {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId||decisionSaving} onClick={()=>{
+              const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);
+              if(zone)void openDecision(zone,type);
+            }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
             {pendingTradeDecision&&<button type="button" className="primary" onClick={navigateToExecutionWork}>Continue trade entry</button>}
-          </div>
+          </div>}
           <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
         </section>}
         {active&&<div className="sessionContextBar"><span><b>Session</b>{active.session_date}</span><span><b>Instrument</b>{active.instrument_symbol}</span><span><b>Environment</b>{active.environment.replaceAll('_',' ')}</span><small>{active.status==='DRAFT'?'Draft: session setup can still be edited before plan confirmation.':'Confirmed session: identity is preserved in history; plan changes use revisions.'}</small></div>}
