@@ -37,7 +37,7 @@ export function reviewCompletionIssues(
     .map(([id])=>({id,label:FIELD_DEFINITION_BY_ID[id]?.label??id}));
   // Recorded YES must identify which currently configured rule(s) were broken.
   // An empty selection is not equivalent to NO; deferred Review drafts remain partial.
-  if(values.ruleViolationReported===true && !values.violatedRuleIds.some(id=>id.trim()))
+  if(values.ruleViolationReported===true && !values.violatedRuleIds?.some(id=>id.trim()))
     issues.push({id:'rule.violatedIds',label:'Violated rules'});
   // Exception-based: never require a rule note when no violation was reported.
   if(values.ruleViolationReported===true && isUserRequired('rule.note',overrides) && !values.ruleNote.trim())
