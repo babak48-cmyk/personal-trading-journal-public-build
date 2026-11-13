@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { evidenceRequiredIssues } from './evidenceValidation';
 import { quickValidationRoute } from './quickValidationRoute';
+import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
@@ -500,10 +501,7 @@ export function App(){
         ...Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]')).filter(el=>el.dataset.validationId===id),
         ...Array.from(document.querySelectorAll<HTMLElement>('[id]')).filter(el=>el.id===id)
       ];
-      for(const el of candidates){
-        const disclosure=el.closest('details');
-        if(disclosure&&!disclosure.open)disclosure.open=true;
-      }
+      for(const el of candidates)openRequiredFieldDisclosures(el);
       const target=candidates.find(el=>el.getClientRects().length>0);
       if(!target){if(attempt<12)window.setTimeout(()=>focusVisible(attempt+1),90);return;}
       target.scrollIntoView({behavior:'smooth',block:'center'});
