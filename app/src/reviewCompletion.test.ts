@@ -43,13 +43,26 @@ describe('Review Pending and finalization boundaries',()=>{
   });
   it('Rule note is Required only on finalization when a rule violation is reported',()=>{
     const overrides={'rule.note':true};
-    const values={...blank,emotionAffected:false,ruleViolationReported:true};
+    const values={...blank,emotionAffected:false,ruleViolationReported:true,violatedRuleIds:['rule-version-1']};
     expect(reviewCompletionIssues(false,overrides,values)).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,values).map(x=>x.id)).toEqual(['rule.note']);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleNote:'  '})).toHaveLength(1);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleNote:'Moved stop outside plan'})).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:false})).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,{...values,ruleViolationReported:null})).toEqual([]);
+  });
+  it('requires a specific violated rule when YES, but never on Review Pending or NO',()=>{
+    const yes={...blank,emotionAffected:false,ruleViolationReported:true,violatedRuleIds:[]};
+    expect(reviewCompletionIssues(false,{},yes)).toEqual([]);
+    expect(reviewCompletionIssues(true,{},yes).map(x=>x.id)).toEqual(['rule.violatedIds']);
+    expect(reviewCompletionIssues(true,{}, {...yes,violatedRuleIds:['   ']}).map(x=>x.id)).toEqual(['rule.violatedIds']);
+    expect(reviewCompletionIssues(true,{}, {...yes,violatedRuleIds:['rule-version-1']})).toEqual([]);
+    expect(reviewCompletionIssues(true,{}, {...yes,ruleViolationReported:false})).toEqual([]);
+    expect(reviewCompletionIssues(true,{}, {...yes,ruleViolationReported:null})).toEqual([]);
+  });
+  it('reports both rule selection and user-required note without inventing a rule',()=>{
+    const yes={...blank,emotionAffected:false,ruleViolationReported:true,violatedRuleIds:[]};
+    expect(reviewCompletionIssues(true,{'rule.note':true},yes).map(x=>x.id)).toEqual(['rule.violatedIds','rule.note']);
   });
   it('never forces a mistake to be invented when none occurred',()=>{
     const values={...blank,emotionAffected:false};
