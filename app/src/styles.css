@@ -544,3 +544,21 @@
   .appShell .pendingDecisionRecord button{justify-self:start}
   .appShell .savedDecisionRecord > summary{flex-direction:column;align-items:flex-start;gap:.15rem}
 }
+
+
+/* All three Field Manager ordered Evidence inputs retain the same responsive
+   field family styling regardless of their position and without empty placeholders. */
+.appShell .formGrid .orderedEvidenceField{min-width:0;max-width:100%}
+.appShell .formGrid .orderedEvidenceField>label{
+  display:flex;flex-direction:column;gap:.35rem;height:100%;
+  padding:.65rem .75rem;min-width:0;
+  border:1px solid var(--border);border-inline-start:4px solid var(--family-evidence-rule);
+  border-radius:.65rem;background:var(--family-evidence);color:var(--text);
+  font-size:.82rem;font-weight:600;
+}
+.appShell .formGrid .orderedEvidenceField>label:focus-within:not(.validationFieldError){
+  box-shadow:0 0 0 2px var(--family-evidence-rule);
+}
+.appShell .formGrid .orderedEvidenceField input,
+.appShell .formGrid .orderedEvidenceField select,
+.appShell .formGrid .orderedEvidenceField textarea{width:100%;min-width:0}
