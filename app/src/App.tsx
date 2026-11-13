@@ -1207,7 +1207,16 @@ export function App(){
       setMessage('Decision save outcome is UNKNOWN. Refresh and verify saved history before leaving this editor.');
       return false;
     }
-    return !decisionEditorHasUnsavedInput()||window.confirm('Discard UN-SAVED Decision details? The existing saved Decision history will remain intact.');
+    if(decisionEditorHasUnsavedInput()){
+      // Windows WebView may suppress native confirms. Show the established
+      // in-app keep/discard choice before changing Zone or Session.
+      setNotebookPage('DECISION');
+      setDecisionClosePrompt(true);
+      setMessage('UNSAVED Decision: use the visible Keep editing / Keep draft / Discard controls before switching.');
+      focusDecisionEditor();
+      return false;
+    }
+    return true;
   }
   async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
     // Evidence-to-Decision buttons also navigate away; protect unfinished capture.
