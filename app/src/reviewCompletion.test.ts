@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { reviewCompletionIssues, type ReviewCompletionInput } from './reviewCompletion';
 const blank:ReviewCompletionInput={
-  decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',ruleNote:'',ruleViolationReported:null,emotionAffected:true,
+  decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',reviewNote:'',ruleNote:'',ruleViolationReported:null,violatedRuleIds:[],emotionAffected:true,
   psychologyState:'',psychologyStage:'',psychologyIntensity:null,
 };
 
