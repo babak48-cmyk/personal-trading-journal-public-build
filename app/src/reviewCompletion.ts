@@ -9,6 +9,7 @@ export type ReviewCompletionInput = Readonly<{
   reviewNote:string;
   ruleNote:string;
   ruleViolationReported:boolean|null;
+  violatedRuleIds:readonly string[];
   emotionAffected:boolean|null;
   psychologyState:string;
   psychologyStage:string;
@@ -34,6 +35,10 @@ export function reviewCompletionIssues(
   ];
   const issues=fields.filter(([id,present])=>isUserRequired(id,overrides)&&!present)
     .map(([id])=>({id,label:FIELD_DEFINITION_BY_ID[id]?.label??id}));
+  // Recorded YES must identify which currently configured rule(s) were broken.
+  // An empty selection is not equivalent to NO; deferred Review drafts remain partial.
+  if(values.ruleViolationReported===true && !values.violatedRuleIds.some(id=>id.trim()))
+    issues.push({id:'rule.violatedIds',label:'Violated rules'});
   // Exception-based: never require a rule note when no violation was reported.
   if(values.ruleViolationReported===true && isUserRequired('rule.note',overrides) && !values.ruleNote.trim())
     issues.push({id:'rule.note',label:FIELD_DEFINITION_BY_ID['rule.note']?.label??'Rule violation note'});
