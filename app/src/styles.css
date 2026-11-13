@@ -503,3 +503,44 @@
 .appShell .evidenceRow>div{min-width:0;display:flex;flex-direction:column;gap:.2rem}
 .appShell .evidenceRow b,.appShell .evidenceRow small,.appShell .evidenceRow span{display:block;position:static;width:auto;max-width:100%;overflow-wrap:anywhere;white-space:normal;line-height:1.45}
 .appShell .evidenceRow span{white-space:pre-wrap}
+
+
+/* 2026-11-13: responsive, readable persisted Decision history and pending TRADE intents.
+   Previously .decisionHistory forced each nested <details> into a 72px grid column,
+   while time/UUID/reason text could overflow into adjacent columns. Keep the
+   recorded text intact; allow line wrapping at any scale or window width. */
+.appShell .decisionHistoryList{display:grid;gap:.6rem;min-width:0;max-width:100%}
+.appShell .savedDecisionRecord{
+  display:block;min-width:0;max-width:100%;margin:0;
+  border:1px solid var(--border);border-radius:.65rem;
+  background:var(--surface-soft);overflow-wrap:anywhere;
+}
+.appShell .savedDecisionRecord > summary{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem .75rem;
+  min-width:0;padding:.75rem .85rem;line-height:1.5;
+  cursor:pointer;overflow-wrap:anywhere;
+}
+.appShell .savedDecisionRecord > summary > *{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.appShell .savedDecisionWhen{font-size:.76rem;color:var(--text-muted);white-space:normal;overflow-wrap:anywhere}
+.appShell .savedDecisionReason{font-size:.78rem;color:var(--text-muted)}
+.appShell .savedDecisionDetails{padding:.2rem .85rem .85rem;border-top:1px solid var(--border);min-width:0}
+.appShell .savedDecisionDetails p{display:flex;flex-wrap:wrap;gap:.2rem .5rem;margin:.6rem 0;font-size:.82rem;line-height:1.5;min-width:0}
+.appShell .savedDecisionDetails p span,.appShell .savedDecisionDetails small{
+  display:block;min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap;
+}
+.appShell .pendingDecisionRecord{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:1rem;align-items:center;min-width:0;max-width:100%;
+  padding:.85rem;margin:.55rem 0;border:1px solid var(--border);
+  border-radius:.65rem;background:var(--surface-soft);
+}
+.appShell .pendingDecisionInfo{display:flex;flex-direction:column;gap:.25rem;min-width:0}
+.appShell .pendingDecisionInfo > *{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal;line-height:1.5}
+.appShell .pendingDecisionRecord button{max-width:100%;white-space:normal;line-height:1.4}
+.appShell .decisionHistoryControls{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:.55rem}
+.appShell .decisionHistoryControls select{flex:1 1 14rem;min-width:0;max-width:100%;padding:.65rem;border:1px solid var(--border);border-radius:.5rem;background:var(--input-bg);color:var(--text)}
+@media(max-width:760px){
+  .appShell .pendingDecisionRecord{grid-template-columns:minmax(0,1fr)}
+  .appShell .pendingDecisionRecord button{justify-self:start}
+  .appShell .savedDecisionRecord > summary{flex-direction:column;align-items:flex-start;gap:.15rem}
+}
