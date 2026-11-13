@@ -1,7 +1,20 @@
 import {describe,expect,it} from 'vitest';
-import {JOURNAL_PAGE_LABELS,workflowNextAction,type WorkflowSituation} from './workflowGuide';
+import {JOURNAL_PAGE_LABELS,JOURNAL_PAGE_PURPOSE,workflowNextAction,type WorkflowSituation} from './workflowGuide';
 const empty:WorkflowSituation={sessionTradeCount:0,sessionZoneCount:1,unexecutedDecisionCount:0,pendingReviewCount:0,reviewQueueLoading:false,reviewQueueError:false};
 describe('clear lifecycle navigation',()=>{
+  it('explains each Quick stage without conflating plan, evidence, decision, trades and reviews',()=>{
+    expect(JOURNAL_PAGE_PURPOSE.PLAN.task).toMatch(/not proof/i);
+    expect(JOURNAL_PAGE_PURPOSE.EVIDENCE.task).toMatch(/actually observed/i);
+    expect(JOURNAL_PAGE_PURPOSE.DECISION.task).toMatch(/not an executed order/i);
+    expect(JOURNAL_PAGE_PURPOSE.EXECUTION.task).toMatch(/Trade Review/i);
+    expect(JOURNAL_PAGE_PURPOSE.REVIEW.task).toMatch(/entire session/i);
+  });
+  it('uses typed execution destinations instead of guessing from a translated button label',()=>{
+    expect(workflowNextAction({...empty,unexecutedDecisionCount:1}).executionTarget).toBe('SAVED_DECISIONS');
+    expect(workflowNextAction({...empty,sessionTradeCount:1}).executionTarget).toBe('TRADES');
+    expect(workflowNextAction({...empty,sessionTradeCount:1,reviewQueueError:true}).executionTarget).toBe('TRADES');
+    expect(workflowNextAction({...empty,sessionTradeCount:1,reviewQueueLoading:true}).executionTarget).toBe('TRADES');
+  });
   it('never names the Decision shortcut as an actual execution',()=>{
     expect(JOURNAL_PAGE_LABELS.DECISION).toMatch(/decision/i);
     expect(JOURNAL_PAGE_LABELS.EXECUTION).toMatch(/execution/i);
