@@ -9,7 +9,7 @@ import type {CandidateDraftInput} from './services/localApi';
 const review:ReviewCompletionInput={
   decisionQuality:'A',executionQuality:'GOOD',managementQuality:'GOOD',
   exitReason:'TARGET',exitNote:'',reviewNote:'',ruleNote:'',
-  ruleViolationReported:null,emotionAffected:true,
+  ruleViolationReported:null,violatedRuleIds:[],emotionAffected:true,
   psychologyState:'',psychologyStage:'',psychologyIntensity:null,
 };
 const priceMissingZone={
