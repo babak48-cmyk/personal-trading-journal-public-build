@@ -255,6 +255,7 @@ export function App(){
   const [historyOnlyZoneId,setHistoryOnlyZoneId]=useState<string|null>(null);
   const [historyOnlyLoading,setHistoryOnlyLoading]=useState(false);
   const [historyOnlyError,setHistoryOnlyError]=useState('');
+  const historyReadRequestRef=useRef(0);
   const [pendingTradeDecision,setPendingTradeDecision]=useState<CandidateDecision|null>(null);
   const [entryClosePrompt,setEntryClosePrompt]=useState(false);
   const entryDraftsRef=useRef<Record<string,{
@@ -623,7 +624,7 @@ export function App(){
       setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
       setEvidenceCandidate(null);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);
       setEvidenceSaved(false);setEvidencePrice(null);setEvidenceDirection('');setEvidenceNote('');setEvidenceFeedback('');
-      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
+      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
     setShowDraftSetup(false);setValidationErrors([]);
     setReviewQueue(null);setActive(s);rememberOpenedSession(s.session_id);
@@ -756,7 +757,7 @@ export function App(){
     setDecisionNote('');
     setDecisionQuality('');
     setMismatchReason('');
-    setCandidateDecisions({});
+    setCandidateDecisions({});setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);
     setPendingTradeDecision(null);
 
     setEntryPrice(null);
@@ -1122,16 +1123,17 @@ export function App(){
     if(decisionCandidate&&!confirmCloseDecisionEditor())return;
     const owner=active?.session_id;
     if(!owner)return;
+    const request=++historyReadRequestRef.current;
     setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));
     setHistoryOnlyZoneId(candidateId);setHistoryOnlyLoading(true);setHistoryOnlyError('');
     try{
       const rows=await localApi.listCandidateDecisions(candidateId);
-      if(activeSessionIdRef.current!==owner)return;
+      if(activeSessionIdRef.current!==owner||request!==historyReadRequestRef.current)return;
       setCandidateDecisions(v=>({...v,[candidateId]:rows}));
     }catch(e){
-      if(activeSessionIdRef.current===owner)setHistoryOnlyError('Could not load saved Decisions: '+String(e));
+      if(activeSessionIdRef.current===owner&&request===historyReadRequestRef.current)setHistoryOnlyError('Could not load saved Decisions: '+String(e));
     }finally{
-      if(activeSessionIdRef.current===owner)setHistoryOnlyLoading(false);
+      if(activeSessionIdRef.current===owner&&request===historyReadRequestRef.current)setHistoryOnlyLoading(false);
     }
   }
   function decisionDraftKey(candidateId:string,type:string):string{
@@ -1843,7 +1845,7 @@ export function App(){
             <div className="panelTitle"><div><h2>Saved Decisions · read-only</h2><p className="subtle">Inspect existing TRADE, NO_TRADE and MISSED decisions without starting another Decision.</p></div></div>
             <div className="rowActions decisionHistoryControls">
               <label htmlFor="saved-decision-zone">Zone</label>
-              <select id="saved-decision-zone" value={historyOnlyZoneId??''} onChange={e=>{setHistoryOnlyZoneId(e.target.value||null);setHistoryOnlyError('');}}>
+              <select id="saved-decision-zone" value={historyOnlyZoneId??''} onChange={e=>{historyReadRequestRef.current++;setHistoryOnlyZoneId(e.target.value||null);setHistoryOnlyLoading(false);setHistoryOnlyError('');}}>
                 <option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}
               </select>
               <button type="button" disabled={!historyOnlyZoneId||historyOnlyLoading} onClick={()=>{if(historyOnlyZoneId)void inspectSavedZoneDecisions(historyOnlyZoneId);}}>{historyOnlyLoading?'Loading…':'View saved decisions'}</button>
