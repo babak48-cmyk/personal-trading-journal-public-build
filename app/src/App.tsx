@@ -2419,7 +2419,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const [draft,setDraft]=useState<RequirementOverrides>(overrides);
   const [msg,setMsg]=useState('');
   const [fieldSearch,setFieldSearch]=useState('');
-  const [inventoryFilter,setInventoryFilter]=useState<'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'|'REQUIRED'>('ALL');
+  const [inventoryFilter,setInventoryFilter]=useState<'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'|'REQUIRED'|'CONDITIONAL'>('ALL');
   const [stageFilter,setStageFilter]=useState<'ALL'|InventoryStage>('ALL');
   const settingsSaveRef=useRef(false);
   const [settingsSaving,setSettingsSaving]=useState(false);
@@ -2453,7 +2453,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     if(!next[id])delete next[id];
     await save(next);
   }
-  async function reset(){if(settingsSaveRef.current)return;if(await save({}))setMsg('Field requirements reset to lightweight defaults.');}
+  async function reset(){if(settingsSaveRef.current)return;if(!window.confirm('Reset all your Required/Optional choices to the journal defaults? Saved journal entries will not change.'))return;if(await save({}))setMsg('Field requirements reset to lightweight defaults.');}
   function effectivePlacement(id:string):FieldPlacement {
     // Keep the pre-existing Decision quality Quick default (Detailed-only).
     return placements[id]??(id==='decision.quality'?'DETAILED_ONLY':'QUICK_AND_DETAILED');
@@ -2507,7 +2507,8 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const groups=['Session','Plan','Candidate','Evidence','Decision','Trade','Review','Psychology','SessionReview','Attachment'] as const;
   const coverageReport=fieldConnectionReport();
   const coverageSummary=fieldConnectionSummary();
-  const requiredPresentationGaps=requiredPresentationIssues(draft,visibility,placements);
+  const requiredPresentationGaps=requiredPresentationIssues(draft,visibility,placements,
+    new Set(FIELD_CONTROL_INVENTORY.filter(item=>item.category==='conditional-journal-field').map(item=>item.id)));
   const stageOptions=[...new Set(FIELD_CONTROL_INVENTORY.map(item=>item.stage))];
   return <div className="guideOverlay" onClick={onClose}><div className="guideCard sourceManagerCard" onClick={e=>e.stopPropagation()}>
     <div className="panelTitle"><div><h2>Field Requirements</h2><p className="subtle">Choose which optional fields must be completed. System and conditional requirements are locked to protect workflow integrity.</p></div><div className="headerActions"><button onClick={onAppearance}>Appearance</button><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onClose}>Close</button></div></div>
@@ -2518,14 +2519,14 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
       <p className="subtle">Manage connected inputs in one place. Protected fields and unresolved connections remain visible for audit, but cannot be silently changed. Only confirmed settings persist; saved historical field values stay intact.</p>
       <div className="rowActions"><label>Find an input <input type="search" value={fieldSearch} onChange={e=>setFieldSearch(e.target.value)} placeholder="Field, stage or ID"/></label>
         <label>Stage <select aria-label="Input lifecycle stage filter" value={stageFilter} onChange={e=>setStageFilter(e.target.value as 'ALL'|InventoryStage)}><option value="ALL">All stages</option>{stageOptions.map(stage=><option key={stage} value={stage}>{stage.replaceAll('-',' ')}</option>)}</select></label>
-        <label>Show <select aria-label="Input coverage filter" value={inventoryFilter} onChange={e=>setInventoryFilter(e.target.value as 'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'|'REQUIRED')}>
-          <option value="ALL">All inputs</option><option value="EDITABLE">Connected & editable</option><option value="PROTECTED">Protected</option><option value="OPEN">Unfinished connections</option><option value="REQUIRED">System / user required</option>
+        <label>Show <select aria-label="Input coverage filter" value={inventoryFilter} onChange={e=>setInventoryFilter(e.target.value as 'ALL'|'EDITABLE'|'PROTECTED'|'OPEN'|'REQUIRED'|'CONDITIONAL')}>
+          <option value="ALL">All inputs</option><option value="EDITABLE">Connected & editable</option><option value="PROTECTED">Protected</option><option value="OPEN">Unfinished connections</option><option value="REQUIRED">System / user required</option><option value="CONDITIONAL">Conditional fields</option>
         </select></label></div>
       <div className="requirementGroups">{FIELD_CONTROL_INVENTORY.filter(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
         const definition=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
         const configuredRequired=definition?.defaultRequirement==='SYSTEM_REQUIRED'||(!!item.formalFieldId&&isUserRequired(item.formalFieldId,draft));
-        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='REQUIRED'&&configuredRequired);
+        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='REQUIRED'&&configuredRequired)||(inventoryFilter==='CONDITIONAL'&&(definition?.defaultRequirement==='CONDITIONAL'||item.category==='conditional-journal-field'));
         return matchesFilter&&(stageFilter==='ALL'||item.stage===stageFilter)&&(!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()));
       }).map(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
@@ -2556,7 +2557,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
       </div>)}
     </section>)}</div>
     <div className="rowActions"><button disabled={settingsSaving} aria-busy={settingsSaving} onClick={reset}>Reset to defaults</button></div>
-    <p className="guideTip">These settings affect future saves and edits only. Existing historical records are never invalidated retroactively.</p>
+    <p className="guideTip">Conditional requirements are enforced only when their triggering workflow condition is active (such as No-trade/Missed or emotion affecting a trade). They cannot be switched off. These settings affect future saves and edits only. Existing historical records are never invalidated retroactively.</p>
   </div></div>;
 }
 
