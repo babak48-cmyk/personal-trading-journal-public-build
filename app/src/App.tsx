@@ -10,6 +10,7 @@ import { previewEntryRisk } from './entryRiskPreview';
 import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEvidenceDraft, shouldPromptEvidencePageLeave } from './quickEvidenceDraftGuard';
 import { scopedQuickDraftKey } from './quickDraftIdentity';
+import { DecisionHistoryList, PendingTradeDecisionRow } from './QuickDecisionHistory';
 import { hasUnsavedEntryInputs, hasUnsavedManagementInputs, hasUnsavedReviewChanges } from './quickUnsavedCapture';
 import { executionAccountingCautions } from './executionAccountingCautions';
 import { parseOptionalFillCost, fillCostCoverage } from './fillCosts';
@@ -251,6 +252,9 @@ export function App(){
   const [decisionQuality,setDecisionQuality]=useState<'A'|'B'|'C'|'INVALID'|'UNCLEAR'|''>('');
   const [mismatchReason,setMismatchReason]=useState('');
   const [candidateDecisions,setCandidateDecisions]=useState<Record<string,CandidateDecision[]>>({});
+  const [historyOnlyZoneId,setHistoryOnlyZoneId]=useState<string|null>(null);
+  const [historyOnlyLoading,setHistoryOnlyLoading]=useState(false);
+  const [historyOnlyError,setHistoryOnlyError]=useState('');
   const [pendingTradeDecision,setPendingTradeDecision]=useState<CandidateDecision|null>(null);
   const [entryClosePrompt,setEntryClosePrompt]=useState(false);
   const entryDraftsRef=useRef<Record<string,{
@@ -1114,6 +1118,22 @@ export function App(){
     }finally{setEvidenceHistoryVerifying(false);}
   }
 
+  async function inspectSavedZoneDecisions(candidateId:string){
+    if(decisionCandidate&&!confirmCloseDecisionEditor())return;
+    const owner=active?.session_id;
+    if(!owner)return;
+    setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));
+    setHistoryOnlyZoneId(candidateId);setHistoryOnlyLoading(true);setHistoryOnlyError('');
+    try{
+      const rows=await localApi.listCandidateDecisions(candidateId);
+      if(activeSessionIdRef.current!==owner)return;
+      setCandidateDecisions(v=>({...v,[candidateId]:rows}));
+    }catch(e){
+      if(activeSessionIdRef.current===owner)setHistoryOnlyError('Could not load saved Decisions: '+String(e));
+    }finally{
+      if(activeSessionIdRef.current===owner)setHistoryOnlyLoading(false);
+    }
+  }
   function decisionDraftKey(candidateId:string,type:string):string{
     return scopedQuickDraftKey(active?.session_id??'', 'DECISION', candidateId, type);
   }
@@ -1819,6 +1839,18 @@ export function App(){
 
           </div>
           <div style={{display:!quickMode||notebookPage==='DECISION'?'block':'none'}}>
+          {!decisionCandidate&&<div className="panel" id="journal-read-only-decisions">
+            <div className="panelTitle"><div><h2>Saved Decisions · read-only</h2><p className="subtle">Inspect existing TRADE, NO_TRADE and MISSED decisions without starting another Decision.</p></div></div>
+            <div className="rowActions decisionHistoryControls">
+              <label htmlFor="saved-decision-zone">Zone</label>
+              <select id="saved-decision-zone" value={historyOnlyZoneId??''} onChange={e=>{setHistoryOnlyZoneId(e.target.value||null);setHistoryOnlyError('');}}>
+                <option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}
+              </select>
+              <button type="button" disabled={!historyOnlyZoneId||historyOnlyLoading} onClick={()=>{if(historyOnlyZoneId)void inspectSavedZoneDecisions(historyOnlyZoneId);}}>{historyOnlyLoading?'Loading…':'View saved decisions'}</button>
+            </div>
+            {historyOnlyError&&<p role="alert" className="warningBox">{historyOnlyError}</p>}
+            {!historyOnlyLoading&&historyOnlyZoneId&&!historyOnlyError&&candidateDecisions[historyOnlyZoneId]&&<DecisionHistoryList rows={candidateDecisions[historyOnlyZoneId]}/>}
+          </div>}
           {lastDecisionNotice&&!decisionCandidate&&<p role="status" className="okBox">{lastDecisionNotice}</p>}
           {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision"><div className="panelTitle"><div><h2>Decision · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button type="button" onClick={requestCloseDecisionEditor}>Close</button></div>
             <div className="fieldHelpLine"><b>Decision</b><FieldHelp id="decision.type" value={decisionType}/></div><div className="decisionChoice"><button className={decisionType==='TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='TRADE'){setDecisionType('TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}>TRADE</button><button className={decisionType==='NO_TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='NO_TRADE'){setDecisionType('NO_TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}>NO-TRADE</button><button className={decisionType==='MISSED'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='MISSED'){setDecisionType('MISSED');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}>MISSED</button></div>
@@ -1830,7 +1862,7 @@ export function App(){
             {decisionClosePrompt&&<div className="warningBox" id="decision-unsaved-close-warning" role="alertdialog" aria-label="Unsaved Decision" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Closing without keeping this draft loses your current inputs. Existing saved Decisions will not be changed.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setDecisionClosePrompt(false)}>Keep editing</button><button type="button" onClick={()=>resolveDecisionClose(true)}>Close and keep draft</button><button type="button" onClick={()=>resolveDecisionClose(false)}>Discard draft and close</button></div></div>}
             {pendingDecisionPage&&<div className="warningBox" id="decision-page-navigation-warning" role="alertdialog" aria-label="Unsaved Decision navigation" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Go to another page without recording a Decision? This draft stays in the editor; return to Decision to continue.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setPendingDecisionPage(null)}>Keep editing</button><button type="button" onClick={continueWithDecisionDraftPreserved}>Continue and keep draft</button></div></div>}
             <div className="rowActions"><button type="button" disabled={decisionSaving} onClick={requestCloseDecisionEditor}>Cancel</button><button className="primary" disabled={decisionSaving||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" disabled={!canAcknowledgeVerifiedHistory(decisionSaveUncertainZoneId,decisionHistoryCheckedZoneId,decisionCandidate.candidate_id)} onClick={()=>{setDecisionSaveUncertainZoneId(null);setDecisionHistoryCheckedZoneId(null);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
-            {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary>{candidateDecisions[decisionCandidate.candidate_id].slice(0,12).map(d=><details className="decisionHistory" key={d.decision_id}><summary>{d.occurred_at} · {d.decision_type}{d.intended_direction?' · '+d.intended_direction:''} · {d.reason_code||d.plan_alignment||'—'}</summary><p><b>Decision ID:</b> {d.decision_id}</p><p><b>Recorded reason:</b> {d.reason_code||'Not recorded'}</p><p><b>Decision note:</b> {d.reason_note||'No note recorded'}</p><p><b>Decision quality:</b> {d.decision_quality||'Not recorded'}</p>{d.plan_mismatch_reason&&<p><b>Opposite-plan reason:</b> {d.plan_mismatch_reason}</p>}<small>Read-only saved history; opening details does not edit or duplicate a Decision.</small></details>)}</details>}
+            {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary><DecisionHistoryList rows={candidateDecisions[decisionCandidate.candidate_id]??[]}/></details>}
           </div>}
 
           </div>
@@ -1845,7 +1877,7 @@ export function App(){
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
-          {active?.status==='ACTIVE'&&<div className="panel" aria-label="Saved decisions awaiting trade entry"><div className="panelTitle"><div><h2>Saved TRADE decisions awaiting entry</h2><p className="subtle">These are decisions already stored in SQLite but not attached to any Trade. Resume the original decision; never create another one to replace it.</p></div><button type="button" disabled={unexecutedLoading} onClick={()=>setUnexecutedRefreshToken(v=>v+1)}>{unexecutedLoading?'Checking…':'Refresh'}</button></div>{unexecutedError&&<p className="warningBox" role="alert">{unexecutedError}</p>}{unexecutedLoading&&<p role="status">Checking persisted decision-to-trade links…</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.length===0&&<p className="subtle">No saved TRADE decisions currently awaiting execution entry.</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.map(d=><div className="decisionHistory" key={d.decision_id}><time>{d.occurred_at}</time><b>{d.intended_direction??'Unknown direction'} · Zone {d.candidate_id??'Unplanned'}</b><small>Decision ID: {d.decision_id}{d.reason_code?' · '+d.reason_code:''}</small><button type="button" disabled={tradeOpening||pendingTradeDecision?.decision_id===d.decision_id} onClick={()=>resumeUnexecutedTradeDecision(d)}>{pendingTradeDecision?.decision_id===d.decision_id?'Current entry':'Resume original Decision'}</button></div>)}</div>}
+          {active?.status==='ACTIVE'&&<div className="panel" aria-label="Saved decisions awaiting trade entry"><div className="panelTitle"><div><h2>Saved TRADE decisions awaiting entry</h2><p className="subtle">These are decisions already stored in SQLite but not attached to any Trade. Resume the original decision; never create another one to replace it.</p></div><button type="button" disabled={unexecutedLoading} onClick={()=>setUnexecutedRefreshToken(v=>v+1)}>{unexecutedLoading?'Checking…':'Refresh'}</button></div>{unexecutedError&&<p className="warningBox" role="alert">{unexecutedError}</p>}{unexecutedLoading&&<p role="status">Checking persisted decision-to-trade links…</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.length===0&&<p className="subtle">No saved TRADE decisions currently awaiting execution entry.</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.map(d=><PendingTradeDecisionRow key={d.decision_id} decision={d} current={pendingTradeDecision?.decision_id===d.decision_id} disabled={tradeOpening} onResume={()=>resumeUnexecutedTradeDecision(d)}/>)}</div>}
           {quickMode&&!pendingTradeDecision&&!activeTrade&&sessionTrades.length===0&&!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.length===0&&<div className="panel"><h2>Trade entry</h2><p className="subtle">No trade entry yet. Record a TRADE decision first; a decision alone does not create a fill.</p></div>}
           {pendingTradeDecision&&<div className="panel executionPanel" id="journal-quick-entry"><div className="panelTitle"><div><h2>Quick trade entry</h2><p className="subtle">Only the essentials now. Review can be completed later.</p></div><button type="button" disabled={tradeOpening} onClick={closePendingEntry}>Close</button></div>{entryClosePrompt&&<div className="warningBox" id="entry-unsaved-close-warning" role="alertdialog" aria-label="Unsaved Trade entry" aria-modal="false"><strong>UNSAVED trade entry — no Trade or Fill recorded</strong><p>Entry, stop, quantity, target and cost values are not saved. Keep this draft for this running app or explicitly discard it. Your original saved Decision remains unchanged.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setEntryClosePrompt(false)}>Keep editing</button><button type="button" onClick={()=>resolveEntryClose(true)}>Close and keep draft</button><button type="button" onClick={()=>resolveEntryClose(false)}>Discard draft and close</button></div></div>}<div className="formGrid"><label data-validation-id="trade.entryPrice" className={invalidClass('trade.entryPrice')}>Entry price <FieldHelp id="trade.entryPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={entryPrice??''} onChange={e=>{setEntryPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.entryPrice')}} placeholder="e.g. 6025.25"/></label><label data-validation-id="trade.stopPrice" className={invalidClass('trade.stopPrice')}>Initial stop price <FieldHelp id="trade.stopPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={stopPrice??''} onChange={e=>{setStopPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.stopPrice')}} placeholder="e.g. 6022.25"/></label><label data-validation-id="trade.quantity" className={invalidClass('trade.quantity')}>Quantity <FieldHelp id="trade.quantity"/><input type="number" min="1" step="1" value={tradeQty} onChange={e=>{setTradeQty(e.target.value===''?0:Number(e.target.value));clearValidation('trade.quantity')}}/></label>{isFieldPresented('trade.plannedTarget',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="trade.plannedTarget" className={invalidClass('trade.plannedTarget')}>{fieldText['trade.plannedTarget']?.label?.trim()||'Planned target'} <RequirementBadge id="trade.plannedTarget" overrides={requirementOverrides}/>{fieldText['trade.plannedTarget']?.help&&<small title={fieldText['trade.plannedTarget'].help}>ⓘ</small>} <FieldHelp id="trade.plannedTarget"/><input type="number" step={tickStep} value={plannedTarget??''} onChange={e=>{setPlannedTarget(e.target.value?Number(e.target.value):null);clearValidation('trade.plannedTarget')}}/></label>}</div><div className="summaryStrip" role="status" aria-live="polite">
             <span><b>Initial risk (gross)</b>{entryRiskPreview.riskDollars===null?'Enter valid entry, stop and quantity':`${entryRiskPreview.riskDollars.toFixed(2)} ${active?.instrument_currency??''}`}</span>
