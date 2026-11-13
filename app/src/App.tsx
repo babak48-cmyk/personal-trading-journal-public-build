@@ -1068,13 +1068,20 @@ export function App(){
     // the same unsaved observations; no Capture/confirmation is fabricated.
     goToNotebookPage(next);
   }
+  function focusEvidenceEditor(){
+    window.requestAnimationFrame(()=>document.getElementById('journal-quick-evidence')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
+  function focusDecisionEditor(){
+    window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
   async function openEvidence(c:CurrentCandidate){
     if(evidenceCandidate?.candidate_id===c.candidate_id){
-      setNotebookPage('EVIDENCE');return; // Do not erase a draft on reopening its own Zone.
+      setNotebookPage('EVIDENCE');focusEvidenceEditor();return; // Do not erase a draft on reopening its own Zone.
     }
     if(evidenceCandidate&&!confirmCloseEvidenceEditor())return;
     const ownerSessionId=active?.session_id;
     setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);
+    focusEvidenceEditor();
     // Do not discard the attempted batch while its durable outcome is UNKNOWN:
     // the trader needs its exact type/stance/price/note to compare with history.
     const uncertainAttempt=hasUncertainWrite(evidenceSaveUncertainZoneId,c.candidate_id)
@@ -1212,6 +1219,7 @@ export function App(){
     setDecisionReason(savedDraft?.reason??'');setDecisionNote(savedDraft?.note??'');
     setDecisionQuality(savedDraft?.quality??'');setMismatchReason(savedDraft?.mismatchReason??'');
     setDecisionDirection(savedDraft?.direction??directionFromZoneIntent(c.directional_intent));
+    focusDecisionEditor();
     try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
   }
   async function saveDecision(){
@@ -1912,7 +1920,7 @@ export function App(){
           </div>
           <div style={{display:!quickMode||notebookPage==='EVIDENCE'?'block':'none'}}>
           {quickMode&&!evidenceCandidate&&<div className="panel"><h2>Observed evidence</h2><p className="subtle">Only record what actually happened at a saved Zone. You may skip this stage if nothing was observed.</p>{plan.candidates.length===0&&<button type="button" onClick={navigateToLiveZone}>Add a Zone first</button>}{plan.candidates.length>0&&<button type="button" onClick={()=>{const c=plan.candidates.find(x=>x.candidate_id===quickZoneId)??plan.candidates[0];void openEvidence(c);}}>Record evidence</button>}</div>}
-          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button type="button" disabled={evidenceSaving} onClick={closeEvidenceEditor}>Close</button></div>
+          {evidenceCandidate&&<div className="panel" id="journal-quick-evidence"><div className="panelTitle"><div><h2>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button type="button" disabled={evidenceSaving} onClick={closeEvidenceEditor}>Close</button></div>
           <div className={evidenceSaved?'okBox':hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id)?'warningBox':'subtle'} role="status" aria-live="polite" data-testid="evidence-persistence-state">
             <strong>{evidenceSaving?'SAVING — please do not navigate':evidenceSaved?'SAVED — confirmed by journal database':hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id)?'SAVE OUTCOME UNKNOWN — verify history':hasUnsavedEvidenceDraft({selectedIds:selectedEvidenceIds,stances:evidenceStances,direction:evidenceDirection,price:evidencePrice,note:evidenceNote,acknowledgedSaved:false})?'NOT SAVED — Capture is required':'NOT SAVED — choose an observation'}</strong>
             {evidenceSaved&&<p>Recorded {savedEvidenceIds.length} observation(s). Saved details are shown in Recent evidence below. Capture another observation only when actually observed.</p>}
