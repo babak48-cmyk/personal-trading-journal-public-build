@@ -2423,6 +2423,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const [stageFilter,setStageFilter]=useState<'ALL'|InventoryStage>('ALL');
   const settingsSaveRef=useRef(false);
   const [settingsSaving,setSettingsSaving]=useState(false);
+  const [resetConfirmationOpen,setResetConfirmationOpen]=useState(false);
   async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>):Promise<boolean>{
     if(settingsSaveRef.current){setMsg('A Field Manager change is already being saved.');return false;}
     settingsSaveRef.current=true;setSettingsSaving(true);setMsg('Saving '+label+'…');
@@ -2453,7 +2454,11 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     if(!next[id])delete next[id];
     await save(next);
   }
-  async function reset(){if(settingsSaveRef.current)return;if(!window.confirm('Reset all your Required/Optional choices to the journal defaults? Saved journal entries will not change.'))return;if(await save({}))setMsg('Field requirements reset to lightweight defaults.');}
+  async function reset(){
+    if(settingsSaveRef.current)return;
+    setResetConfirmationOpen(false);
+    if(await save({}))setMsg('Required/Optional settings reset to defaults. Other Field Manager preferences and saved journal data were not changed.');
+  }
   function effectivePlacement(id:string):FieldPlacement {
     // Keep the pre-existing Decision quality Quick default (Detailed-only).
     return placements[id]??(id==='decision.quality'?'DETAILED_ONLY':'QUICK_AND_DETAILED');
@@ -2556,7 +2561,12 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
         </div>
       </div>)}
     </section>)}</div>
-    <div className="rowActions"><button disabled={settingsSaving} aria-busy={settingsSaving} onClick={reset}>Reset to defaults</button></div>
+    <div className="rowActions"><button type="button" disabled={settingsSaving} onClick={()=>{setResetConfirmationOpen(true);setMsg('');}}>Reset to defaults</button></div>
+    {resetConfirmationOpen&&<div role="alertdialog" aria-labelledby="field-reset-title" aria-describedby="field-reset-description" className="requirementGroup">
+      <h3 id="field-reset-title">Confirm resetting Required/Optional settings</h3>
+      <p id="field-reset-description">This resets your field Required/Optional selections to the journal defaults. It does not reset field visibility, ordering, Quick/Detailed placement, custom labels or previously saved journal entries.</p>
+      <div className="rowActions"><button type="button" disabled={settingsSaving} onClick={()=>{setResetConfirmationOpen(false);setMsg('Reset cancelled. Your settings were not changed.');}}>Cancel</button><button type="button" disabled={settingsSaving} aria-busy={settingsSaving} onClick={()=>void reset()}>Confirm reset</button></div>
+    </div>}
     <p className="guideTip">Conditional requirements are enforced only when their triggering workflow condition is active (such as No-trade/Missed or emotion affecting a trade). They cannot be switched off. These settings affect future saves and edits only. Existing historical records are never invalidated retroactively.</p>
   </div></div>;
 }
