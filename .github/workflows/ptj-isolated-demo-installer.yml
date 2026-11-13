@@ -1,5 +1,5 @@
 name: PTJ isolated DEMO installer (release gate)
-# Isolated Settings acceptance candidate based on frozen 1.9.6-beta.1; targeted conditional input audit, requirement reset safeguard and preserved original DEMO data profile.
+# Isolated Settings DEMO rerun after observed Windows reset-confirmation failure; use the in-app Cancel / Confirm reset dialog instead of native window.confirm. Baseline and DEMO segregation preserved.
 on:
   workflow_dispatch:
   push:
