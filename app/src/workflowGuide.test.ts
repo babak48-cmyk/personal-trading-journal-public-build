@@ -19,7 +19,7 @@ describe('clear lifecycle navigation',()=>{
     expect(JOURNAL_PAGE_LABELS.DECISION).toMatch(/decision/i);
     expect(JOURNAL_PAGE_LABELS.EXECUTION).toMatch(/execution/i);
     expect(JOURNAL_PAGE_LABELS.REVIEW).toMatch(/session review/i);
-    expect(workflowNextAction(empty).description).toMatch(/does not execute/i);
+    expect(workflowNextAction(empty).description).toMatch(/not an executed trade or fill/i);
   });
   it('does not send a session without Zones to nonexistent decision controls',()=>{
     expect(workflowNextAction({...empty,sessionZoneCount:0})).toMatchObject({destination:'PLAN',action:'NAVIGATE',label:'Add a zone to the current plan'});
