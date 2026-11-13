@@ -2105,8 +2105,9 @@ function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStag
       if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
       return;
     }
-    const disclosure=target.closest('details');
-    if(disclosure&&!disclosure.open && disclosure.getClientRects().length>0)disclosure.open=true;
+    // The owner-scoped custom field may be inside nested Quick/Review groups.
+    // Open all ancestor disclosures before asking whether the field is visible.
+    openRequiredFieldDisclosures(target);
     if(target.getClientRects().length===0){
       if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
       return;
