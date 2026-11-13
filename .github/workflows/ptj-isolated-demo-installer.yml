@@ -1,5 +1,5 @@
 name: PTJ isolated DEMO installer (release gate)
-# Isolated acceptance candidate covering the cohesive Evidence/Decision field ordering, Required/Conditional focus and Review rule integrity package; retains prior accepted Decision/Trade history. Existing approved icon and DEMO profile preserved.
+# Isolated Settings acceptance candidate based on frozen 1.9.6-beta.1; targeted conditional input audit, requirement reset safeguard and preserved original DEMO data profile.
 on:
   workflow_dispatch:
   push:
@@ -8,6 +8,7 @@ on:
       - fix/decision-trade-draft-guard-2026-11-13
       - feature/decision-history-execution-readability-2026-11-13
       - feature/evidence-field-manager-cohesive-2026-11-13
+      - feature/ptj-settings-from-accepted-demo-2026-11-14
     paths:
       - .github/workflows/ptj-isolated-demo-installer.yml
       - app/src-tauri/icons/approved-icon-source.webp
