@@ -1054,8 +1054,9 @@ export function App(){
     if(!navigateNotebookPage('EXECUTION'))return;
     // Verified queue entries alone can be labelled pending. When unknown,
     // reopen the existing queue and ask the database rather than guessing.
-    if(reviewQueueSessionId===active?.session_id&&reviewQueue&&reviewQueue.length>0){
-      void openTradeDetail(reviewQueue[0],true);
+    if(reviewQueueSessionId===active?.session_id&&reviewQueue!==null&&!reviewQueueError){
+      if(reviewQueue.length>0){void openTradeDetail(reviewQueue[0],true);return;}
+      navigateToExecutionWork('TRADES'); // All reviews verified complete: choose a saved trade to inspect.
       return;
     }
     if(reviewQueueSessionId!==active?.session_id||reviewQueue===null||reviewQueueError)loadReviewPending();
@@ -1750,8 +1751,8 @@ export function App(){
       <div className="journeySteps">
         <div className={active ? 'journeyStep journeyDone' : 'journeyStep journeyCurrent'}><span>01</span><b>Session</b><small>{active ? 'Selected' : 'Start here'}</small></div>
         <div className={plan ? 'journeyStep journeyDone' : active ? 'journeyStep journeyCurrent' : 'journeyStep'}><span>02</span><b>Plan & Zones</b><small>{plan ? 'Confirmed' : active ? 'Draft / confirm' : 'Next'}</small>{active?.status==='DRAFT' && !plan && <div className="journeyDraftLinks"><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(1)}>Plan</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(2)}>Zones</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(3)}>Review</button></div>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{(!quickMode||!active)&&plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={navigateToZoneActions}>Select zone ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{(!quickMode||!active)&&plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={navigateToZoneActions}>Select zone ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{!quickMode&&plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={navigateToZoneActions}>Select zone ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{!quickMode&&plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={navigateToZoneActions}>Select zone ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>05</span><b>Execution & trade review</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{!quickMode&&plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>navigateToExecutionWork('TRADES')}>View trades ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b>Session review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{!quickMode&&plan && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('REVIEW')){if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>document.getElementById('journal-session-review')?.scrollIntoView({behavior:'smooth',block:'start'}));}}}>Session review ↓</button>}</div>
       </div>
@@ -1863,7 +1864,7 @@ export function App(){
             </div>
             <p className="subtle">Choose a stage below at any time. Switching stages never saves a draft automatically. Trade Review belongs to one executed trade; Session Review belongs to the whole session.</p>
             {sessionTrades.some(t=>t.status==='CLOSED')&&<div className="rowActions">
-              <button type="button" onClick={navigateToTradeReviews}>{reviewQueueSessionId===active.session_id&&reviewQueue!==null&&!reviewQueueError?(reviewQueue.length>0?`Open Trade Reviews — ${reviewQueue.length} pending`:'View closed Trade Reviews'):'Find Trade Reviews'}</button>
+              <button type="button" onClick={navigateToTradeReviews}>{reviewQueueSessionId===active.session_id&&reviewQueue!==null&&!reviewQueueError?(reviewQueue.length>0?`Open Trade Reviews — ${reviewQueue.length} pending`:'View closed trades'):'Find Trade Reviews'}</button>
               <small className="subtle">For individual closed trades, not today's Session Review</small>
             </div>}{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={()=>navigateToExecutionWork('SAVED_DECISIONS')}>Review saved decisions</button></div>}
             {(()=>{const next=workflowNextAction({
