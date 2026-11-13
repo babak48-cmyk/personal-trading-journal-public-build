@@ -503,7 +503,11 @@ export function App(){
       ];
       for(const el of candidates)openRequiredFieldDisclosures(el);
       const target=candidates.find(el=>el.getClientRects().length>0);
-      if(!target){if(attempt<12)window.setTimeout(()=>focusVisible(attempt+1),90);return;}
+      if(!target){
+        if(attempt<12)window.setTimeout(()=>focusVisible(attempt+1),90);
+        else setMessage(`Required field ${validationIssueLabels[id]??FIELD_DEFINITION_BY_ID[id]?.label??id} is still not visible in this view. Its validation is preserved; open the correct owner/stage before saving.`);
+        return;
+      }
       target.scrollIntoView({behavior:'smooth',block:'center'});
       const input=target.matches('input,select,textarea,button')?target:
         target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled),button:not(:disabled)');
@@ -1649,7 +1653,7 @@ export function App(){
           ].join(', ')+'.');
           setReviewFeedback('Save the named required custom fields before completing.');
           setNotebookPage('EXECUTION');
-          window.setTimeout(()=>focusRequiredCustomField(first.fieldId,firstStage,activeTrade.metrics.trade_id),120);
+          window.setTimeout(()=>focusRequiredCustomField(first.fieldId,firstStage,savingTradeId,()=>setReviewFeedback('Required custom field is not visible for the selected Trade. Reopen this Trade to load its saved custom field controls; no Review was completed.')),120);
           return;
         }
       }catch(e){setReviewFeedback('Required field check failed. Verify existing values before retrying.');setMessage('Review not completed: required custom fields could not be verified. '+String(e));return;}
@@ -2095,7 +2099,7 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   </div></div>;
 }
 
-function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStage,ownerId:string){
+function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStage,ownerId:string,onUnreachable?:()=>void){
   // Required values are checked against the canonical owner, including post-trade-review.
   // The correct Quick notebook page must be visible before an editor can receive focus.
   const targetId=customFieldFocusId(ownerStage,ownerId,fieldId);
@@ -2103,6 +2107,7 @@ function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStag
     const target=document.getElementById(targetId);
     if(!target){
       if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
+      else onUnreachable?.();
       return;
     }
     // The owner-scoped custom field may be inside nested Quick/Review groups.
@@ -2110,6 +2115,7 @@ function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStag
     openRequiredFieldDisclosures(target);
     if(target.getClientRects().length===0){
       if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
+      else onUnreachable?.();
       return;
     }
     target.scrollIntoView({behavior:'smooth',block:'center'});
