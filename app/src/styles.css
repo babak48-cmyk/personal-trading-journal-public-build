@@ -585,7 +585,7 @@
    Use existing theme tokens; no new overlay or hidden controls. */
 .workflowStageContext{
   display:grid;gap:.3rem;padding:.8rem .95rem;margin-bottom:.65rem;
-  border:1px solid var(--border);border-inline-start:4px solid var(--accent);
+  border:1px solid var(--border);border-inline-start:4px solid var(--user-accent);
   border-radius:.65rem;background:var(--surface-soft);color:var(--text);
 }
 .workflowStageContext strong{font-size:1rem}
