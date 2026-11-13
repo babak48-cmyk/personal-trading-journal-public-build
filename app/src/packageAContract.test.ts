@@ -63,15 +63,15 @@ describe('Package A cross-stage delivery gate',()=>{
   it('keeps Review Pending drafts permissive and requires configured answers only on explicit completion',()=>{
     const review:ReviewCompletionInput={
       decisionQuality:'',executionQuality:'',managementQuality:'',exitReason:'',exitNote:'',
-      reviewNote:'',ruleNote:'',ruleViolationReported:false,emotionAffected:false,
+      reviewNote:'',ruleNote:'',ruleViolationReported:false,violatedRuleIds:[],emotionAffected:false,
       psychologyState:'',psychologyStage:'',psychologyIntensity:null,
     };
     const overrides={'review.note':true,'rule.note':true};
     expect(reviewCompletionIssues(false,overrides,review)).toEqual([]);
     expect(reviewCompletionIssues(true,overrides,review).map(x=>x.id)).toEqual(['review.note']);
     expect(reviewCompletionIssues(true,overrides,{...review,ruleViolationReported:true}).map(x=>x.id))
-      .toEqual(['review.note','rule.note']);
-    expect(reviewCompletionIssues(true,overrides,{...review,reviewNote:'Actionable lesson',ruleNote:'Rule breach',ruleViolationReported:true}))
+      .toEqual(['review.note','rule.violatedIds','rule.note']);
+    expect(reviewCompletionIssues(true,overrides,{...review,reviewNote:'Actionable lesson',ruleNote:'Rule breach',ruleViolationReported:true,violatedRuleIds:['rule-version-1']}))
       .toEqual([]);
   });
 
