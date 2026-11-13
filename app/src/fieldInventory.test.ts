@@ -269,3 +269,22 @@ describe('Evidence field ordering in one persisted preference map', () => {
     expect(new Set(ordered)).toEqual(new Set(keys));
   });
 });
+
+describe('Settings conditional-field audit regression', () => {
+  it('keeps conditional fields discoverable and protected even when preferences hide every input', () => {
+    const conditionalIds = FIELD_CONTROL_INVENTORY
+      .filter(item => item.category === 'conditional-journal-field')
+      .map(item => item.id);
+    expect(conditionalIds).toContain('candidate.price');
+    expect(conditionalIds).toContain('decision.reason');
+    expect(conditionalIds).toContain('rule.violatedIds');
+    const hidden = Object.fromEntries(FIELD_CONTROL_INVENTORY.map(item => [item.id, false]));
+    const detailedOnly = Object.fromEntries(FIELD_CONTROL_INVENTORY.map(item =>
+      [item.id, 'DETAILED_ONLY' as const]));
+    expect(requiredPresentationIssues({}, hidden, detailedOnly, new Set(conditionalIds))).toEqual([]);
+    for (const id of conditionalIds) {
+      expect(isFieldPresented(id, true, hidden, detailedOnly, {}, true)).toBe(true);
+      expect(isFieldPresented(id, false, hidden, detailedOnly, {}, true)).toBe(true);
+    }
+  });
+});
