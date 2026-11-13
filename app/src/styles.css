@@ -580,3 +580,14 @@
 .appShell .formGrid .orderedDecisionField input,
 .appShell .formGrid .orderedDecisionField select,
 .appShell .formGrid .orderedDecisionField textarea{width:100%;min-width:0}
+
+/* Quick notebook: one visible place for current stage, purpose and safe next steps.
+   Use existing theme tokens; no new overlay or hidden controls. */
+.workflowStageContext{
+  display:grid;gap:.3rem;padding:.8rem .95rem;margin-bottom:.65rem;
+  border:1px solid var(--border);border-inline-start:4px solid var(--accent);
+  border-radius:.65rem;background:var(--surface-soft);color:var(--text);
+}
+.workflowStageContext strong{font-size:1rem}
+.workflowStageContext p{margin:0;line-height:1.5}
+.workflowStageContext small{line-height:1.45}
