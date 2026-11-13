@@ -562,3 +562,21 @@
 .appShell .formGrid .orderedEvidenceField input,
 .appShell .formGrid .orderedEvidenceField select,
 .appShell .formGrid .orderedEvidenceField textarea{width:100%;min-width:0}
+
+
+/* Ordered Decision note and optional quality retain the established Decision
+   family appearance; nested wrappers never render invisible placeholder fields. */
+.appShell .formGrid .orderedDecisionField{min-width:0;max-width:100%}
+.appShell .formGrid .orderedDecisionField>label{
+  display:flex;flex-direction:column;gap:.35rem;min-width:0;height:100%;
+  padding:.65rem .75rem;border:1px solid var(--border);
+  border-inline-start:4px solid var(--family-decision-rule);
+  border-radius:.65rem;background:var(--family-decision);color:var(--text);
+  font-size:.82rem;font-weight:600;
+}
+.appShell .formGrid .orderedDecisionField>label:focus-within:not(.validationFieldError){
+  box-shadow:0 0 0 2px var(--family-decision-rule);
+}
+.appShell .formGrid .orderedDecisionField input,
+.appShell .formGrid .orderedDecisionField select,
+.appShell .formGrid .orderedDecisionField textarea{width:100%;min-width:0}
