@@ -1041,6 +1041,13 @@ export function App(){
     if(!navigateNotebookPage('PLAN'))return;
     window.requestAnimationFrame(()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'}));
   }
+  function navigateToExecutionWork(){
+    // Reveal the Quick execution page before moving to the pending entry or
+    // verified saved TRADE decisions. Never touch capture state or persistence.
+    if(!navigateNotebookPage('EXECUTION'))return;
+    if(pendingTradeDecision){focusQuickEntryInput();return;}
+    window.requestAnimationFrame(()=>document.getElementById('journal-pending-trade-decisions')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  }
   function navigateToLiveZone(){
     if(!navigateNotebookPage('PLAN'))return;
     setShowLiveCandidate(true);
@@ -1776,7 +1783,7 @@ export function App(){
                 window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
               }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
             </>}
-            {pendingTradeDecision&&<button type="button" className="primary" onClick={()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})}>Continue trade entry</button>}
+            {pendingTradeDecision&&<button type="button" className="primary" onClick={navigateToExecutionWork}>Continue trade entry</button>}
           </div>
           <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
         </section>}
@@ -1822,7 +1829,7 @@ export function App(){
 
         {active&&plan&&<>
           {quickMode&&<nav className="panel" aria-label="Quick notebook pages" style={{padding:12,marginBottom:12}}>
-            <strong>Daily journal route</strong><p className="subtle">Decision = intent; Execution = actual trade and its review; Session review = whole trading day. Your saved entries stay in place.</p>{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={()=>navigateNotebookPage('EXECUTION')}>Review saved decisions</button></div>}
+            <strong>Daily journal route</strong><p className="subtle">Decision = intent; Execution = actual trade and its review; Session review = whole trading day. Your saved entries stay in place.</p>{verifiedUnexecutedTradeDecisions.length>0&&<div className="rowActions"><span role="status">{verifiedUnexecutedTradeDecisions.length} saved TRADE decision(s) awaiting execution entry</span><button type="button" onClick={navigateToExecutionWork}>Review saved decisions</button></div>}
             {(()=>{const next=workflowNextAction({
               sessionTradeCount:sessionTrades.length,
               sessionZoneCount:plan.candidates.length,
@@ -1839,6 +1846,7 @@ export function App(){
                 }
                 if(next.destination==='PLAN'&&plan.candidates.length===0){navigateToLiveZone();return;}
                 if(next.destination==='PLAN'){navigateToZoneActions();return;}
+                if(next.destination==='EXECUTION'){navigateToExecutionWork();return;}
                 navigateNotebookPage(next.destination);
               }}>{next.label} →</button>
             </div>;})()}
@@ -1917,7 +1925,7 @@ export function App(){
 
           </div>
           <div style={{display:!quickMode||notebookPage==='EXECUTION'?'block':'none'}}>
-          {active?.status==='ACTIVE'&&<div className="panel" aria-label="Saved decisions awaiting trade entry"><div className="panelTitle"><div><h2>Saved TRADE decisions awaiting entry</h2><p className="subtle">These are decisions already stored in SQLite but not attached to any Trade. Resume the original decision; never create another one to replace it.</p></div><button type="button" disabled={unexecutedLoading} onClick={()=>setUnexecutedRefreshToken(v=>v+1)}>{unexecutedLoading?'Checking…':'Refresh'}</button></div>{unexecutedError&&<p className="warningBox" role="alert">{unexecutedError}</p>}{unexecutedLoading&&<p role="status">Checking persisted decision-to-trade links…</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.length===0&&<p className="subtle">No saved TRADE decisions currently awaiting execution entry.</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.map(d=><PendingTradeDecisionRow key={d.decision_id} decision={d} current={pendingTradeDecision?.decision_id===d.decision_id} disabled={tradeOpening} onResume={()=>resumeUnexecutedTradeDecision(d)}/>)}</div>}
+          {active?.status==='ACTIVE'&&<div className="panel" id="journal-pending-trade-decisions" aria-label="Saved decisions awaiting trade entry"><div className="panelTitle"><div><h2>Saved TRADE decisions awaiting entry</h2><p className="subtle">These are decisions already stored in SQLite but not attached to any Trade. Resume the original decision; never create another one to replace it.</p></div><button type="button" disabled={unexecutedLoading} onClick={()=>setUnexecutedRefreshToken(v=>v+1)}>{unexecutedLoading?'Checking…':'Refresh'}</button></div>{unexecutedError&&<p className="warningBox" role="alert">{unexecutedError}</p>}{unexecutedLoading&&<p role="status">Checking persisted decision-to-trade links…</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.length===0&&<p className="subtle">No saved TRADE decisions currently awaiting execution entry.</p>}{!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.map(d=><PendingTradeDecisionRow key={d.decision_id} decision={d} current={pendingTradeDecision?.decision_id===d.decision_id} disabled={tradeOpening} onResume={()=>resumeUnexecutedTradeDecision(d)}/>)}</div>}
           {quickMode&&!pendingTradeDecision&&!activeTrade&&sessionTrades.length===0&&!unexecutedLoading&&!unexecutedError&&verifiedUnexecutedTradeDecisions.length===0&&<div className="panel"><h2>Trade entry</h2><p className="subtle">No executed trade or saved TRADE decision awaiting entry is available. Record a TRADE decision at a Zone first; no Fill is created by that decision.</p><button type="button" onClick={plan.candidates.length?navigateToZoneActions:navigateToLiveZone}>{plan.candidates.length?"Choose Zone to decide":"Add a Zone first"}</button></div>}
           {pendingTradeDecision&&<div className="panel executionPanel" id="journal-quick-entry"><div className="panelTitle"><div><h2>Quick trade entry</h2><p className="subtle">Only the essentials now. Review can be completed later.</p></div><button type="button" disabled={tradeOpening} onClick={closePendingEntry}>Close</button></div>{entryClosePrompt&&<div className="warningBox" id="entry-unsaved-close-warning" role="alertdialog" aria-label="Unsaved Trade entry" aria-modal="false"><strong>UNSAVED trade entry — no Trade or Fill recorded</strong><p>Entry, stop, quantity, target and cost values are not saved. Keep this draft for this running app or explicitly discard it. Your original saved Decision remains unchanged.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setEntryClosePrompt(false)}>Keep editing</button><button type="button" onClick={()=>resolveEntryClose(true)}>Close and keep draft</button><button type="button" onClick={()=>resolveEntryClose(false)}>Discard draft and close</button></div></div>}<div className="formGrid"><label data-validation-id="trade.entryPrice" className={invalidClass('trade.entryPrice')}>Entry price <FieldHelp id="trade.entryPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={entryPrice??''} onChange={e=>{setEntryPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.entryPrice')}} placeholder="e.g. 6025.25"/></label><label data-validation-id="trade.stopPrice" className={invalidClass('trade.stopPrice')}>Initial stop price <FieldHelp id="trade.stopPrice"/> <small>Full market price</small><input type="number" step={tickStep} value={stopPrice??''} onChange={e=>{setStopPrice(e.target.value?Number(e.target.value):null);clearValidation('trade.stopPrice')}} placeholder="e.g. 6022.25"/></label><label data-validation-id="trade.quantity" className={invalidClass('trade.quantity')}>Quantity <FieldHelp id="trade.quantity"/><input type="number" min="1" step="1" value={tradeQty} onChange={e=>{setTradeQty(e.target.value===''?0:Number(e.target.value));clearValidation('trade.quantity')}}/></label>{isFieldPresented('trade.plannedTarget',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="trade.plannedTarget" className={invalidClass('trade.plannedTarget')}>{fieldText['trade.plannedTarget']?.label?.trim()||'Planned target'} <RequirementBadge id="trade.plannedTarget" overrides={requirementOverrides}/>{fieldText['trade.plannedTarget']?.help&&<small title={fieldText['trade.plannedTarget'].help}>ⓘ</small>} <FieldHelp id="trade.plannedTarget"/><input type="number" step={tickStep} value={plannedTarget??''} onChange={e=>{setPlannedTarget(e.target.value?Number(e.target.value):null);clearValidation('trade.plannedTarget')}}/></label>}</div><div className="summaryStrip" role="status" aria-live="polite">
             <span><b>Initial risk (gross)</b>{entryRiskPreview.riskDollars===null?'Enter valid entry, stop and quantity':`${entryRiskPreview.riskDollars.toFixed(2)} ${active?.instrument_currency??''}`}</span>
