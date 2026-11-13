@@ -1,12 +1,15 @@
 import {describe,expect,it} from 'vitest';
 import {JOURNAL_PAGE_LABELS,workflowNextAction,type WorkflowSituation} from './workflowGuide';
-const empty:WorkflowSituation={sessionTradeCount:0,unexecutedDecisionCount:0,pendingReviewCount:0,reviewQueueLoading:false,reviewQueueError:false};
+const empty:WorkflowSituation={sessionTradeCount:0,sessionZoneCount:1,unexecutedDecisionCount:0,pendingReviewCount:0,reviewQueueLoading:false,reviewQueueError:false};
 describe('clear lifecycle navigation',()=>{
   it('never names the Decision shortcut as an actual execution',()=>{
     expect(JOURNAL_PAGE_LABELS.DECISION).toMatch(/decision/i);
     expect(JOURNAL_PAGE_LABELS.EXECUTION).toMatch(/execution/i);
     expect(JOURNAL_PAGE_LABELS.REVIEW).toMatch(/session review/i);
     expect(workflowNextAction(empty).description).toMatch(/does not execute/i);
+  });
+  it('does not send a session without Zones to nonexistent decision controls',()=>{
+    expect(workflowNextAction({...empty,sessionZoneCount:0})).toMatchObject({destination:'PLAN',action:'NAVIGATE',label:'Add a zone to the current plan'});
   });
   it('routes saved but unexecuted trade intentions to Execution',()=>{
     expect(workflowNextAction({...empty,unexecutedDecisionCount:2})).toMatchObject({
