@@ -73,6 +73,7 @@ const emptyCandidate = (identified_when: CandidateDraftInput['identified_when'] 
 });
 
 const ACTIVE_STATES = new Set(['PLANNED', 'WATCHING', 'REACHED', 'VALID']);
+const QUICK_NOTEBOOK_PAGES=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;
 const ATTACHMENT_STAGES = ['PRE_MARKET','PRE_ENTRY','ENTRY','DURING','POST_EXIT','FOLLOW_UP','ORDER_FLOW','OTHER'] as const;
 const cleanLines=(lines:string[])=>lines.map(x=>x.trim()).filter(Boolean);
 const cleanCandidate=(c:CandidateDraftInput):CandidateDraftInput=>({...c,required_conditions:cleanLines(c.required_conditions),invalidation_conditions:cleanLines(c.invalidation_conditions)});
@@ -1734,6 +1735,7 @@ export function App(){
   const longZones=activeCandidates.filter(c=>c.directional_intent==='LONG');
   const shortZones=activeCandidates.filter(c=>c.directional_intent==='SHORT');
   const conditionalZones=activeCandidates.filter(c=>!['LONG','SHORT'].includes(c.directional_intent));
+  const notebookPageIndex=QUICK_NOTEBOOK_PAGES.indexOf(notebookPage);
   const activeTheme=resolvedTheme(appearance.theme,prefersDark);
 
   return <main className="appShell" data-theme={activeTheme.toLowerCase()} data-font-size={appearance.fontSize.toLowerCase()} data-font-family={appearance.fontFamily.toLowerCase()} data-background-tone={appearance.backgroundTone.toLowerCase()} data-accent={appearance.accent.toLowerCase()}>
@@ -1885,9 +1887,12 @@ export function App(){
               }}>{next.label} →</button>
             </div>;})()}
             <div className="rowActions" style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).map((page,i)=><button key={page} type="button" className={notebookPage===page?'primary':''} aria-current={notebookPage===page?'page':undefined} onClick={()=>navigateNotebookPage(page)}>{i+1}. {JOURNAL_PAGE_LABELS[page]}</button>)}
+              {QUICK_NOTEBOOK_PAGES.map((page,i)=><button key={page} type="button" className={notebookPage===page?'primary':''} aria-current={notebookPage===page?'page':undefined} onClick={()=>navigateNotebookPage(page)}>{i+1}. {JOURNAL_PAGE_LABELS[page]}</button>)}
             </div>
-            <div className="rowActions"><button type="button" disabled={notebookPage==='PLAN'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;navigateNotebookPage(pages[Math.max(0,pages.indexOf(notebookPage)-1)]);}}>← {JOURNAL_PAGE_LABELS[(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const)[Math.max(0,(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).indexOf(notebookPage)-1)]]}</button><button type="button" disabled={notebookPage==='REVIEW'} onClick={()=>{const pages=['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const;const nextIndex=Math.min(4,pages.indexOf(notebookPage)+1);navigateNotebookPage(pages[nextIndex]);}}>{JOURNAL_PAGE_LABELS[(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const)[Math.min(4,(['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'] as const).indexOf(notebookPage)+1)]]} →</button></div>
+            <div className="rowActions">
+              <button type="button" disabled={notebookPageIndex===0} onClick={()=>navigateNotebookPage(QUICK_NOTEBOOK_PAGES[Math.max(0,notebookPageIndex-1)])}>← {JOURNAL_PAGE_LABELS[QUICK_NOTEBOOK_PAGES[Math.max(0,notebookPageIndex-1)]]}</button>
+              <button type="button" disabled={notebookPageIndex===QUICK_NOTEBOOK_PAGES.length-1} onClick={()=>navigateNotebookPage(QUICK_NOTEBOOK_PAGES[Math.min(QUICK_NOTEBOOK_PAGES.length-1,notebookPageIndex+1)])}>{JOURNAL_PAGE_LABELS[QUICK_NOTEBOOK_PAGES[Math.min(QUICK_NOTEBOOK_PAGES.length-1,notebookPageIndex+1)]]} →</button>
+            </div>
             {pendingEvidencePage&&<div id="evidence-page-navigation-warning" className="warningBox" role="alertdialog" aria-label="Unsaved Evidence navigation" aria-modal="false">
               <strong>UNSAVED Evidence — not captured yet</strong>
               <p>Keep the observed selections, classification, price and note when changing pages. Nothing will be recorded until you select Capture.</p>
