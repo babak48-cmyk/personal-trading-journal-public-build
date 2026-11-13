@@ -13,6 +13,7 @@ export const JOURNAL_PAGE_LABELS:Readonly<Record<QuickJournalPage,string>>={
 };
 export type WorkflowSituation={
   sessionTradeCount:number;
+  sessionZoneCount:number;
   unexecutedDecisionCount:number;
   pendingReviewCount:number|null;
   reviewQueueLoading:boolean;
@@ -44,6 +45,11 @@ export function workflowNextAction(s:WorkflowSituation):NextAction{
     label:'View recorded trades',
     description:'Open a trade to manage its fills or review it. Session review is a separate final step.',
     destination:'EXECUTION',action:'NAVIGATE',
+  };
+  if(s.sessionZoneCount===0)return {
+    label:'Add a zone to the current plan',
+    description:'There are no saved Zones in this session. Add a live Zone through a timestamped plan revision before recording Zone evidence or decisions.',
+    destination:'PLAN',action:'NAVIGATE',
   };
   return {
     label:'Choose a zone and record a decision',
