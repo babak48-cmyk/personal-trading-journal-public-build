@@ -34,6 +34,7 @@ import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './custom
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
 import { CustomAdminValidationError, isPreWriteCustomAdminValidation } from './customAdminValidation';
+import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -2431,7 +2432,7 @@ function CustomFieldDiscovery(){
   function newId(){return crypto.randomUUID();}
   return <details className="guidedMore"><summary>Custom Fields & Options — management (beta)</summary>
     <p className="subtle">Changes affect field definitions and future selections, not old values. Schema v9 is required. Use a DEMO journal for testing this beta.</p>
-    <button type="button" disabled={busy||uncertainAdmin} onClick={refresh}>Refresh custom fields</button>
+    <button type="button" disabled={customAdminRefreshDisabled(busy)} onClick={refresh}>Refresh custom fields</button>
     {uncertainAdmin&&<p role="alert" className="warningBox">A previous custom-field operation was not verified. Create, edit, reorder and cleanup actions are locked until Refresh succeeds. Review the returned saved values before taking another action.</p>}
     <p className="subtle" role="status">{notice}</p>
     <div className="requirementGroup">
@@ -2441,7 +2442,7 @@ function CustomFieldDiscovery(){
       <label>Stage<select value={newField.stage} onChange={e=>setNewField(v=>({...v,stage:e.target.value}))}>{CAPTURABLE_CUSTOM_FIELD_STAGES.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
       <label>Type<select value={newField.field_type} onChange={e=>setNewField(v=>({...v,field_type:e.target.value}))}>{['TEXT','NUMBER','DATE','BOOLEAN','SINGLE_SELECT','MULTI_SELECT'].map(x=><option key={x}>{x}</option>)}</select></label>
       <label>Help text<input value={newField.help_text} maxLength={240} onChange={e=>setNewField(v=>({...v,help_text:e.target.value}))}/></label>
-      <button type="button" disabled={busy||uncertainAdmin||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>{
+      <button type="button" disabled={customAdminEditDisabled(busy,uncertainAdmin)||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>{
         const id=newId(),snapshot={...newField};
         void runChange(async()=>{
           if(!canCaptureCustomFieldStage(snapshot.stage))throw Error('Stage has no supported capture editor');
