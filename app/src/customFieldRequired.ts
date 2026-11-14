@@ -23,10 +23,12 @@ export async function missingRequiredCustomValues(
   ]);
   const missing:CustomRequiredIssue[]=[];
   for(const {field,value} of typedValues){
-    const valid=field.field_type==='TEXT'? !!value?.text_value?.trim()
-      :field.field_type==='NUMBER'? value?.number_value!==null&&value?.number_value!==undefined&&Number.isFinite(value.number_value)
-      :field.field_type==='DATE'? !!value?.date_value?.trim()
-      :field.field_type==='BOOLEAN'? value?.boolean_value!==null&&value?.boolean_value!==undefined : false;
+    // A typed field must be backed by a current persisted value OF ITS OWN TYPE.
+    // A stale/mismatched historical event must never satisfy a new required input.
+    const valid=field.field_type==='TEXT'? value?.value_type==='TEXT'&&!!value.text_value?.trim()
+      :field.field_type==='NUMBER'? value?.value_type==='NUMBER'&&value.number_value!==null&&value.number_value!==undefined&&Number.isFinite(value.number_value)
+      :field.field_type==='DATE'? value?.value_type==='DATE'&&!!value.date_value?.trim()
+      :field.field_type==='BOOLEAN'? value?.value_type==='BOOLEAN'&&value.boolean_value!==null&&value.boolean_value!==undefined : false;
     if(!valid)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   for(const {field,value} of selectedValues){
