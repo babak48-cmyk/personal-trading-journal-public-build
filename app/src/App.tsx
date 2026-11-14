@@ -2475,7 +2475,14 @@ function CustomFieldDiscovery(){
         async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.required===wanted&&current.active===field.active;}
       );}}/> Required at this stage</label>
       <button type="button" disabled={busy||uncertainAdmin||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>{const wanted=!field.active;void runChange(
-        ()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,wanted,field.display_order),
+        async()=>{
+          if(wanted){
+            const defs=await localApi.listCustomFieldDefinitions();
+            if(!isUniqueActiveCustomLabel(field.label,defs.filter(f=>f.stage===field.stage).map(f=>({id:f.field_id,label:f.label,active:f.active})),field.field_id))
+              throw Error('VALIDATION: An active field in this stage already uses this label; rename before reactivating.');
+          }
+          await localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,wanted,field.display_order);
+        },
         async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.active===wanted&&current.required===field.required;}
       );}}>{field.active?'Deactivate':'Reactivate'}</button>
       <button type="button" disabled={busy||uncertainAdmin} onClick={async()=>{
@@ -2575,7 +2582,14 @@ function CustomFieldDiscovery(){
           <button type="button" disabled={busy||uncertainAdmin||optionIndex===0} onClick={()=>void moveOption(field.field_id,option.option_id,-1)} aria-label={'Move option '+option.label+' earlier'}>↑ Earlier</button>
           <button type="button" disabled={busy||uncertainAdmin||optionIndex===((options[field.field_id]?.length??0)-1)} onClick={()=>void moveOption(field.field_id,option.option_id,1)} aria-label={'Move option '+option.label+' later'}>↓ Later</button>
           <button type="button" disabled={busy||uncertainAdmin} onClick={()=>{const wanted=!option.active;void runChange(
-            ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,wanted,option.display_order),
+            async()=>{
+              if(wanted){
+                const opts=await localApi.listCustomFieldOptions(field.field_id);
+                if(!isUniqueActiveCustomLabel(option.label,opts.map(o=>({id:o.option_id,label:o.label,active:o.active})),option.option_id))
+                  throw Error('VALIDATION: Another active option uses this name; rename before reactivating.');
+              }
+              await localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,wanted,option.display_order);
+            },
             async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.active===wanted&&o.label===option.label);},
             field.field_id
           );}}>{option.active?'Deactivate':'Reactivate'}</button>
