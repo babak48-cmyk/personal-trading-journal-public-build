@@ -33,6 +33,8 @@ describe('Custom Field safe write verification',()=>{
     expect(verifiedCustomSelectionEvent(selection,{...saved,options:saved.options.slice(0,1)})).toBe(false);
     expect(verifiedCustomSelectionEvent(selection,{...saved,options:[{...saved.options[0],label_at_selection:''},saved.options[1]]})).toBe(false);
     expect(verifiedCustomSelectionEvent({...selection,option_ids:['optA','optA']},saved)).toBe(false);
+    expect(verifiedCustomSelectionEvent(selection,{...saved,options:[saved.options[1],saved.options[0]].map((o,index)=>({...o,ordinal:index}))})).toBe(false);
+    expect(verifiedCustomSelectionEvent({...selection,option_ids:['optB','optA']},saved)).toBe(false);
   });
   it('rejects damaged historical selection ordinals without silently claiming persistence',()=>{
     expect(verifiedCustomSelectionEvent(selection,{...saved,options:[

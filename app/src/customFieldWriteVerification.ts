@@ -24,7 +24,9 @@ export function verifiedCustomSelectionEvent(request:CustomSelectionInput,actual
   const expected=request.option_ids;
   if(expected.length===0||new Set(expected).size!==expected.length||actual.options.length!==expected.length)return false;
   const actualIds=actual.options.map(o=>o.option_id);
-  if(new Set(actualIds).size!==actualIds.length||!expected.every(id=>actualIds.includes(id)))return false;
+  if(new Set(actualIds).size!==actualIds.length||!expected.every((id,index)=>actualIds[index]===id))return false;
+  // SQLite returns snapshots ordered by ordinal. Require exact request order,
+  // not just the same set: ordinal is part of immutable historical evidence.
   // A historical option-label snapshot must be present for later review.
   return actual.options.every((o,index)=>typeof o.label_at_selection==='string'&&o.label_at_selection.trim().length>0
     && Number.isSafeInteger(o.ordinal)&&o.ordinal===index);
