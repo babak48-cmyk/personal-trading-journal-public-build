@@ -10,6 +10,7 @@ import {
   fieldConnectionReport,
   fieldConnectionSummary,
   requiredPresentationIssues,
+  isEditableRequirementControl,
 } from './fieldInventory';
 
 describe('Field Manager inventory safety', () => {
@@ -66,6 +67,19 @@ describe('Field Manager inventory safety', () => {
       expect(FIELD_CONTROL_INVENTORY.find(x => x.id === id)?.stage).toBe('post-trade-review');
     }
     expect(FIELD_CONTROL_INVENTORY.find(x => x.id === 'rule.violationReported')?.candidateForCustomization).toBe(false);
+  });
+
+  it('lets the trader require the emotion-impact answer without hiding the conditional review gate',()=>{
+    expect(isEditableRequirementControl('psychology.emotionAffected')).toBe(true);
+    expect(isEditableRequirementControl('psychology.state')).toBe(false);
+    expect(isEditableRequirementControl('psychology.stage')).toBe(false);
+    expect(isEditableRequirementControl('candidate.trendRelationship')).toBe(false);
+    expect(isEditableRequirementControl('review.mistakes')).toBe(false);
+    expect(isEditableRequirementControl('plan.mainScenario')).toBe(true);
+    expect(isFieldPresented('psychology.emotionAffected',true,
+      {'psychology.emotionAffected':false},
+      {'psychology.emotionAffected':'DETAILED_ONLY'},
+      {'psychology.emotionAffected':true})).toBe(true);
   });
 
   it('protects conditional psychology state even if optional control preferences hide it', () => {
