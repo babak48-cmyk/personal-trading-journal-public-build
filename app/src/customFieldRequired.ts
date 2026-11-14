@@ -32,7 +32,10 @@ export async function missingRequiredCustomValues(
     if(!valid)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   for(const {field,value} of selectedValues){
-    if(!value?.options.length)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
+    const hasUsableSnapshot=!!value?.event_id&&!!value.options.length
+      && value.options.every(o=>!!o.option_id?.trim()&&!!o.label_at_selection?.trim())
+      && new Set(value.options.map(o=>o.option_id)).size===value.options.length;
+    if(!hasUsableSnapshot)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   return missing;
 }
