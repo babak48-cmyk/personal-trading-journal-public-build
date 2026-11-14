@@ -88,6 +88,15 @@ describe('custom field semantic boundary required check',()=>{
   expect(visited).toContain('session-review:review-A:sr-required');
   expect(visited).toContain('session-review:review-A:sr-zero');
  });
+ it('does not mistake a mismatched historical typed value for a saved Required response',async()=>{
+  const mismatched:CustomValueReader={...reader,
+    currentCustomFieldTypedValue:async()=>({event_id:'legacy',value_type:'TEXT',text_value:'nonempty',
+      number_value:0,date_value:'2026-11-14',boolean_value:false}),
+  };
+  // Even non-empty cross-type columns must not satisfy a NUMBER or BOOLEAN input.
+  expect((await missingRequiredCustomValues(mismatched,'session','s1')).map(x=>x.id))
+    .toEqual(['s-zero','s-false','s-empty']);
+ });
  it('propagates unavailable persistence errors rather than confirming without checking',async()=>{
   await expect(missingRequiredCustomValues({...reader,listCustomFieldDefinitions:async()=>{throw Error('database unavailable')}},'zone','z1')).rejects.toThrow('database unavailable');
  });
