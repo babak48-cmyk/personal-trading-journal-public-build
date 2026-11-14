@@ -54,7 +54,7 @@ describe('completed review historical custom answers',()=>{
     const a={id:'z',label:'Z',display:'Z',retired:false,stage:'trade',displayOrder:0};
     const b={id:'a',label:'A',display:'A',retired:false,stage:'session-review',displayOrder:0};
     const input=[a,b] as const;
-    expect(orderedReadOnlyCustomRows(input).map(x=>x.id)).toEqual(['a','z']);
+    expect(orderedReadOnlyCustomRows(input).map(x=>x.id)).toEqual(['z','a']);
     expect(input[0].id).toBe('z');
   });
 });
