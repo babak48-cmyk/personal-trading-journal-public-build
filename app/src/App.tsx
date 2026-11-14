@@ -36,6 +36,7 @@ import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
 import { CustomAdminValidationError, isPreWriteCustomAdminValidation } from './customAdminValidation';
 import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
 import { validCustomSelectionDraft } from './customSelectionDraftSafety';
+import { isValidCustomTextDraft } from './customTypedDraftSafety';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -2257,7 +2258,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
     const raw=values[field.field_id]??'';
     if(persistedValid[field.field_id]&&raw===original[field.field_id]&&raw.trim()){setFieldFeedback(v=>({...v,[field.field_id]:'No change to save.'}));return;}
     const number=field.field_type==='NUMBER'?Number(raw):null;
-    if(!raw.trim()||(field.field_type==='TEXT'&&(raw.length>4000||Array.from(raw).some(ch=>ch.charCodeAt(0)<32||ch.charCodeAt(0)===127)))||(field.field_type==='NUMBER'&&!Number.isFinite(number))){
+    if(!raw.trim()||(field.field_type==='TEXT'&&!isValidCustomTextDraft(raw))||(field.field_type==='NUMBER'&&!Number.isFinite(number))){
       setLocalErrors(v=>v.includes(field.field_id)?v:[...v,field.field_id]);
       setFieldFeedback(v=>({...v,[field.field_id]:'Enter a valid value before saving.'}));
       return;
