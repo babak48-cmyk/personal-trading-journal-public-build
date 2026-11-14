@@ -8,6 +8,24 @@ export type CustomValueReader = Readonly<{
   currentCustomFieldSelection:(stage:string,ownerId:string,fieldId:string)=>Promise<CustomSelection|null>;
 }>;
 
+/** Shared semantic validity policy for both Quick/Detailed missing-field markers
+ * and the save-boundary guard. Do not count non-empty mismatched legacy values
+ * as satisfying a currently required field. Zero and false are valid values.
+ */
+export function isUsableCustomTypedValue(fieldType:string,value:CustomTypedValue|null):boolean{
+  if(!value?.event_id)return false;
+  return fieldType==='TEXT'? value.value_type==='TEXT'&&!!value.text_value?.trim()
+    :fieldType==='NUMBER'? value.value_type==='NUMBER'&&value.number_value!==null&&value.number_value!==undefined&&Number.isFinite(value.number_value)
+    :fieldType==='DATE'? value.value_type==='DATE'&&!!value.date_value?.trim()
+    :fieldType==='BOOLEAN'? value.value_type==='BOOLEAN'&&value.boolean_value!==null&&value.boolean_value!==undefined : false;
+}
+
+export function isUsableCustomSelection(value:CustomSelection|null):boolean{
+  return !!value?.event_id&&!!value.options.length
+    && value.options.every(o=>!!o.option_id?.trim()&&!!o.label_at_selection?.trim())
+    && new Set(value.options.map(o=>o.option_id)).size===value.options.length;
+}
+
 /** Check persisted values, not unfinished drafts. A saved false/zero is a valid answer. */
 export async function missingRequiredCustomValues(
   reader:CustomValueReader,
@@ -23,19 +41,11 @@ export async function missingRequiredCustomValues(
   ]);
   const missing:CustomRequiredIssue[]=[];
   for(const {field,value} of typedValues){
-    // A typed field must be backed by a current persisted value OF ITS OWN TYPE.
-    // A stale/mismatched historical event must never satisfy a new required input.
-    const valid=field.field_type==='TEXT'? value?.value_type==='TEXT'&&!!value.text_value?.trim()
-      :field.field_type==='NUMBER'? value?.value_type==='NUMBER'&&value.number_value!==null&&value.number_value!==undefined&&Number.isFinite(value.number_value)
-      :field.field_type==='DATE'? value?.value_type==='DATE'&&!!value.date_value?.trim()
-      :field.field_type==='BOOLEAN'? value?.value_type==='BOOLEAN'&&value.boolean_value!==null&&value.boolean_value!==undefined : false;
+    const valid=isUsableCustomTypedValue(field.field_type,value);
     if(!valid)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   for(const {field,value} of selectedValues){
-    const hasUsableSnapshot=!!value?.event_id&&!!value.options.length
-      && value.options.every(o=>!!o.option_id?.trim()&&!!o.label_at_selection?.trim())
-      && new Set(value.options.map(o=>o.option_id)).size===value.options.length;
-    if(!hasUsableSnapshot)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
+    if(!isUsableCustomSelection(value))missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   return missing;
 }
