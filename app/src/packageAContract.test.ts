@@ -22,7 +22,7 @@ describe('Package A cross-stage delivery gate',()=>{
     const counts=fieldConnectionSummary();
     expect(report).toHaveLength(entries.length);
     expect(new Set(entries.map(x=>x.id)).size).toBe(entries.length);
-    expect(counts.CONNECTED+counts.PROTECTED+counts.VISIBILITY_ONLY+counts.PENDING).toBe(entries.length);
+    expect(counts.CONNECTED+counts.REQUIREMENT_ONLY+counts.PROTECTED+counts.VISIBILITY_ONLY+counts.PENDING).toBe(entries.length);
     expect(activeVisibilityInventoryIssues()).toEqual([]);
     // These are intentionally system-locked, not three newly missing implementation tasks.
     for(const id of ['candidate.trendRelationship','psychology.state','psychology.stage']){
