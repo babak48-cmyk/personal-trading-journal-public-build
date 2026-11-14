@@ -241,6 +241,7 @@ export const RENDERED_FIELD_TEXT_IDS = [
   'management.reason',
   'plan.alternativeScenario',
   'plan.mainScenario',
+  'plan.preSessionState',
   'plan.preSessionStateIntensity',
   'planRevision.evidence',
   'psychology.intensity',

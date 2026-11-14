@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { FIELD_CONTROL_INVENTORY, RENDERED_FIELD_TEXT_IDS, isActiveVisibilityControl, orderFieldIdsWithinSection } from './fieldInventory';
+import { FIELD_CONTROL_INVENTORY, RENDERED_FIELD_TEXT_IDS, ACTIVE_VISIBILITY_FIELD_IDS, isActiveVisibilityControl, orderFieldIdsWithinSection } from './fieldInventory';
 import { FIELD_DEFINITION_BY_ID } from './fieldDefinitions';
 
 describe('Field Manager complete rendered text-editor coverage', () => {
   it('lists unique connected, formally defined and live-presented controls', () => {
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
-    expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(35);
+    expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(36);
+    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set(ACTIVE_VISIBILITY_FIELD_IDS));
     for (const id of RENDERED_FIELD_TEXT_IDS) {
       expect(FIELD_CONTROL_INVENTORY.some(item => item.id===id)).toBe(true);
       expect(FIELD_DEFINITION_BY_ID[id]).toBeDefined();
       expect(isActiveVisibilityControl(id)).toBe(true);
     }
+  });
+  it('includes the pre-session state label/help in the actual Draft Plan editor', () => {
+    expect(RENDERED_FIELD_TEXT_IDS).toContain('plan.preSessionState');
   });
   it('includes all Review and Psychology labels consumed by the current editor', () => {
     for (const id of [
