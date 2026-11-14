@@ -2351,6 +2351,8 @@ function CustomFieldDiscovery(){
   const [newOption,setNewOption]=useState<Record<string,string>>({});
   const [renameFieldDraft,setRenameFieldDraft]=useState<Record<string,string>>({});
   const [renameOptionDraft,setRenameOptionDraft]=useState<Record<string,string>>({});
+  const [cleanupPreflight,setCleanupPreflight]=useState<import('./services/localApi').CustomFieldCleanupPreflight|null>(null);
+  const [cleanupConfirmText,setCleanupConfirmText]=useState('');
   const visibleFields=fields.filter(field=>(showInactive||field.active)&&
     [field.label,field.field_id,field.stage,field.field_type].some(value=>value.toLowerCase().includes(filter.toLowerCase().trim())));
   async function refresh(){
@@ -2465,25 +2467,59 @@ function CustomFieldDiscovery(){
         async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.active===wanted&&current.required===field.required;}
       );}}>{field.active?'Deactivate':'Reactivate'}</button>
       <button type="button" disabled={busy||uncertainAdmin} onClick={async()=>{
-        if(busy)return;
-        setBusy(true);
-        try {
+        if(customAdminBusyRef.current||uncertainAdminRef.current)return;
+        customAdminBusyRef.current=true;setBusy(true);
+        setCleanupPreflight(null);setCleanupConfirmText('');
+        try{
           const report=await localApi.customFieldCleanupPreflight(field.field_id);
-          const details=`Controlled Cleanup — ${report.label} (${report.stage})\nField ID: ${report.field_id}\nOptions: ${report.option_count}; saved events: ${report.event_count}; selection snapshots: ${report.snapshot_count}`;
           if(!report.eligible_unused_definition){
-            setNotice(details+' — BLOCKED: saved history is protected. Deactivate this field instead; test-data history purge is not implemented.');
-            return;
+            setNotice('Controlled cleanup BLOCKED for '+report.label+': '+report.event_count+' events and '+report.snapshot_count+' snapshots. Saved history must remain intact; deactivate instead.');
+          }else if(report.event_count!==0||report.snapshot_count!==0){
+            setNotice('Cleanup BLOCKED: expected unused definition, but historical events/snapshots were found.');
+          }else{
+            setCleanupPreflight(report);
+            setNotice('Cleanup preflight passed for an unused definition only. Review the details and type DELETE to approve a new checked operation.');
           }
-          if(!window.confirm(details+'\n\nPERMANENT deletion of this unused field and its options. A safety backup will be created and validated first. Continue?'))return;
-          const typed=window.prompt('Final confirmation: type DELETE to permanently delete this unused field and all its options.');
-          if(typed!=='DELETE'){setNotice('Cleanup cancelled; DELETE not confirmed.');return;}
-          const path=await localApi.cleanupUnusedCustomField(field.field_id,typed);
-          setFields(await localApi.listCustomFieldDefinitions());
-          setOptions({});
-          setNotice('Unused field deleted after verified backup: '+path);
-        }catch(e){setNotice('Cleanup not performed: '+String(e));}
-        finally{setBusy(false);}
+        }catch(e){setNotice('Cleanup preflight unavailable: '+String(e));}
+        finally{customAdminBusyRef.current=false;setBusy(false);}
       }}>Controlled cleanup</button>
+      {cleanupPreflight?.field_id===field.field_id&&<div className="requirementGroup" role="group" aria-label={'Permanent cleanup confirmation for '+field.label}>
+        <strong>Permanent deletion: unused custom field and its options</strong>
+        <p className="subtle">Field: {cleanupPreflight.label} · ID: {cleanupPreflight.field_id} · Stage: {cleanupPreflight.stage}. Options: {cleanupPreflight.option_count}; historical events: {cleanupPreflight.event_count}; snapshots: {cleanupPreflight.snapshot_count}. The backend must perform and validate its safety backup before deletion. This operation cannot be undone in the journal.</p>
+        <label>Type DELETE to authorize this specific field cleanup
+          <input autoComplete="off" value={cleanupConfirmText} onChange={e=>setCleanupConfirmText(e.target.value)} />
+        </label>
+        <div className="rowActions">
+          <button type="button" disabled={busy} onClick={()=>{setCleanupPreflight(null);setCleanupConfirmText('');setNotice('Controlled cleanup cancelled; no data was deleted.');}}>Cancel</button>
+          <button type="button" disabled={busy||uncertainAdmin||cleanupConfirmText!=='DELETE'} onClick={async()=>{
+            if(customAdminBusyRef.current||uncertainAdminRef.current||cleanupConfirmText!=='DELETE')return;
+            customAdminBusyRef.current=true;setBusy(true);
+            const snapshot=cleanupPreflight;
+            setCleanupPreflight(null);setCleanupConfirmText('');
+            let attempted=false;
+            try{
+              const latest=await localApi.customFieldCleanupPreflight(snapshot.field_id);
+              if(!latest.eligible_unused_definition||latest.event_count!==0||latest.snapshot_count!==0
+                ||latest.field_id!==snapshot.field_id||latest.option_count!==snapshot.option_count
+                ||latest.stage!==snapshot.stage||latest.label!==snapshot.label){
+                setNotice('Cleanup cancelled: the independent preflight changed or historical data exists. No deletion request was sent.');
+                return;
+              }
+              attempted=true;
+              const backupPath=await localApi.cleanupUnusedCustomField(snapshot.field_id,'DELETE');
+              const current=await localApi.listCustomFieldDefinitions();
+              if(current.some(item=>item.field_id===snapshot.field_id))
+                throw new Error('Cleanup returned but definition still exists; inspect storage before retrying.');
+              setFields(current);
+              setOptions(v=>{const next={...v};delete next[snapshot.field_id];return next;});
+              setNotice('Cleanup confirmed for unused field '+snapshot.label+'. Backend reported safety backup: '+backupPath);
+            }catch(e){
+              if(attempted){uncertainAdminRef.current=true;setUncertainAdmin(true);}
+              setNotice('Controlled cleanup not confirmed. Do not retry before reloading saved records and inspecting the backup: '+String(e));
+            }finally{customAdminBusyRef.current=false;setBusy(false);}
+          }}>Confirm permanent cleanup</button>
+        </div>
+      </div>}
       <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameFieldDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.label}))}>Rename</button>
       {renameFieldDraft[field.field_id]!==undefined&&<div className="rowActions">
         <label>New field label <input maxLength={240} value={renameFieldDraft[field.field_id]}
