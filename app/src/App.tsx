@@ -24,7 +24,7 @@ import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
 import { isCompletedReviewForTrade } from './reviewIdentity';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
-import { missingRequiredCustomValues } from './customFieldRequired';
+import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
@@ -2133,6 +2133,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
   const [selected,setSelected]=useState<Record<string,string[]>>({});
   const [notice,setNotice]=useState('');
   const [original,setOriginal]=useState<Record<string,string[]>>({});
+  const [persistedValid,setPersistedValid]=useState<Record<string,boolean>>({});
   const [busy,setBusy]=useState(false);
   const busyRef=useRef(false);
   const [fieldFeedback,setFieldFeedback]=useState<Record<string,string>>({});
@@ -2140,14 +2141,14 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
   const [uncertainWrites,setUncertainWrites]=useState<string[]>([]);
   useEffect(()=>{
     let live=true;
-    setFields([]);setOptions({});setSelected({});setOriginal({});setNotice('');setFieldFeedback({});setLocalErrors([]);setUncertainWrites([]);
+    setFields([]);setOptions({});setSelected({});setOriginal({});setPersistedValid({});setNotice('');setFieldFeedback({});setLocalErrors([]);setUncertainWrites([]);
     localApi.listCustomFieldDefinitions().then(async defs=>{
       const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
         const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
-        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[]};
+        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[],valid:isUsableCustomSelection(current)};
       }));
-      if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));}
+      if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setPersistedValid(Object.fromEntries(pairs.map(p=>[p.id,p.valid])));}
     }).catch(e=>{if(live)setNotice('Custom fields unavailable: '+String(e));});
     return ()=>{live=false;};
   },[ownerId,ownerStage]);
@@ -2160,7 +2161,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       setFieldFeedback(v=>({...v,[fieldId]:'Select at least one active option before saving.'}));
       return;
     }
-    if(values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
+    if(persistedValid[fieldId]&&values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
     busyRef.current=true;setBusy(true);setFieldFeedback(v=>({...v,[fieldId]:'Saving selection…'}));
     const request={event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:ownerStage,owner_id:ownerId,option_ids:[...values]};
     let writeAttempted=false;
@@ -2171,6 +2172,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       if(!verifiedCustomSelectionEvent(request,current))
         throw new Error('Stored option IDs or event identity did not match the submitted selection.');
       setOriginal(v=>({...v,[fieldId]:[...values]}));
+      setPersistedValid(v=>({...v,[fieldId]:true}));
       onSaved(customFieldFocusId(ownerStage,ownerId,fieldId));
       setLocalErrors(v=>v.filter(x=>x!==fieldId));
       setFieldFeedback(v=>({...v,[fieldId]:'Selection saved and verified.'}));
@@ -2183,7 +2185,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
     finally{busyRef.current=false;setBusy(false);}
   }
   if(!fields.length&&!notice)return null;
-  const missing=fields.filter(f=>f.required&&(original[f.field_id]||[]).length===0);
+  const missing=fields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
@@ -2191,7 +2193,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       const values=selected[field.field_id]||[];
       const available=options[field.field_id]||[];
       const same=values.length===(original[field.field_id]||[]).length&&values.every(v=>(original[field.field_id]||[]).includes(v));
-      const valid=!same&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
+      const valid=(!same||!persistedValid[field.field_id])&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
       return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))||localErrors.includes(field.field_id)?'validationFieldError':'')}>
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
         {field.field_type==='SINGLE_SELECT'
@@ -2204,7 +2206,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
               onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.checked?[...values,o.option_id]:values.filter(id=>id!==o.option_id)}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}/>
             {o.label}{o.active?'':' (inactive)'}
           </label>)}</div>}
-        <button type="button" disabled={busy||uncertainWrites.includes(field.field_id)||(same&&values.length>0)||(!valid&&values.length>0)} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
+        <button type="button" disabled={busy||uncertainWrites.includes(field.field_id)||(same&&values.length>0&&persistedValid[field.field_id])||(!valid&&values.length>0)} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
         {fieldFeedback[field.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[field.field_id]}</small>}
       </div>;
     })}
@@ -2222,27 +2224,28 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
   const [localErrors,setLocalErrors]=useState<string[]>([]);
   const [fieldFeedback,setFieldFeedback]=useState<Record<string,string>>({});
   const [original,setOriginal]=useState<Record<string,string>>({});
+  const [persistedValid,setPersistedValid]=useState<Record<string,boolean>>({});
   const [uncertainWrites,setUncertainWrites]=useState<string[]>([]);
   useEffect(()=>{
     let current=true;
-    setFields([]);setValues({});setOriginal({});setMessage('');setLocalErrors([]);setFieldFeedback({});setUncertainWrites([]);
+    setFields([]);setValues({});setOriginal({});setPersistedValid({});setMessage('');setLocalErrors([]);setFieldFeedback({});setUncertainWrites([]);
     localApi.listCustomFieldDefinitions().then(async all=>{
       const eligible=eligibleCustomFields(all,ownerStage,'typed');
       const entries=await Promise.all(eligible.map(async f=>{
         const value=await localApi.currentCustomFieldTypedValue(ownerStage,ownerId,f.field_id);
-        const display=value?.value_type==='BOOLEAN' ? (value.boolean_value===true?'true':value.boolean_value===false?'false':'') :
+        const display=value?.value_type!==f.field_type ? '' : value?.value_type==='BOOLEAN' ? (value.boolean_value===true?'true':value.boolean_value===false?'false':'') :
           value?.value_type==='NUMBER' ? (value.number_value==null?'':String(value.number_value)) :
           value?.value_type==='DATE' ? (value.date_value||'') : (value?.text_value||'');
-        return [f.field_id,display] as const;
+        return {id:f.field_id,display,valid:isUsableCustomTypedValue(f.field_type,value)};
       }));
-      if(current){setFields(eligible);setValues(Object.fromEntries(entries));setOriginal(Object.fromEntries(entries));}
+      if(current){setFields(eligible);setValues(Object.fromEntries(entries.map(e=>[e.id,e.display])));setOriginal(Object.fromEntries(entries.map(e=>[e.id,e.display])));setPersistedValid(Object.fromEntries(entries.map(e=>[e.id,e.valid])));}
     }).catch(e=>{if(current)setMessage('Typed fields unavailable: '+String(e));});
     return ()=>{current=false;};
   },[ownerId,ownerStage]);
   async function save(field:import('./services/localApi').CustomFieldDefinition){
     if(busyRef.current||uncertainWrites.includes(field.field_id))return;
     const raw=values[field.field_id]??'';
-    if(raw===original[field.field_id]&&raw.trim()){setFieldFeedback(v=>({...v,[field.field_id]:'No change to save.'}));return;}
+    if(persistedValid[field.field_id]&&raw===original[field.field_id]&&raw.trim()){setFieldFeedback(v=>({...v,[field.field_id]:'No change to save.'}));return;}
     const number=field.field_type==='NUMBER'?Number(raw):null;
     if(!raw.trim()||(field.field_type==='NUMBER'&&!Number.isFinite(number))){
       setLocalErrors(v=>v.includes(field.field_id)?v:[...v,field.field_id]);
@@ -2265,6 +2268,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
       if(!verifiedCustomTypedEvent(request,persisted))
         throw new Error('Saved event identity or typed value differed from the requested value.');
       setOriginal(v=>({...v,[field.field_id]:raw}));
+      setPersistedValid(v=>({...v,[field.field_id]:true}));
       onSaved(customFieldFocusId(ownerStage,ownerId,field.field_id));
       setLocalErrors(v=>v.filter(x=>x!==field.field_id));
       setFieldFeedback(v=>({...v,[field.field_id]:'Value saved and verified.'}));
@@ -2277,7 +2281,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
     finally{busyRef.current=false;setBusy(false);}
   }
   if(!fields.length&&!message)return null;
-  const missing=fields.filter(f=>f.required&&!(original[f.field_id]??'').trim());
+  const missing=fields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
     <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
@@ -2288,7 +2292,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
           :<input type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}/>}
       </label>
       {f.help_text&&<p className="subtle">{f.help_text}</p>}
-      <button type="button" disabled={busy||uncertainWrites.includes(f.field_id)||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??''))} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
+      <button type="button" disabled={busy||uncertainWrites.includes(f.field_id)||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??'')&&persistedValid[f.field_id])} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
       {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}
     </div>)}
     {message&&<p role="status" className="subtle">{message}</p>}
