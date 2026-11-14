@@ -2343,6 +2343,8 @@ function CustomFieldDiscovery(){
   const [showInactive,setShowInactive]=useState(false);
   const [newField,setNewField]=useState({label:'',stage:'session',field_type:'SINGLE_SELECT',help_text:''});
   const [newOption,setNewOption]=useState<Record<string,string>>({});
+  const [renameFieldDraft,setRenameFieldDraft]=useState<Record<string,string>>({});
+  const [renameOptionDraft,setRenameOptionDraft]=useState<Record<string,string>>({});
   const visibleFields=fields.filter(field=>(showInactive||field.active)&&
     [field.label,field.field_id,field.stage,field.field_type].some(value=>value.toLowerCase().includes(filter.toLowerCase().trim())));
   async function refresh(){
@@ -2461,13 +2463,21 @@ function CustomFieldDiscovery(){
         }catch(e){setNotice('Cleanup not performed: '+String(e));}
         finally{setBusy(false);}
       }}>Controlled cleanup</button>
-      <button type="button" disabled={busy} onClick={()=>{
-        const label=window.prompt('New field label',field.label);
-        if(label!==null&&label.trim())void runChange(
-          ()=>localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order),
-          async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.label===label&&current.active===field.active;}
-        );
-      }}>Rename</button>
+      <button type="button" disabled={busy} onClick={()=>setRenameFieldDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.label}))}>Rename</button>
+      {renameFieldDraft[field.field_id]!==undefined&&<div className="rowActions">
+        <label>New field label <input maxLength={240} value={renameFieldDraft[field.field_id]}
+          onChange={e=>setRenameFieldDraft(v=>({...v,[field.field_id]:e.target.value}))}/></label>
+        <button type="button" disabled={busy||!renameFieldDraft[field.field_id].trim()} onClick={()=>{
+          const label=renameFieldDraft[field.field_id].trim();
+          void runChange(
+            ()=>localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order),
+            async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.label===label&&current.active===field.active;},
+            undefined,
+            ()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})
+          );
+        }}>Save name</button>
+        <button type="button" disabled={busy} onClick={()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})}>Cancel</button>
+      </div>}
       {['SINGLE_SELECT','MULTI_SELECT'].includes(field.field_type)&&<>
         <button type="button" disabled={busy} onClick={async()=>{try{const fieldOptions=await localApi.listCustomFieldOptions(field.field_id);setOptions(v=>({...v,[field.field_id]:fieldOptions}));}catch(e){setNotice(String(e));}}}>View options</button>
         <label>New option<input value={newOption[field.field_id]||''} onChange={e=>setNewOption(v=>({...v,[field.field_id]:e.target.value}))}/></label>
@@ -2489,11 +2499,21 @@ function CustomFieldDiscovery(){
             async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.active===wanted&&o.label===option.label);},
             field.field_id
           );}}>{option.active?'Deactivate':'Reactivate'}</button>
-          <button type="button" disabled={busy} onClick={()=>{const label=window.prompt('New option label',option.label);if(label!==null&&label.trim())void runChange(
-            ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order),
-            async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.label===label&&o.active===option.active);},
-            field.field_id
-          );}}>Rename</button>
+          <button type="button" disabled={busy} onClick={()=>setRenameOptionDraft(v=>({...v,[option.option_id]:v[option.option_id]??option.label}))}>Rename</button>
+          {renameOptionDraft[option.option_id]!==undefined&&<span className="rowActions">
+            <label>New option label <input maxLength={240} value={renameOptionDraft[option.option_id]}
+              onChange={e=>setRenameOptionDraft(v=>({...v,[option.option_id]:e.target.value}))}/></label>
+            <button type="button" disabled={busy||!renameOptionDraft[option.option_id].trim()} onClick={()=>{
+              const label=renameOptionDraft[option.option_id].trim();
+              void runChange(
+                ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order),
+                async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.label===label&&o.active===option.active);},
+                field.field_id,
+                ()=>setRenameOptionDraft(v=>{const next={...v};delete next[option.option_id];return next;})
+              );
+            }}>Save option name</button>
+            <button type="button" disabled={busy} onClick={()=>setRenameOptionDraft(v=>{const next={...v};delete next[option.option_id];return next;})}>Cancel</button>
+          </span>}
         </p>)}
       </>}
     </div>)}
