@@ -99,6 +99,19 @@ mod tests {
             assert_eq!(get(&restored)?,saved);
             let label:String=restored.query_row("SELECT label FROM custom_field_definitions WHERE field_id='test-opt'",[],|row|row.get(0))?;
             assert_eq!(label,"Test");
+            drop(restored);
+            // Full production restore machinery, but only on a disposable database.
+            let live=db::open_database(&paths.database())?;
+            save(&live,r#"{"test-opt":{"visible":true,"placement":"QUICK_AND_DETAILED"}}"#)?;
+            drop(live);
+            let result=restore::replace_live_from_backup(&paths,&archive)?;
+            assert_eq!(result.integrity,"ok");
+            let current=db::open_database(&paths.database())?;
+            assert_eq!(get(&current)?,saved);
+            let historical_label:String=current.query_row(
+                "SELECT label FROM custom_field_definitions WHERE field_id='test-opt'",
+                [], |row|row.get(0))?;
+            assert_eq!(historical_label,"Test");
             Ok(())
         })();
         let _=std::fs::remove_dir_all(&root); // disposable only, never app user path
