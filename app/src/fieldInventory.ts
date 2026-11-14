@@ -360,13 +360,15 @@ export type FieldConnectionReport = Readonly<{
 export function fieldConnectionReport():FieldConnectionReport[] {
   return FIELD_CONTROL_INVENTORY.map(item=>{
     const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
-    if(!item.candidateForCustomization || item.protectedReason || def?.systemLocked){
-      return {id:item.id,stage:item.stage,status:'PROTECTED' as const,
-        reason:item.protectedReason??(def?.systemLocked?'Canonical system-locked field':'Not eligible for customization')};
-    }
+    // A requirement-only field may deliberately be protected from visibility edits.
+    // Report its actual Required/Optional connection before the general protection rule.
     if(isEditableRequirementControl(item.id)&&!isActiveVisibilityControl(item.id)){
       return {id:item.id,stage:item.stage,status:'REQUIREMENT_ONLY' as const,
         reason:'Required/Optional connected; visibility and Quick/Detailed placement are deliberately protected'};
+    }
+    if(!item.candidateForCustomization || item.protectedReason || def?.systemLocked){
+      return {id:item.id,stage:item.stage,status:'PROTECTED' as const,
+        reason:item.protectedReason??(def?.systemLocked?'Canonical system-locked field':'Not eligible for customization')};
     }
     if(isActiveVisibilityControl(item.id)){
       if(!def)return {id:item.id,stage:item.stage,status:'VISIBILITY_ONLY' as const,
