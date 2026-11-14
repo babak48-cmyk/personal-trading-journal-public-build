@@ -564,3 +564,35 @@ Checkpoint ID: PTJ-CUSTOM-RECOVERY-SELECTION-TEXT-NATIVE-CONTRACT-2026-11-14
 - **Implemented:** `app/src/customFieldRequired.ts` now checks the same Gregorian format, actual month/day bounds, century leap rules and year 0001..9999 before counting an existing saved DATE as satisfying a USER_REQUIRED field in either Quick or Detailed. No existing value, event, ID, timestamp, schema, or requirement setting is mutated. Appended regressions in `app/src/customFieldRequired.test.ts` for valid leap dates, invalid and non-ASCII dates, owner-specific persisted required guards and preservation of invalid legacy values.
 - **Evidence:** source read-back of both files and branch SHA VERIFIED. GitHub Actions source-only run `43595090585` triggered; frontend/package-check completed SUCCESS, native Windows Rust/SQLite job still pending at checkpoint writing. Do not claim native PASS or installed Windows acceptance for this source commit until verified.
 - **Next:** independently check full GitHub Actions job outcome; continue cohesive all-input coverage and safe Custom Field history/selection validations without repeated DEMO or production-data edits. All prior accepted Windows tests remain valid, and current consolidated installer gate is still deferred.
+
+## PTJ-MASTER-CONTINUITY-12-GROUP-STATUS-2026-11-14
+**Purpose:** User-directed master checkpoint BEFORE continuing development; restore position, 12-group progress, evidence and next cohesive delivery without installer inflation.
+
+**Authority/scope:** Latest user decisions prevail: discard broad UX redesign and closed unmerged PR #12; accepted DEMO 1.9.6-beta.1 baseline `c80ce859994127b7c961d0f3631a4094c4e7eda0`. Work exclusively on public temporary branch `feature/ptj-settings-from-accepted-demo-2026-11-14`; no private repo writes, no merge, no DB migration, no modification to user data. User approved teal transparent icon; do not produce a DEMO for a single cosmetic fix. All approved Master Requirements MR-1.0..MR-1.19 and all 12 in-app Roadmap categories remain governing; Cohesive Delivery Policy v1.0 and Global Continuity v1.2 are binding.
+
+**Verified exact state before this checkpoint:**
+- Development source commit `62e975d7b527e947f4292f9f169cdce4158590b0`, followed by checkpoint-only `39ecd2652e0f65ca32fce9c8bd8d1eeecb3c72f4` (read-back head before this write).
+- Correct earlier installed DEMO generated from `fa349fe1e58505d3e0b77a36173e20f35d7da9c5` in GitHub Actions `43587174367`; user reports successful Windows installation plus 4/4 Field Manager Save/Label tests and Required/Visibility/Quick behavior tests. This is targeted USER-REPORTED WINDOWS PASS, not full package acceptance.
+- Consolidated source-only run `43594401371` fully SUCCESS for frontend, icon and Windows-runner Rust/SQLite. Latest focused native DATE validation source run `43595090585` fully SUCCESS on `62e975d7b527e947f4292f9f169cdce4158590b0`: frontend tests, TS/Vite, transparent approved teal ICO, Rust check and Rust library tests. These are CI-TESTED; current source/icon not installed Windows-tested.
+- User-approved teal icon staged as pinned source and reproducible ICO generator, with transparent 16/24/32/48/64/128/256 resources. Initial invalid Base64 and 16px alpha-bleed CI failures fixed; latest source-only PASS. Actual Windows desktop/taskbar/title-bar acceptance remains PENDING.
+- Latest feature fix: a persisted custom DATE value now satisfies Required only if it is a real Gregorian YYYY-MM-DD date, aligned to native Rust; owner and historical events are not rewritten. Source + regression test committed and independently read back. No installer.
+- Native CI historical `Cargo.lock` requires ephemeral runner resolution before locked tests; source lockfile not rewritten. npm ci emits security warnings requiring separate review before final release; do not auto-upgrade without authorization.
+
+**12 preserved roadmap categories and honest current category status** (approved 2026-11-06 Cohesive Delivery Policy screenshot crosswalk; categories are NOT a percentage):
+1. Initial Plan / Draft Zone guided UX/navigation: earlier broad redesign specifically cancelled, baseline restored; only safe approved working features carry forward; exact category title/status originally unverified. NOT ACCEPTED.
+2. Planning & Zones — PARTIAL.
+3. Full All-Inputs Field Manager — PARTIAL, current closest coherent closure target.
+4. Custom Fields & Options — PARTIAL, coupled with #3.
+5. Decisions & Evidence — PARTIAL.
+6. Execution & Trade Management — PARTIAL.
+7. Psychology & Review — PARTIAL.
+8. Audited Data Correction — NOT IMPLEMENTED; independent design/migration authorization needed.
+9. Analytics & Weekly Learning — PARTIAL.
+10. Setup Playbook — PROPOSED; no implicit implementation authority.
+11. NinjaTrader Import — CONDITIONAL; requires separate value/schema approval.
+12. Stability & Windows Release — PARTIAL.
+**No category can presently be marked fully ACCEPTED from present evidence; this does not mean nothing is implemented.** Preserve 12 categories and original Master Roadmap Gates 0–9.
+
+**What remains before closing even the nearest category #3:** (a) reconcile all actual controls/owners with authoritative MR and stage inventory, including which are protected vs eligible; (b) complete visibility, Required/Conditional, Quick/Detailed, label/help and bounded ordering behavior for every eligible input rather than merely tests of connected subset; (c) verify native persistence and historical non-destructive semantics, including Quick/Detailed focus on missing fields across stages; (d) finish targeted frontend/Rust regression tests, then run ONE later appropriately timed installed isolated Windows acceptance matrix and explicit user signoff. Custom Fields #4 additionally requires typed/selection persistence, deactivation, snapshots, recovery and export/backup/restore compatibility acceptance. Neither #3 nor #4 is ready to call COMPLETE. **No honest duration or % can be inferred** from existing coverage statuses; reassess from a full per-field gap matrix, not commits/tests count.
+
+**Next authorized work:** build a requirements-to-active-input coverage matrix and fix a cohesive group of actual critical gaps (Quick/Detailed and data integrity) with targeted source tests. Keep manual Windows tests minimal and defer installer until a substantial batch is ready; the approved baseline remains protected. Before a major material next event, append to this existing checkpoint, with exact SHA, CI, limitations and independent remote read-back.
