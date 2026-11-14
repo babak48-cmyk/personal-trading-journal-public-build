@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import type {CustomFieldDefinition,CustomTypedValue,CustomSelection} from './services/localApi';
-import {missingRequiredCustomValues,type CustomValueReader} from './customFieldRequired';
+import {missingRequiredCustomValues,isUsableCustomTypedValue,isUsableCustomSelection,type CustomValueReader} from './customFieldRequired';
 
 const def=(id:string,stage:string,type:string,required=true,active=true):CustomFieldDefinition=>({
  field_id:id,label:id,stage,field_type:type,required,active,help_text:'',display_order:0,
@@ -113,4 +113,27 @@ describe('custom field semantic boundary required check',()=>{
  it('propagates unavailable persistence errors rather than confirming without checking',async()=>{
   await expect(missingRequiredCustomValues({...reader,listCustomFieldDefinitions:async()=>{throw Error('database unavailable')}},'zone','z1')).rejects.toThrow('database unavailable');
  });
+});
+
+describe('shared Quick/Detailed persisted custom-field completion policy',()=>{
+  it('does not display a required NUMBER or BOOLEAN as complete from a TEXT event',()=>{
+    const wrong:CustomTypedValue={event_id:'event-1',value_type:'TEXT',text_value:'old',
+      number_value:0,date_value:null,boolean_value:false};
+    expect(isUsableCustomTypedValue('NUMBER',wrong)).toBe(false);
+    expect(isUsableCustomTypedValue('BOOLEAN',wrong)).toBe(false);
+    expect(isUsableCustomTypedValue('TEXT',wrong)).toBe(true);
+    expect(isUsableCustomTypedValue('NUMBER',{...wrong,value_type:'NUMBER'})).toBe(true);
+    expect(isUsableCustomTypedValue('BOOLEAN',{...wrong,value_type:'BOOLEAN'})).toBe(true);
+    expect(isUsableCustomTypedValue('TEXT',{...wrong,event_id:''})).toBe(false);
+  });
+  it('uses the same immutable option snapshot policy in the editor and the stage save guard',()=>{
+    expect(isUsableCustomSelection(null)).toBe(false);
+    expect(isUsableCustomSelection({event_id:'old',options:[{option_id:'id-A',label_at_selection:'Historical value',ordinal:0}]})).toBe(true);
+    expect(isUsableCustomSelection({event_id:'old',options:[{option_id:'id-A',label_at_selection:'',ordinal:0}]})).toBe(false);
+    expect(isUsableCustomSelection({event_id:'',options:[{option_id:'id-A',label_at_selection:'Historical value',ordinal:0}]})).toBe(false);
+    expect(isUsableCustomSelection({event_id:'old',options:[
+      {option_id:'id-A',label_at_selection:'First',ordinal:0},
+      {option_id:'id-A',label_at_selection:'Second',ordinal:1}
+    ]})).toBe(false);
+  });
 });
