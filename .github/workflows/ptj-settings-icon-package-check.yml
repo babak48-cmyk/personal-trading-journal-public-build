@@ -1,0 +1,48 @@
+name: PTJ Settings and exact icon source checks (no installer)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/ptj-settings-from-accepted-demo-2026-11-14
+    paths:
+      - .github/workflows/ptj-settings-icon-package-check.yml
+      - app/src/App.tsx
+      - app/src/fieldInventory.ts
+      - app/scripts/build-approved-icon.py
+      - app/src-tauri/icons/approved-icon-source.webp
+permissions:
+  contents: read
+jobs:
+  package-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Verify exact locked icon and alpha-only background cleanup
+        run: |
+          python3 -m pip install --disable-pip-version-check Pillow==11.3.0
+          python3 scripts/build-approved-icon.py
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          p=Path('src-tauri/icons')
+          ico=Image.open(p/'icon.ico').convert('RGBA')
+          assert ico.getpixel((0,0))[3]==0, 'No transparent icon background'
+          assert ico.getpixel((ico.width//2,ico.height//2))[3]>0, 'Artwork was deleted'
+          png=Image.open(p/'128x128@2x.png').convert('RGBA')
+          assert png.getpixel((0,0))[3]==0, 'Tauri PNG corner is opaque'
+          print('Icon alpha verified: all original RGB retained; Windows ICO and PNG transparent corners.')
+          PY
+      - name: No generated installer / artifact
+        run: echo "CI-only gate: no NSIS installer and no uploaded artifact"
