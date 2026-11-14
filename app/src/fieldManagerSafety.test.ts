@@ -20,7 +20,7 @@ describe('Field Manager integration safety', () => {
     const summary = fieldConnectionSummary();
     expect(report).toHaveLength(FIELD_CONTROL_INVENTORY.length);
     expect(new Set(report.map(x => x.id)).size).toBe(report.length);
-    expect(summary.CONNECTED + summary.VISIBILITY_ONLY + summary.PROTECTED + summary.PENDING).toBe(report.length);
+    expect(summary.CONNECTED + summary.REQUIREMENT_ONLY + summary.VISIBILITY_ONLY + summary.PROTECTED + summary.PENDING).toBe(report.length);
     expect(report.find(x => x.id === 'candidate.trendRelationship')?.status).toBe('PROTECTED');
   });
 
