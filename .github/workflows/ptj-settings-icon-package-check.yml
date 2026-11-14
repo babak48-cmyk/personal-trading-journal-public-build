@@ -23,6 +23,8 @@ on:
       - app/src/customFieldWriteVerification.test.ts
       - app/src/fieldInventory.ts
       - app/src/fieldInventory.test.ts
+      - app/src/fieldManagerSafety.test.ts
+      - app/src/packageAContract.test.ts
       - app/scripts/build-approved-icon.py
       - app/src-tauri/icons/approved-icon-source.webp
 permissions:
