@@ -2349,12 +2349,27 @@ function CustomFieldDiscovery(){
     catch(e){setFields([]);setOptions({});setNotice('Unavailable: '+String(e));}
     finally{setBusy(false);}
   }
-  async function runChange(action:()=>Promise<void>){
+  async function runChange(action:()=>Promise<void>,verify?:()=>Promise<boolean>,refreshOptionsFor?:string){
     if(busy)return;
-    setBusy(true);
-    try{await action();setFields(await localApi.listCustomFieldDefinitions());setOptions({});setNotice('Saved. Existing historical values were not rewritten.');}
-    catch(e){setNotice('Not saved: '+String(e));}
-    finally{setBusy(false);}
+    setBusy(true);setNotice('Saving custom field settings…');
+    let attempted=false;
+    try{
+      attempted=true;
+      await action();
+      const updated=await localApi.listCustomFieldDefinitions();
+      // Never equate successful IPC return with verified custom-field persistence.
+      const verified=verify?await verify():false;
+      setFields(updated);
+      if(refreshOptionsFor){
+        const updatedOptions=await localApi.listCustomFieldOptions(refreshOptionsFor);
+        setOptions(v=>({...v,[refreshOptionsFor]:updatedOptions}));
+      }
+      setNotice(verified
+        ?'Custom field change saved and verified. Previously recorded events remain unchanged.'
+        :'Custom field change returned successfully; refresh the list to verify its current state.');
+    }catch(e){
+      setNotice((attempted?'Change outcome not confirmed; inspect current settings before retrying: ':'Change not performed: ')+String(e));
+    }finally{setBusy(false);}
   }
   async function moveOption(fieldId:string,optionId:string,direction:-1|1){
     if(busy)return;
@@ -2381,11 +2396,15 @@ function CustomFieldDiscovery(){
       <label>Stage<select value={newField.stage} onChange={e=>setNewField(v=>({...v,stage:e.target.value}))}>{CAPTURABLE_CUSTOM_FIELD_STAGES.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
       <label>Type<select value={newField.field_type} onChange={e=>setNewField(v=>({...v,field_type:e.target.value}))}>{['TEXT','NUMBER','DATE','BOOLEAN','SINGLE_SELECT','MULTI_SELECT'].map(x=><option key={x}>{x}</option>)}</select></label>
       <label>Help text<input value={newField.help_text} maxLength={240} onChange={e=>setNewField(v=>({...v,help_text:e.target.value}))}/></label>
-      <button type="button" disabled={busy||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>runChange(async()=>{
-        if(!canCaptureCustomFieldStage(newField.stage))throw Error('Stage has no supported capture editor');
-        await localApi.createCustomFieldDefinition({field_id:newId(),stage:newField.stage,field_type:newField.field_type,label:newField.label,help_text:newField.help_text,required:false,display_order:fields.length});
-        setNewField(v=>({...v,label:'',help_text:''}));
-      })}>Create field</button>
+      <button type="button" disabled={busy||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>{
+        const id=newId(),snapshot={...newField};
+        void runChange(async()=>{
+          if(!canCaptureCustomFieldStage(snapshot.stage))throw Error('Stage has no supported capture editor');
+          await localApi.createCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,required:false,display_order:fields.length});
+        },async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===id);
+          return !!current&&current.active&&current.label===snapshot.label&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
+        });
+      }}>Create field</button>
     </div>
     <label>Search fields<input type="search" value={filter} onChange={e=>setFilter(e.target.value)}/></label>
     <label><input type="checkbox" checked={showInactive} onChange={e=>setShowInactive(e.target.checked)}/> Show inactive</label>
@@ -2396,8 +2415,14 @@ function CustomFieldDiscovery(){
         <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===fields.filter(f=>f.stage===field.stage).length-1} onClick={()=>runChange(()=>localApi.moveCustomField(field.field_id,1))} aria-label={'Move field '+field.label+' later'}>↓ Later</button>
       </span>
       <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}{!canCaptureCustomFieldStage(field.stage)?' · No capture editor for this legacy stage; cannot newly require it':''}</p>
-      <label><input type="checkbox" checked={field.required} disabled={busy||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,e.target.checked,field.active,field.display_order));}}/> Required at this stage</label>
-      <button type="button" disabled={busy||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>runChange(()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,!field.active,field.display_order))}>{field.active?'Deactivate':'Reactivate'}</button>
+      <label><input type="checkbox" checked={field.required} disabled={busy||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}const wanted=e.target.checked;void runChange(
+        ()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,wanted,field.active,field.display_order),
+        async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.required===wanted&&current.active===field.active;}
+      );}}/> Required at this stage</label>
+      <button type="button" disabled={busy||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>{const wanted=!field.active;void runChange(
+        ()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,wanted,field.display_order),
+        async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.active===wanted&&current.required===field.required;}
+      );}}>{field.active?'Deactivate':'Reactivate'}</button>
       <button type="button" disabled={busy} onClick={async()=>{
         if(busy)return;
         setBusy(true);
@@ -2420,18 +2445,36 @@ function CustomFieldDiscovery(){
       }}>Controlled cleanup</button>
       <button type="button" disabled={busy} onClick={()=>{
         const label=window.prompt('New field label',field.label);
-        if(label!==null&&label.trim())void runChange(()=>localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order));
+        if(label!==null&&label.trim())void runChange(
+          ()=>localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order),
+          async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.label===label&&current.active===field.active;}
+        );
       }}>Rename</button>
       {['SINGLE_SELECT','MULTI_SELECT'].includes(field.field_type)&&<>
         <button type="button" disabled={busy} onClick={async()=>{try{const fieldOptions=await localApi.listCustomFieldOptions(field.field_id);setOptions(v=>({...v,[field.field_id]:fieldOptions}));}catch(e){setNotice(String(e));}}}>View options</button>
         <label>New option<input value={newOption[field.field_id]||''} onChange={e=>setNewOption(v=>({...v,[field.field_id]:e.target.value}))}/></label>
-        <button type="button" disabled={busy||!field.active||!(newOption[field.field_id]||'').trim()} onClick={()=>runChange(async()=>{await localApi.createCustomFieldOption({option_id:newId(),field_id:field.field_id,label:newOption[field.field_id],display_order:options[field.field_id]?.length||0});setNewOption(v=>({...v,[field.field_id]:''}));})}>Add option</button>
+        <button type="button" disabled={busy||!field.active||!(newOption[field.field_id]||'').trim()} onClick={()=>{
+          const id=newId(),label=newOption[field.field_id],fieldId=field.field_id;
+          void runChange(
+            ()=>localApi.createCustomFieldOption({option_id:id,field_id:fieldId,label,display_order:options[fieldId]?.length||0}),
+            async()=>{const all=await localApi.listCustomFieldOptions(fieldId);return all.some(o=>o.option_id===id&&o.label===label&&o.active);},
+            fieldId
+          );
+        }}>Add option</button>
         {options[field.field_id]?.map((option,optionIndex)=><p key={option.option_id} className="subtle">
           {option.label} · {option.active?'Active':'Inactive'} · ID: {option.option_id}
           <button type="button" disabled={busy||optionIndex===0} onClick={()=>void moveOption(field.field_id,option.option_id,-1)} aria-label={'Move option '+option.label+' earlier'}>↑ Earlier</button>
           <button type="button" disabled={busy||optionIndex===((options[field.field_id]?.length??0)-1)} onClick={()=>void moveOption(field.field_id,option.option_id,1)} aria-label={'Move option '+option.label+' later'}>↓ Later</button>
-          <button type="button" disabled={busy} onClick={()=>runChange(()=>localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,!option.active,option.display_order))}>{option.active?'Deactivate':'Reactivate'}</button>
-          <button type="button" disabled={busy} onClick={()=>{const label=window.prompt('New option label',option.label);if(label!==null&&label.trim())void runChange(()=>localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order));}}>Rename</button>
+          <button type="button" disabled={busy} onClick={()=>{const wanted=!option.active;void runChange(
+            ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,wanted,option.display_order),
+            async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.active===wanted&&o.label===option.label);},
+            field.field_id
+          );}}>{option.active?'Deactivate':'Reactivate'}</button>
+          <button type="button" disabled={busy} onClick={()=>{const label=window.prompt('New option label',option.label);if(label!==null&&label.trim())void runChange(
+            ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order),
+            async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.label===label&&o.active===option.active);},
+            field.field_id
+          );}}>Rename</button>
         </p>)}
       </>}
     </div>)}
