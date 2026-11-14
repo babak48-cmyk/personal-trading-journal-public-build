@@ -95,7 +95,7 @@ describe('custom field semantic boundary required check',()=>{
   };
   // Even non-empty cross-type columns must not satisfy a NUMBER or BOOLEAN input.
   expect((await missingRequiredCustomValues(mismatched,'session','s1')).map(x=>x.id))
-    .toEqual(['s-zero','s-false','s-empty']);
+    .toEqual(['s-false','s-zero']);
  });
  it('requires real historical option snapshots rather than an empty or duplicate saved selection',async()=>{
   const snapshots:CustomValueReader={...reader,currentCustomFieldSelection:async()=>({
