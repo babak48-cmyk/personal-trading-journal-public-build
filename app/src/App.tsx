@@ -2491,6 +2491,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     if(settingsSaveRef.current)return;
     const def=FIELD_DEFINITION_BY_ID[id];
     if(!def||def.systemLocked)return;
+    setRowSaveFeedback(v=>{const copy={...v};delete copy[id];return copy;});
     const next={...draft,[id]:!draft[id]};
     if(!next[id])delete next[id];
     const ok=await save(next);
@@ -2524,12 +2525,14 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   }
   async function togglePlacement(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
+    setRowSaveFeedback(v=>{const copy={...v};delete copy[id];return copy;});
     const next:Record<string,FieldPlacement>={...placements,[id]:effectivePlacement(id)==='DETAILED_ONLY'?'QUICK_AND_DETAILED':'DETAILED_ONLY'};
     const ok=await persistSetting('Quick/Detailed placement',()=>localApi.saveFieldPlacementPreferences(next),onPlacementChanged,async()=>matchesPersistedPreferences('PLACEMENT',next,await localApi.getFieldPlacementPreferences()));
     setRowSaveFeedback(v=>({...v,[id]:{ok,message:ok?'Quick/Detailed placement saved and verified.':'Quick/Detailed placement not verified; reopen Settings before retrying.'}}));
   }
   async function toggleVisible(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
+    setRowSaveFeedback(v=>{const copy={...v};delete copy[id];return copy;});
     const next={...visibility,[id]:!isFieldShown(id,visibility,draft)};
     const ok=await persistSetting('Field visibility',()=>localApi.saveFieldVisibilityPreferences(next),onVisibilityChanged,async()=>matchesPersistedPreferences('VISIBILITY',next,await localApi.getFieldVisibilityPreferences()));
     setRowSaveFeedback(v=>({...v,[id]:{ok,message:ok?'Visibility saved and verified.':'Visibility save not verified; reopen Settings before retrying.'}}));
