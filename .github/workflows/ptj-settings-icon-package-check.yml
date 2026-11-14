@@ -19,6 +19,10 @@ on:
       - app/src/customFieldLabelSafety.test.ts
       - app/src/customAdminValidation.ts
       - app/src/customAdminValidation.test.ts
+      - app/src/customAdminRecovery.ts
+      - app/src/customAdminRecovery.test.ts
+      - app/src/customSelectionDraftSafety.ts
+      - app/src/customSelectionDraftSafety.test.ts
       - app/src/customFieldWriteVerification.ts
       - app/src/customFieldWriteVerification.test.ts
       - app/src/fieldInventory.ts
