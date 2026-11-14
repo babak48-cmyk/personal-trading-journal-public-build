@@ -9,8 +9,8 @@ describe('Owner-scoped Required custom field navigation safety',()=>{
     const b=customFieldFocusId('trade','trade-B',field);
     const review=customFieldFocusId('post-trade-review','trade-A',field);
     expect(new Set([a,b,review]).size).toBe(3);
-    expect(review).toContain('post-trade-review-trade-A');
-    expect(a).toContain('trade-trade-A');
+    expect(review).toContain('custom-required-post-trade-review-7:trade-A-');
+    expect(a).toContain('custom-required-trade-7:trade-A-');
   });
   it('opens nested owner disclosure without touching unrelated trade panels',()=>{
     const tradeB:DisclosureNode={tagName:'DETAILS',parentElement:null,open:false};
