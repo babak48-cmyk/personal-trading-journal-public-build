@@ -98,7 +98,10 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm run build
-      - name: Check frozen Rust dependency lock
+      - name: Resolve existing Rust lockfile on isolated CI runner only
+        working-directory: app/src-tauri
+        run: cargo check
+      - name: Verify resolved Rust dependency lock on isolated runner
         working-directory: app/src-tauri
         run: cargo check --locked
       - name: Exercise native SQLite and custom-field regression tests
