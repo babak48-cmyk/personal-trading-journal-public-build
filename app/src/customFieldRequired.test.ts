@@ -128,6 +128,10 @@ describe('shared Quick/Detailed persisted custom-field completion policy',()=>{
   });
   it('uses the same immutable option snapshot policy in the editor and the stage save guard',()=>{
     expect(isUsableCustomSelection(null)).toBe(false);
+    const two=[{option_id:'A',label_at_selection:'A',ordinal:0},{option_id:'B',label_at_selection:'B',ordinal:1}];
+    expect(isUsableCustomSelection({event_id:'e',options:two},'MULTI_SELECT')).toBe(true);
+    expect(isUsableCustomSelection({event_id:'e',options:two},'SINGLE_SELECT')).toBe(false);
+
     expect(isUsableCustomSelection({event_id:'old',options:[{option_id:'id-A',label_at_selection:'Historical value',ordinal:0}]})).toBe(true);
     expect(isUsableCustomSelection({event_id:'old',options:[{option_id:'id-A',label_at_selection:'',ordinal:0}]})).toBe(false);
     expect(isUsableCustomSelection({event_id:'',options:[{option_id:'id-A',label_at_selection:'Historical value',ordinal:0}]})).toBe(false);
