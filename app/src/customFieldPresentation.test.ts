@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES } from './customFieldStage';
-import { defaultCustomPresentation, effectiveCustomPresentation,isCustomFieldPresented,nextCustomPresentation } from './customFieldPresentation';
+import { defaultCustomPresentation, effectiveCustomPresentation,isCustomFieldPresented,nextCustomPresentation,compactCustomPresentation } from './customFieldPresentation';
 import type {CustomFieldDefinition} from './services/localApi';
 const def=(stage:string,required=false,active=true):CustomFieldDefinition=>({
  field_id:stage+'-field',stage,field_type:'TEXT',label:'Test',help_text:'',required,active,display_order:0
@@ -26,5 +26,21 @@ describe('One Custom Fields presentation policy for all seven lifecycle stages',
    const prefs=nextCustomPresentation(a,{},'visible');
    expect(isCustomFieldPresented(b,true,prefs)).toBe(true);
    expect(prefs[a.field_id].visible).toBe(false);
+ });
+});
+
+describe('Safe preference cleanup after controlled deletion of a NEVER-used field',()=>{
+ it('retains inactive field preferences and removes only truly absent definitions',()=>{
+   const active=def('zone'),inactive=def('trade',false,false);
+   const prefs={
+     [active.field_id]:{visible:false,placement:'DETAILED_ONLY' as const},
+     [inactive.field_id]:{visible:false,placement:'DETAILED_ONLY' as const},
+     'deleted-unused-field':{visible:true,placement:'QUICK_AND_DETAILED' as const},
+   };
+   expect(compactCustomPresentation(prefs,[active,inactive])).toEqual({
+     [active.field_id]:prefs[active.field_id],
+     [inactive.field_id]:prefs[inactive.field_id],
+   });
+   expect(prefs['deleted-unused-field']).toBeDefined(); // original map is not mutated
  });
 });

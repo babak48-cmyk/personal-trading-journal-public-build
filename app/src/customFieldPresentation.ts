@@ -22,3 +22,13 @@ export function nextCustomPresentation(field:CustomFieldDefinition,prefs:CustomF
     ?{...previous,visible:!previous.visible}
     :{...previous,placement:previous.placement==='QUICK_AND_DETAILED'?'DETAILED_ONLY':'QUICK_AND_DETAILED'}};
 }
+
+/** Remove preferences only for definitions already absent from the active database.
+ * Must receive the complete definition list (including deactivated fields).
+ * Never drops a deactivated/hidden field's preferences or touches its history.
+ */
+export function compactCustomPresentation(prefs:CustomFieldPresentationMap,
+  allDefinitions:readonly CustomFieldDefinition[]):CustomFieldPresentationMap{
+  const ids=new Set(allDefinitions.map(f=>f.field_id));
+  return Object.fromEntries(Object.entries(prefs).filter(([id])=>ids.has(id)));
+}

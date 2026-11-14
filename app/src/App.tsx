@@ -24,7 +24,7 @@ import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
 import { isCompletedReviewForTrade } from './reviewIdentity';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
-import {isCustomFieldPresented,effectiveCustomPresentation,nextCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
+import {isCustomFieldPresented,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
@@ -2382,6 +2382,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
       const currentOptionGroups=Object.keys(options);
       const refreshed=await Promise.all(currentOptionGroups.map(async id=>
         [id,await localApi.listCustomFieldOptions(id)] as const));
+      await onPresentationChanged();
       setFields(definitions);setOptions(Object.fromEntries(refreshed));
       uncertainAdminRef.current=false;setUncertainAdmin(false);
       setNotice('Definitions and displayed options reloaded from saved data. Confirm the expected state before continuing.');
@@ -2441,7 +2442,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
   }
   async function setPresentation(field:import('./services/localApi').CustomFieldDefinition,property:'visible'|'placement'){
     if(customAdminBusyRef.current||uncertainAdminRef.current||field.required||!field.active)return;
-    const next=nextCustomPresentation(field,presentation,property);
+    const next=compactCustomPresentation(nextCustomPresentation(field,presentation,property),fields);
     customAdminBusyRef.current=true;setBusy(true);
     let attempted=false;
     try{
