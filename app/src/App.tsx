@@ -2146,7 +2146,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
         const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
-        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[],valid:isUsableCustomSelection(current)};
+        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[],valid:isUsableCustomSelection(current,f.field_type as 'SINGLE_SELECT'|'MULTI_SELECT')};
       }));
       if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setPersistedValid(Object.fromEntries(pairs.map(p=>[p.id,p.valid])));}
     }).catch(e=>{if(live)setNotice('Custom fields unavailable: '+String(e));});
