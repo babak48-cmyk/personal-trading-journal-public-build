@@ -2398,8 +2398,11 @@ function CustomFieldDiscovery(){
         ?'Custom field change saved and verified. Previously recorded events remain unchanged.'
         :'Save outcome uncertain: further custom-field changes are blocked. Refresh saved definitions/options, then inspect before repeating.');
     }catch(e){
-      if(attempted){uncertainAdminRef.current=true;setUncertainAdmin(true);}
-      setNotice((attempted?'Save outcome uncertain; edits blocked until Refresh and inspection: ':'Change not performed: ')+String(e));
+      const validation=String(e).includes('VALIDATION:');
+      if(attempted&&!validation){uncertainAdminRef.current=true;setUncertainAdmin(true);}
+      setNotice(validation
+        ? String(e).replace(/^Error: VALIDATION:\s*/,'')
+        : (attempted?'Save outcome uncertain; edits blocked until Refresh and inspection: ':'Change not performed: ')+String(e));
     }finally{customAdminBusyRef.current=false;setBusy(false);}
   }
   async function moveOption(fieldId:string,optionId:string,direction:-1|1){
@@ -2443,7 +2446,7 @@ function CustomFieldDiscovery(){
           if(!canCaptureCustomFieldStage(snapshot.stage))throw Error('Stage has no supported capture editor');
           const current=await localApi.listCustomFieldDefinitions();
           if(!isUniqueActiveCustomLabel(snapshot.label,current.filter(f=>f.stage===snapshot.stage).map(f=>({id:f.field_id,label:f.label,active:f.active}))))
-            throw Error('An active custom field with the same label already exists in this stage.');
+            throw Error('VALIDATION: An active custom field with the same label already exists in this stage.');
           await localApi.createCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,required:false,display_order:fields.length});
         },async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===id);
           return !!current&&current.active&&current.label===snapshot.label&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
@@ -2540,7 +2543,7 @@ function CustomFieldDiscovery(){
             async()=>{
               const current=await localApi.listCustomFieldDefinitions();
               if(!isUniqueActiveCustomLabel(label,current.filter(f=>f.stage===field.stage).map(f=>({id:f.field_id,label:f.label,active:f.active})),field.field_id))
-                throw Error('Another active field in this stage already uses this label.');
+                throw Error('VALIDATION: Another active field in this stage already uses this label.');
               await localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order);
             },
             async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.label===label&&current.active===field.active;},
@@ -2559,7 +2562,7 @@ function CustomFieldDiscovery(){
             async()=>{
               const current=await localApi.listCustomFieldOptions(fieldId);
               if(!isUniqueActiveCustomLabel(label,current.map(o=>({id:o.option_id,label:o.label,active:o.active}))))
-                throw Error('An active option with this name already exists for the field.');
+                throw Error('VALIDATION: An active option with this name already exists for the field.');
               await localApi.createCustomFieldOption({option_id:id,field_id:fieldId,label,display_order:current.length});
             },
             async()=>{const all=await localApi.listCustomFieldOptions(fieldId);return all.some(o=>o.option_id===id&&o.label===label&&o.active);},
@@ -2586,7 +2589,7 @@ function CustomFieldDiscovery(){
                 async()=>{
                   const current=await localApi.listCustomFieldOptions(field.field_id);
                   if(!isUniqueActiveCustomLabel(label,current.map(o=>({id:o.option_id,label:o.label,active:o.active})),option.option_id))
-                    throw Error('Another active option already uses this name.');
+                    throw Error('VALIDATION: Another active option already uses this name.');
                   await localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order);
                 },
                 async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.label===label&&o.active===option.active);},
