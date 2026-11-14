@@ -45,4 +45,4 @@ jobs:
           print('Icon alpha verified: all original RGB retained; Windows ICO and PNG transparent corners.')
           PY
       - name: No generated installer / artifact
-        run: echo "CI-only gate: no NSIS installer and no uploaded artifact"
+        run: echo "CI-only gate, no NSIS installer and no uploaded artifact"
