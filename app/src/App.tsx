@@ -2134,6 +2134,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
   const [notice,setNotice]=useState('');
   const [original,setOriginal]=useState<Record<string,string[]>>({});
   const [persistedValid,setPersistedValid]=useState<Record<string,boolean>>({});
+  const [historicalLabels,setHistoricalLabels]=useState<Record<string,string>>({});
   const [busy,setBusy]=useState(false);
   const busyRef=useRef(false);
   const [fieldFeedback,setFieldFeedback]=useState<Record<string,string>>({});
@@ -2141,14 +2142,16 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
   const [uncertainWrites,setUncertainWrites]=useState<string[]>([]);
   useEffect(()=>{
     let live=true;
-    setFields([]);setOptions({});setSelected({});setOriginal({});setPersistedValid({});setNotice('');setFieldFeedback({});setLocalErrors([]);setUncertainWrites([]);
+    setFields([]);setOptions({});setSelected({});setOriginal({});setPersistedValid({});setHistoricalLabels({});setNotice('');setFieldFeedback({});setLocalErrors([]);setUncertainWrites([]);
     localApi.listCustomFieldDefinitions().then(async defs=>{
       const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
         const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
-        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[],valid:isUsableCustomSelection(current,f.field_type as 'SINGLE_SELECT'|'MULTI_SELECT')};
+        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[],
+          valid:isUsableCustomSelection(current,f.field_type as 'SINGLE_SELECT'|'MULTI_SELECT'),
+          historical:current?.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.label_at_selection).join(', ')||''};
       }));
-      if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setPersistedValid(Object.fromEntries(pairs.map(p=>[p.id,p.valid])));}
+      if(live){setFields(eligible);setOptions(Object.fromEntries(pairs.map(p=>[p.id,p.opts])));setSelected(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setOriginal(Object.fromEntries(pairs.map(p=>[p.id,p.value])));setPersistedValid(Object.fromEntries(pairs.map(p=>[p.id,p.valid])));setHistoricalLabels(Object.fromEntries(pairs.map(p=>[p.id,p.historical])));}
     }).catch(e=>{if(live)setNotice('Custom fields unavailable: '+String(e));});
     return ()=>{live=false;};
   },[ownerId,ownerStage]);
@@ -2173,6 +2176,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
         throw new Error('Stored option IDs or event identity did not match the submitted selection.');
       setOriginal(v=>({...v,[fieldId]:[...values]}));
       setPersistedValid(v=>({...v,[fieldId]:true}));
+      setHistoricalLabels(v=>({...v,[fieldId]:current!.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.label_at_selection).join(', ')}));
       onSaved(customFieldFocusId(ownerStage,ownerId,fieldId));
       setLocalErrors(v=>v.filter(x=>x!==fieldId));
       setFieldFeedback(v=>({...v,[fieldId]:'Selection saved and verified.'}));
@@ -2196,6 +2200,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       const valid=(!same||!persistedValid[field.field_id])&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
       return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))||localErrors.includes(field.field_id)?'validationFieldError':'')}>
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
+        {historicalLabels[field.field_id]&&<p className="subtle" data-testid={'custom-selection-historical-'+field.field_id}>Saved historical selection labels: {historicalLabels[field.field_id]}. The current options shown below may have been renamed or deactivated since that event.</p>}
         {field.field_type==='SINGLE_SELECT'
           ? <select aria-label={field.label} value={values[0]||''} onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}>
             <option value="">Select an option</option>
