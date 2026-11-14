@@ -182,6 +182,19 @@ export function orderFieldIdsWithinSection(
     }).map(x=>x.id);
 }
 
+/** Requirement-only controls are editable for Required/Optional in the existing
+ * Review validation contract, but must never gain hide/placement permissions.
+ * Keep this separate from visibility eligibility and historical field ownership.
+ */
+export const REQUIREMENT_ONLY_FIELD_IDS=['psychology.emotionAffected'] as const;
+export function isEditableRequirementControl(id:string):boolean{
+  const item=FIELD_CONTROL_INVENTORY.find(x=>x.id===id);
+  const def=item?.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
+  if(!item||!def||def.systemLocked||def.requirementManaged===false||def.defaultRequirement!=='OPTIONAL')return false;
+  return isActiveVisibilityControl(id)
+    ||REQUIREMENT_ONLY_FIELD_IDS.some(allowed=>allowed===id);
+}
+
 /** Controls with an actual form binding; inventory-only fields cannot be toggled yet. */
 export const ACTIVE_VISIBILITY_FIELD_IDS = [
   'plan.mainScenario',
