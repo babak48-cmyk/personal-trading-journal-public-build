@@ -31,6 +31,7 @@ import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} fr
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, type InventoryStage } from './fieldInventory';
 import { matchesPersistedPreferences, type PreferenceMap } from './fieldPreferenceVerification';
 import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './customFieldWriteVerification';
+import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -2376,13 +2377,18 @@ function CustomFieldDiscovery(){
     if(busy)return;
     setBusy(true);
     try{
+      const original=await localApi.listCustomFieldOptions(fieldId);
+      const before=original.map(o=>o.option_id);
       await localApi.moveCustomFieldOption(fieldId,optionId,direction);
       const [defs,opts]=await Promise.all([
         localApi.listCustomFieldDefinitions(),localApi.listCustomFieldOptions(fieldId),
       ]);
       setFields(defs);setOptions(v=>({...v,[fieldId]:opts}));
-      setNotice('Option order saved. Existing selection events and historic labels are unchanged.');
-    }catch(e){setNotice('Option order not confirmed: '+String(e));}
+      const confirmed=verifiedAdjacentMove(before,opts.map(o=>o.option_id),optionId,direction);
+      setNotice(confirmed
+        ?'Option order saved and independently verified. Historical selection labels are unchanged.'
+        :'Option order could not be verified. Inspect displayed order before repeating.');
+    }catch(e){setNotice('Option order not confirmed; inspect saved order before retrying: '+String(e));}
     finally{setBusy(false);}
   }
   function newId(){return crypto.randomUUID();}
@@ -2412,8 +2418,16 @@ function CustomFieldDiscovery(){
     {visibleFields.map(field=><div className="requirementGroup" key={field.field_id}>
       <b>{field.label}</b> <small>({field.field_type} · {field.stage} · {field.active?'Active':'Inactive'})</small>
       <span className="rowActions">
-        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===0} onClick={()=>runChange(()=>localApi.moveCustomField(field.field_id,-1))} aria-label={'Move field '+field.label+' earlier'}>↑ Earlier</button>
-        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===fields.filter(f=>f.stage===field.stage).length-1} onClick={()=>runChange(()=>localApi.moveCustomField(field.field_id,1))} aria-label={'Move field '+field.label+' later'}>↓ Later</button>
+        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===0} onClick={()=>{
+          const before=fields.filter(f=>f.stage===field.stage).map(f=>f.field_id);
+          void runChange(()=>localApi.moveCustomField(field.field_id,-1),
+            async()=>verifiedAdjacentMove(before,(await localApi.listCustomFieldDefinitions()).filter(f=>f.stage===field.stage).map(f=>f.field_id),field.field_id,-1));
+        }} aria-label={'Move field '+field.label+' earlier'}>↑ Earlier</button>
+        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===fields.filter(f=>f.stage===field.stage).length-1} onClick={()=>{
+          const before=fields.filter(f=>f.stage===field.stage).map(f=>f.field_id);
+          void runChange(()=>localApi.moveCustomField(field.field_id,1),
+            async()=>verifiedAdjacentMove(before,(await localApi.listCustomFieldDefinitions()).filter(f=>f.stage===field.stage).map(f=>f.field_id),field.field_id,1));
+        }} aria-label={'Move field '+field.label+' later'}>↓ Later</button>
       </span>
       <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}{!canCaptureCustomFieldStage(field.stage)?' · No capture editor for this legacy stage; cannot newly require it':''}</p>
       <label><input type="checkbox" checked={field.required} disabled={busy||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}const wanted=e.target.checked;void runChange(
