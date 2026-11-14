@@ -39,6 +39,15 @@ describe('completed review historical custom answers',()=>{
     expect(orderedReadOnlyCustomRows(rows).map(row=>row.display)).toEqual(['Zeta saved','Alpha saved']);
     expect(rows[0].id).toBe('alpha'); // sort never mutates fetched records
   });
+  it('displays completed custom answers in canonical lifecycle order, not alphabetical',()=>{
+    const mk=(stage:string,id:string)=>({id,label:id,display:id,retired:false,stage,displayOrder:0});
+    const input=[mk('post-trade-review','review'),mk('candidate','candidate'),mk('session','session'),
+      mk('trade','trade'),mk('premarket-plan','plan'),mk('zone','zone')];
+    expect(orderedReadOnlyCustomRows(input).map(x=>x.id)).toEqual([
+      'session','plan','candidate','zone','trade','review'
+    ]);
+    expect(input[0].id).toBe('review');
+  });
   it('keeps saved date and descriptive text unchanged and sorts without mutation',()=>{
     expect(readOnlyCustomRow(field('date','DATE'),typed({value_type:'DATE',date_value:'2026-11-09'}),null)?.display).toBe('2026-11-09');
     expect(readOnlyCustomRow(field('reason','TEXT'),typed({text_value:'Review learning'}),null)?.display).toBe('Review learning');
