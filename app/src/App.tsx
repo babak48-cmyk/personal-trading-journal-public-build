@@ -2338,6 +2338,7 @@ function CustomFieldDiscovery(){
   const [options,setOptions]=useState<Record<string,import('./services/localApi').CustomFieldOption[]>>({});
   const [notice,setNotice]=useState('Refresh to load definitions. Changes require an existing schema v9 database.');
   const [busy,setBusy]=useState(false);
+  const customAdminBusyRef=useRef(false);
   const [filter,setFilter]=useState('');
   const [showInactive,setShowInactive]=useState(false);
   const [newField,setNewField]=useState({label:'',stage:'session',field_type:'SINGLE_SELECT',help_text:''});
@@ -2351,7 +2352,8 @@ function CustomFieldDiscovery(){
     finally{setBusy(false);}
   }
   async function runChange(action:()=>Promise<void>,verify?:()=>Promise<boolean>,refreshOptionsFor?:string,onVerified?:()=>void){
-    if(busy)return;
+    if(customAdminBusyRef.current)return;
+    customAdminBusyRef.current=true;
     setBusy(true);setNotice('Saving custom field settings…');
     let attempted=false;
     try{
@@ -2371,10 +2373,11 @@ function CustomFieldDiscovery(){
         :'Change returned, but the requested state was not independently verified. Refresh and inspect before repeating it.');
     }catch(e){
       setNotice((attempted?'Change outcome not confirmed; inspect current settings before retrying: ':'Change not performed: ')+String(e));
-    }finally{setBusy(false);}
+    }finally{customAdminBusyRef.current=false;setBusy(false);}
   }
   async function moveOption(fieldId:string,optionId:string,direction:-1|1){
-    if(busy)return;
+    if(customAdminBusyRef.current)return;
+    customAdminBusyRef.current=true;
     setBusy(true);
     try{
       const original=await localApi.listCustomFieldOptions(fieldId);
@@ -2389,7 +2392,7 @@ function CustomFieldDiscovery(){
         ?'Option order saved and independently verified. Historical selection labels are unchanged.'
         :'Option order could not be verified. Inspect displayed order before repeating.');
     }catch(e){setNotice('Option order not confirmed; inspect saved order before retrying: '+String(e));}
-    finally{setBusy(false);}
+    finally{customAdminBusyRef.current=false;setBusy(false);}
   }
   function newId(){return crypto.randomUUID();}
   return <details className="guidedMore"><summary>Custom Fields & Options — management (beta)</summary>
