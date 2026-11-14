@@ -33,7 +33,7 @@ def main() -> None:
     if not bbox:
         raise SystemExit("FAIL CLOSED: approved artwork is empty")
     art=original.crop(bbox)
-    max_size=244  # six-pixel inset on the largest canvas; nearly fills small icons
+    max_size=236  # ten-pixel safe inset prevents 16px Lanczos alpha bleed at corners
     factor=min(max_size/art.width,max_size/art.height)
     w,h=max(1,round(art.width*factor)),max(1,round(art.height*factor))
     resized=art.resize((w,h),Image.Resampling.LANCZOS)
