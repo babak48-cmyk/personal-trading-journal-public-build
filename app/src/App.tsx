@@ -2339,6 +2339,8 @@ function CustomFieldDiscovery(){
   const [notice,setNotice]=useState('Refresh to load definitions. Changes require an existing schema v9 database.');
   const [busy,setBusy]=useState(false);
   const customAdminBusyRef=useRef(false);
+  const [uncertainAdmin,setUncertainAdmin]=useState(false);
+  const uncertainAdminRef=useRef(false);
   const [filter,setFilter]=useState('');
   const [showInactive,setShowInactive]=useState(false);
   const [newField,setNewField]=useState({label:'',stage:'session',field_type:'SINGLE_SELECT',help_text:''});
@@ -2348,13 +2350,22 @@ function CustomFieldDiscovery(){
   const visibleFields=fields.filter(field=>(showInactive||field.active)&&
     [field.label,field.field_id,field.stage,field.field_type].some(value=>value.toLowerCase().includes(filter.toLowerCase().trim())));
   async function refresh(){
+    if(customAdminBusyRef.current)return;
+    customAdminBusyRef.current=true;
     setBusy(true);
-    try{setFields(await localApi.listCustomFieldDefinitions());setOptions({});setNotice('Definitions loaded.');}
-    catch(e){setFields([]);setOptions({});setNotice('Unavailable: '+String(e));}
-    finally{setBusy(false);}
+    try{
+      const definitions=await localApi.listCustomFieldDefinitions();
+      const currentOptionGroups=Object.keys(options);
+      const refreshed=await Promise.all(currentOptionGroups.map(async id=>
+        [id,await localApi.listCustomFieldOptions(id)] as const));
+      setFields(definitions);setOptions(Object.fromEntries(refreshed));
+      uncertainAdminRef.current=false;setUncertainAdmin(false);
+      setNotice('Definitions and displayed options reloaded from saved data. Confirm the expected state before continuing.');
+    }catch(e){setNotice('Refresh unsuccessful: '+String(e)+' — changes remain blocked until successfully reloaded.');}
+    finally{customAdminBusyRef.current=false;setBusy(false);}
   }
   async function runChange(action:()=>Promise<void>,verify?:()=>Promise<boolean>,refreshOptionsFor?:string,onVerified?:()=>void){
-    if(customAdminBusyRef.current)return;
+    if(customAdminBusyRef.current||uncertainAdminRef.current)return;
     customAdminBusyRef.current=true;
     setBusy(true);setNotice('Saving custom field settings…');
     let attempted=false;
@@ -2370,36 +2381,42 @@ function CustomFieldDiscovery(){
         setOptions(v=>({...v,[refreshOptionsFor]:updatedOptions}));
       }
       if(verified)onVerified?.();
+      else{uncertainAdminRef.current=true;setUncertainAdmin(true);}
       setNotice(verified
         ?'Custom field change saved and verified. Previously recorded events remain unchanged.'
-        :'Change returned, but the requested state was not independently verified. Refresh and inspect before repeating it.');
+        :'Save outcome uncertain: further custom-field changes are blocked. Refresh saved definitions/options, then inspect before repeating.');
     }catch(e){
-      setNotice((attempted?'Change outcome not confirmed; inspect current settings before retrying: ':'Change not performed: ')+String(e));
+      if(attempted){uncertainAdminRef.current=true;setUncertainAdmin(true);}
+      setNotice((attempted?'Save outcome uncertain; edits blocked until Refresh and inspection: ':'Change not performed: ')+String(e));
     }finally{customAdminBusyRef.current=false;setBusy(false);}
   }
   async function moveOption(fieldId:string,optionId:string,direction:-1|1){
-    if(customAdminBusyRef.current)return;
+    if(customAdminBusyRef.current||uncertainAdminRef.current)return;
     customAdminBusyRef.current=true;
     setBusy(true);
     try{
       const original=await localApi.listCustomFieldOptions(fieldId);
       const before=original.map(o=>o.option_id);
+      if(!before.includes(optionId)||before.indexOf(optionId)+direction<0||before.indexOf(optionId)+direction>=before.length)
+        throw new Error('Move is not valid for current saved option order.');
       await localApi.moveCustomFieldOption(fieldId,optionId,direction);
       const [defs,opts]=await Promise.all([
         localApi.listCustomFieldDefinitions(),localApi.listCustomFieldOptions(fieldId),
       ]);
       setFields(defs);setOptions(v=>({...v,[fieldId]:opts}));
       const confirmed=verifiedAdjacentMove(before,opts.map(o=>o.option_id),optionId,direction);
+      if(!confirmed){uncertainAdminRef.current=true;setUncertainAdmin(true);}
       setNotice(confirmed
         ?'Option order saved and independently verified. Historical selection labels are unchanged.'
-        :'Option order could not be verified. Inspect displayed order before repeating.');
-    }catch(e){setNotice('Option order not confirmed; inspect saved order before retrying: '+String(e));}
+        :'Option order could not be verified. Changes are blocked until Refresh and inspection.');
+    }catch(e){uncertainAdminRef.current=true;setUncertainAdmin(true);setNotice('Option order uncertain; changes are blocked until Refresh and inspection: '+String(e));}
     finally{customAdminBusyRef.current=false;setBusy(false);}
   }
   function newId(){return crypto.randomUUID();}
   return <details className="guidedMore"><summary>Custom Fields & Options — management (beta)</summary>
     <p className="subtle">Changes affect field definitions and future selections, not old values. Schema v9 is required. Use a DEMO journal for testing this beta.</p>
-    <button type="button" disabled={busy} onClick={refresh}>Refresh custom fields</button>
+    <button type="button" disabled={busy||uncertainAdmin} onClick={refresh}>Refresh custom fields</button>
+    {uncertainAdmin&&<p role="alert" className="warningBox">A previous custom-field operation was not verified. Create, edit, reorder and cleanup actions are locked until Refresh succeeds. Review the returned saved values before taking another action.</p>}
     <p className="subtle" role="status">{notice}</p>
     <div className="requirementGroup">
       <h3>Create custom field</h3>
@@ -2408,7 +2425,7 @@ function CustomFieldDiscovery(){
       <label>Stage<select value={newField.stage} onChange={e=>setNewField(v=>({...v,stage:e.target.value}))}>{CAPTURABLE_CUSTOM_FIELD_STAGES.map(x=><option key={x} value={x}>{x}</option>)}</select></label>
       <label>Type<select value={newField.field_type} onChange={e=>setNewField(v=>({...v,field_type:e.target.value}))}>{['TEXT','NUMBER','DATE','BOOLEAN','SINGLE_SELECT','MULTI_SELECT'].map(x=><option key={x}>{x}</option>)}</select></label>
       <label>Help text<input value={newField.help_text} maxLength={240} onChange={e=>setNewField(v=>({...v,help_text:e.target.value}))}/></label>
-      <button type="button" disabled={busy||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>{
+      <button type="button" disabled={busy||uncertainAdmin||!newField.label.trim()||!canCaptureCustomFieldStage(newField.stage)} onClick={()=>{
         const id=newId(),snapshot={...newField};
         void runChange(async()=>{
           if(!canCaptureCustomFieldStage(snapshot.stage))throw Error('Stage has no supported capture editor');
@@ -2423,27 +2440,27 @@ function CustomFieldDiscovery(){
     {visibleFields.map(field=><div className="requirementGroup" key={field.field_id}>
       <b>{field.label}</b> <small>({field.field_type} · {field.stage} · {field.active?'Active':'Inactive'})</small>
       <span className="rowActions">
-        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===0} onClick={()=>{
+        <button type="button" disabled={busy||uncertainAdmin||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===0} onClick={()=>{
           const before=fields.filter(f=>f.stage===field.stage).map(f=>f.field_id);
           void runChange(()=>localApi.moveCustomField(field.field_id,-1),
             async()=>verifiedAdjacentMove(before,(await localApi.listCustomFieldDefinitions()).filter(f=>f.stage===field.stage).map(f=>f.field_id),field.field_id,-1));
         }} aria-label={'Move field '+field.label+' earlier'}>↑ Earlier</button>
-        <button type="button" disabled={busy||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===fields.filter(f=>f.stage===field.stage).length-1} onClick={()=>{
+        <button type="button" disabled={busy||uncertainAdmin||fields.filter(f=>f.stage===field.stage).findIndex(f=>f.field_id===field.field_id)===fields.filter(f=>f.stage===field.stage).length-1} onClick={()=>{
           const before=fields.filter(f=>f.stage===field.stage).map(f=>f.field_id);
           void runChange(()=>localApi.moveCustomField(field.field_id,1),
             async()=>verifiedAdjacentMove(before,(await localApi.listCustomFieldDefinitions()).filter(f=>f.stage===field.stage).map(f=>f.field_id),field.field_id,1));
         }} aria-label={'Move field '+field.label+' later'}>↓ Later</button>
       </span>
       <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}{!canCaptureCustomFieldStage(field.stage)?' · No capture editor for this legacy stage; cannot newly require it':''}</p>
-      <label><input type="checkbox" checked={field.required} disabled={busy||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}const wanted=e.target.checked;void runChange(
+      <label><input type="checkbox" checked={field.required} disabled={busy||uncertainAdmin||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}const wanted=e.target.checked;void runChange(
         ()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,wanted,field.active,field.display_order),
         async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.required===wanted&&current.active===field.active;}
       );}}/> Required at this stage</label>
-      <button type="button" disabled={busy||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>{const wanted=!field.active;void runChange(
+      <button type="button" disabled={busy||uncertainAdmin||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>{const wanted=!field.active;void runChange(
         ()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,field.required,wanted,field.display_order),
         async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.active===wanted&&current.required===field.required;}
       );}}>{field.active?'Deactivate':'Reactivate'}</button>
-      <button type="button" disabled={busy} onClick={async()=>{
+      <button type="button" disabled={busy||uncertainAdmin} onClick={async()=>{
         if(busy)return;
         setBusy(true);
         try {
@@ -2463,11 +2480,11 @@ function CustomFieldDiscovery(){
         }catch(e){setNotice('Cleanup not performed: '+String(e));}
         finally{setBusy(false);}
       }}>Controlled cleanup</button>
-      <button type="button" disabled={busy} onClick={()=>setRenameFieldDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.label}))}>Rename</button>
+      <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameFieldDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.label}))}>Rename</button>
       {renameFieldDraft[field.field_id]!==undefined&&<div className="rowActions">
         <label>New field label <input maxLength={240} value={renameFieldDraft[field.field_id]}
           onChange={e=>setRenameFieldDraft(v=>({...v,[field.field_id]:e.target.value}))}/></label>
-        <button type="button" disabled={busy||!renameFieldDraft[field.field_id].trim()} onClick={()=>{
+        <button type="button" disabled={busy||uncertainAdmin||!renameFieldDraft[field.field_id].trim()} onClick={()=>{
           const label=renameFieldDraft[field.field_id].trim();
           void runChange(
             ()=>localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order),
@@ -2476,12 +2493,12 @@ function CustomFieldDiscovery(){
             ()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})
           );
         }}>Save name</button>
-        <button type="button" disabled={busy} onClick={()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})}>Cancel</button>
+        <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})}>Cancel</button>
       </div>}
       {['SINGLE_SELECT','MULTI_SELECT'].includes(field.field_type)&&<>
-        <button type="button" disabled={busy} onClick={async()=>{try{const fieldOptions=await localApi.listCustomFieldOptions(field.field_id);setOptions(v=>({...v,[field.field_id]:fieldOptions}));}catch(e){setNotice(String(e));}}}>View options</button>
+        <button type="button" disabled={busy||uncertainAdmin} onClick={async()=>{try{const fieldOptions=await localApi.listCustomFieldOptions(field.field_id);setOptions(v=>({...v,[field.field_id]:fieldOptions}));}catch(e){setNotice(String(e));}}}>View options</button>
         <label>New option<input value={newOption[field.field_id]||''} onChange={e=>setNewOption(v=>({...v,[field.field_id]:e.target.value}))}/></label>
-        <button type="button" disabled={busy||!field.active||!(newOption[field.field_id]||'').trim()} onClick={()=>{
+        <button type="button" disabled={busy||uncertainAdmin||!field.active||!(newOption[field.field_id]||'').trim()} onClick={()=>{
           const id=newId(),label=newOption[field.field_id],fieldId=field.field_id;
           void runChange(
             ()=>localApi.createCustomFieldOption({option_id:id,field_id:fieldId,label,display_order:options[fieldId]?.length||0}),
@@ -2492,18 +2509,18 @@ function CustomFieldDiscovery(){
         }}>Add option</button>
         {options[field.field_id]?.map((option,optionIndex)=><p key={option.option_id} className="subtle">
           {option.label} · {option.active?'Active':'Inactive'} · ID: {option.option_id}
-          <button type="button" disabled={busy||optionIndex===0} onClick={()=>void moveOption(field.field_id,option.option_id,-1)} aria-label={'Move option '+option.label+' earlier'}>↑ Earlier</button>
-          <button type="button" disabled={busy||optionIndex===((options[field.field_id]?.length??0)-1)} onClick={()=>void moveOption(field.field_id,option.option_id,1)} aria-label={'Move option '+option.label+' later'}>↓ Later</button>
-          <button type="button" disabled={busy} onClick={()=>{const wanted=!option.active;void runChange(
+          <button type="button" disabled={busy||uncertainAdmin||optionIndex===0} onClick={()=>void moveOption(field.field_id,option.option_id,-1)} aria-label={'Move option '+option.label+' earlier'}>↑ Earlier</button>
+          <button type="button" disabled={busy||uncertainAdmin||optionIndex===((options[field.field_id]?.length??0)-1)} onClick={()=>void moveOption(field.field_id,option.option_id,1)} aria-label={'Move option '+option.label+' later'}>↓ Later</button>
+          <button type="button" disabled={busy||uncertainAdmin} onClick={()=>{const wanted=!option.active;void runChange(
             ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,wanted,option.display_order),
             async()=>{const all=await localApi.listCustomFieldOptions(field.field_id);return all.some(o=>o.option_id===option.option_id&&o.active===wanted&&o.label===option.label);},
             field.field_id
           );}}>{option.active?'Deactivate':'Reactivate'}</button>
-          <button type="button" disabled={busy} onClick={()=>setRenameOptionDraft(v=>({...v,[option.option_id]:v[option.option_id]??option.label}))}>Rename</button>
+          <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameOptionDraft(v=>({...v,[option.option_id]:v[option.option_id]??option.label}))}>Rename</button>
           {renameOptionDraft[option.option_id]!==undefined&&<span className="rowActions">
             <label>New option label <input maxLength={240} value={renameOptionDraft[option.option_id]}
               onChange={e=>setRenameOptionDraft(v=>({...v,[option.option_id]:e.target.value}))}/></label>
-            <button type="button" disabled={busy||!renameOptionDraft[option.option_id].trim()} onClick={()=>{
+            <button type="button" disabled={busy||uncertainAdmin||!renameOptionDraft[option.option_id].trim()} onClick={()=>{
               const label=renameOptionDraft[option.option_id].trim();
               void runChange(
                 ()=>localApi.editCustomFieldOption(field.field_id,option.option_id,label,option.active,option.display_order),
@@ -2512,7 +2529,7 @@ function CustomFieldDiscovery(){
                 ()=>setRenameOptionDraft(v=>{const next={...v};delete next[option.option_id];return next;})
               );
             }}>Save option name</button>
-            <button type="button" disabled={busy} onClick={()=>setRenameOptionDraft(v=>{const next={...v};delete next[option.option_id];return next;})}>Cancel</button>
+            <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameOptionDraft(v=>{const next={...v};delete next[option.option_id];return next;})}>Cancel</button>
           </span>}
         </p>)}
       </>}
