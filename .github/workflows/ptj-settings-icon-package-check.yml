@@ -1,4 +1,4 @@
-name: PTJ Settings and exact icon source checks (no installer)
+name: PTJ Field Manager cohesive source checks (no installer)
 on:
   workflow_dispatch:
   push:
@@ -11,6 +11,10 @@ on:
       - app/src/fieldPreferenceVerification.test.ts
       - app/src/customFieldRequired.ts
       - app/src/customFieldRequired.test.ts
+      - app/src/customFieldReadOnly.ts
+      - app/src/customFieldReadOnly.test.ts
+      - app/src/customFieldOrderingCheck.ts
+      - app/src/customFieldOrderingCheck.test.ts
       - app/src/customFieldWriteVerification.ts
       - app/src/customFieldWriteVerification.test.ts
       - app/src/fieldInventory.ts
@@ -35,7 +39,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - name: Verify exact locked icon and alpha-only background cleanup
+      - name: Verify pinned user-selected 3D notebook artwork and generated transparent ICO
         run: |
           python3 -m pip install --disable-pip-version-check Pillow==11.3.0
           python3 scripts/build-approved-icon.py
