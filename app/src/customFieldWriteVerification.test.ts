@@ -26,12 +26,23 @@ describe('Custom Field safe write verification',()=>{
     expect(verifiedCustomTypedEvent({...textReq,number_value:2},storedText)).toBe(false);
   });
   const selection:CustomSelectionInput={event_id:'choice-new',field_id:'custom-b',owner_stage:'trade',owner_id:'trade-a',option_ids:['optA','optB']};
-  const saved:CustomSelection={event_id:'choice-new',options:[{option_id:'optB',label_at_selection:'Earlier B',ordinal:1},{option_id:'optA',label_at_selection:'Earlier A',ordinal:0}]};
-  it('verifies newly saved option IDs and historical label snapshots independent of order',()=>{
+  const saved:CustomSelection={event_id:'choice-new',options:[{option_id:'optA',label_at_selection:'Earlier A',ordinal:0},{option_id:'optB',label_at_selection:'Earlier B',ordinal:1}]};
+  it('verifies newly saved option IDs and historical label snapshots in native ordinal order',()=>{
     expect(verifiedCustomSelectionEvent(selection,saved)).toBe(true);
     expect(verifiedCustomSelectionEvent(selection,{...saved,event_id:'old'})).toBe(false);
     expect(verifiedCustomSelectionEvent(selection,{...saved,options:saved.options.slice(0,1)})).toBe(false);
     expect(verifiedCustomSelectionEvent(selection,{...saved,options:[{...saved.options[0],label_at_selection:''},saved.options[1]]})).toBe(false);
     expect(verifiedCustomSelectionEvent({...selection,option_ids:['optA','optA']},saved)).toBe(false);
+  });
+  it('rejects damaged historical selection ordinals without silently claiming persistence',()=>{
+    expect(verifiedCustomSelectionEvent(selection,{...saved,options:[
+      {...saved.options[0],ordinal:0},{...saved.options[1],ordinal:0}
+    ]})).toBe(false);
+    expect(verifiedCustomSelectionEvent(selection,{...saved,options:[
+      {...saved.options[0],ordinal:1},{...saved.options[1],ordinal:0}
+    ]})).toBe(false);
+    expect(verifiedCustomSelectionEvent(selection,{...saved,options:[
+      {...saved.options[0],ordinal:0},{...saved.options[1],ordinal:2}
+    ]})).toBe(false);
   });
 });

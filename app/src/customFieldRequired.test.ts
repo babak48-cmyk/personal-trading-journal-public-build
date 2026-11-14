@@ -167,4 +167,23 @@ describe('shared Quick/Detailed persisted custom-field completion policy',()=>{
       {option_id:'id-A',label_at_selection:'Second',ordinal:1}
     ]})).toBe(false);
   });
+  it('enforces native-compatible saved text and canonical option snapshot ordinals',()=>{
+    const text:CustomTypedValue={event_id:'saved',value_type:'TEXT',text_value:'Valid context',
+      number_value:null,boolean_value:null,date_value:null};
+    expect(isUsableCustomTypedValue('TEXT',text)).toBe(true);
+    expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'\n'})).toBe(false);
+    expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'x'.repeat(4001)})).toBe(false);
+    expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'é'.repeat(2001)})).toBe(false);
+    const select:CustomSelection={event_id:'event',options:[
+      {option_id:'oldA',label_at_selection:'Historical A',ordinal:0},
+      {option_id:'oldB',label_at_selection:'Historical B',ordinal:1}]};
+    expect(isUsableCustomSelection(select)).toBe(true);
+    expect(isUsableCustomSelection({...select,options:[
+      {...select.options[0],ordinal:0},{...select.options[1],ordinal:2}]})).toBe(false);
+    expect(isUsableCustomSelection({...select,options:[
+      {...select.options[0],ordinal:1},{...select.options[1],ordinal:0}]})).toBe(false);
+    expect(isUsableCustomTypedValue('BOOLEAN',{...text,value_type:'BOOLEAN',boolean_value:'false' as unknown as boolean})).toBe(false);
+    // No historical value, label, ID or selection order is modified.
+    expect(select.options[0].label_at_selection).toBe('Historical A');
+  });
 });

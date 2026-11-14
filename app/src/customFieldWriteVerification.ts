@@ -26,5 +26,6 @@ export function verifiedCustomSelectionEvent(request:CustomSelectionInput,actual
   const actualIds=actual.options.map(o=>o.option_id);
   if(new Set(actualIds).size!==actualIds.length||!expected.every(id=>actualIds.includes(id)))return false;
   // A historical option-label snapshot must be present for later review.
-  return actual.options.every(o=>typeof o.label_at_selection==='string'&&o.label_at_selection.trim().length>0);
+  return actual.options.every((o,index)=>typeof o.label_at_selection==='string'&&o.label_at_selection.trim().length>0
+    && Number.isSafeInteger(o.ordinal)&&o.ordinal===index);
 }

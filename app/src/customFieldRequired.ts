@@ -29,10 +29,10 @@ export function isValidCustomCalendarDate(value:string):boolean{
 
 export function isUsableCustomTypedValue(fieldType:string,value:CustomTypedValue|null):boolean{
   if(!value?.event_id)return false;
-  return fieldType==='TEXT'? value.value_type==='TEXT'&&!!value.text_value?.trim()
+  return fieldType==='TEXT'? value.value_type==='TEXT'&&typeof value.text_value==='string'&&value.text_value.trim().length>0&&new TextEncoder().encode(value.text_value).length<=4000&&![...value.text_value].some(ch=>ch.charCodeAt(0)<32||ch.charCodeAt(0)===127)
     :fieldType==='NUMBER'? value.value_type==='NUMBER'&&value.number_value!==null&&value.number_value!==undefined&&Number.isFinite(value.number_value)
     :fieldType==='DATE'? value.value_type==='DATE'&&typeof value.date_value==='string'&&isValidCustomCalendarDate(value.date_value)
-    :fieldType==='BOOLEAN'? value.value_type==='BOOLEAN'&&value.boolean_value!==null&&value.boolean_value!==undefined : false;
+    :fieldType==='BOOLEAN'? value.value_type==='BOOLEAN'&&typeof value.boolean_value==='boolean' : false;
 }
 
 export function isUsableCustomSelection(value:CustomSelection|null,fieldType:'SINGLE_SELECT'|'MULTI_SELECT'='MULTI_SELECT'):boolean{
@@ -40,7 +40,10 @@ export function isUsableCustomSelection(value:CustomSelection|null,fieldType:'SI
     && value.options.length<=100
     && (fieldType!=='SINGLE_SELECT'||value.options.length===1)
     && value.options.every(o=>!!o.option_id?.trim()&&!!o.label_at_selection?.trim())
-    && new Set(value.options.map(o=>o.option_id)).size===value.options.length;
+    && new Set(value.options.map(o=>o.option_id)).size===value.options.length
+    // Native snapshots assign consecutive zero-based ordinals when appending an
+    // immutable selection event. Reject a damaged read-back, never rewrite it.
+    && value.options.every((o,index)=>Number.isSafeInteger(o.ordinal)&&o.ordinal===index);
 }
 
 /** Check persisted values, not unfinished drafts. A saved false/zero is a valid answer. */
