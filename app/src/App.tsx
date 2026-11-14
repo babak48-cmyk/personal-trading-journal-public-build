@@ -2349,7 +2349,7 @@ function CustomFieldDiscovery(){
     catch(e){setFields([]);setOptions({});setNotice('Unavailable: '+String(e));}
     finally{setBusy(false);}
   }
-  async function runChange(action:()=>Promise<void>,verify?:()=>Promise<boolean>,refreshOptionsFor?:string){
+  async function runChange(action:()=>Promise<void>,verify?:()=>Promise<boolean>,refreshOptionsFor?:string,onVerified?:()=>void){
     if(busy)return;
     setBusy(true);setNotice('Saving custom field settings…');
     let attempted=false;
@@ -2364,9 +2364,10 @@ function CustomFieldDiscovery(){
         const updatedOptions=await localApi.listCustomFieldOptions(refreshOptionsFor);
         setOptions(v=>({...v,[refreshOptionsFor]:updatedOptions}));
       }
+      if(verified)onVerified?.();
       setNotice(verified
         ?'Custom field change saved and verified. Previously recorded events remain unchanged.'
-        :'Custom field change returned successfully; refresh the list to verify its current state.');
+        :'Change returned, but the requested state was not independently verified. Refresh and inspect before repeating it.');
     }catch(e){
       setNotice((attempted?'Change outcome not confirmed; inspect current settings before retrying: ':'Change not performed: ')+String(e));
     }finally{setBusy(false);}
@@ -2403,7 +2404,7 @@ function CustomFieldDiscovery(){
           await localApi.createCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,required:false,display_order:fields.length});
         },async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===id);
           return !!current&&current.active&&current.label===snapshot.label&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
-        });
+        },undefined,()=>setNewField(v=>({...v,label:'',help_text:''})));
       }}>Create field</button>
     </div>
     <label>Search fields<input type="search" value={filter} onChange={e=>setFilter(e.target.value)}/></label>
@@ -2458,7 +2459,8 @@ function CustomFieldDiscovery(){
           void runChange(
             ()=>localApi.createCustomFieldOption({option_id:id,field_id:fieldId,label,display_order:options[fieldId]?.length||0}),
             async()=>{const all=await localApi.listCustomFieldOptions(fieldId);return all.some(o=>o.option_id===id&&o.label===label&&o.active);},
-            fieldId
+            fieldId,
+            ()=>setNewOption(v=>({...v,[fieldId]:''}))
           );
         }}>Add option</button>
         {options[field.field_id]?.map((option,optionIndex)=><p key={option.option_id} className="subtle">
