@@ -29,13 +29,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - name: Temporarily expose the tiny approved source icon for pixel-level diagnosis
-        uses: actions/upload-artifact@v4
-        with:
-          name: PTJ-APPROVED-SOURCE-ICON-DIAGNOSTIC
-          path: app/src-tauri/icons/approved-icon-source.webp
-          retention-days: 1
-          if-no-files-found: error
       - name: Verify exact locked icon and alpha-only background cleanup
         run: |
           python3 -m pip install --disable-pip-version-check Pillow==11.3.0
