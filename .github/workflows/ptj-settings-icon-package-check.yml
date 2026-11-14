@@ -33,6 +33,10 @@ on:
       - app/src/packageAContract.test.ts
       - app/scripts/build-approved-icon.py
       - app/src-tauri/icons/approved-icon-source.webp
+      - app/src-tauri/src/custom_fields.rs
+      - app/src-tauri/src/db.rs
+      - app/src-tauri/src/repository.rs
+      - app/src-tauri/migrations/**
 permissions:
   contents: read
 jobs:
@@ -69,3 +73,34 @@ jobs:
           PY
       - name: No generated installer / artifact
         run: echo "CI-only gate, no NSIS installer and no uploaded artifact"
+
+  rust-sqlite-contract:
+    # The source-only package gate must also exercise the canonical native
+    # custom-field and historical-value contract before the next installer.
+    # Runs against ephemeral GitHub-hosted storage, never a user's journal DB.
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Check frozen Rust dependency lock
+        working-directory: app/src-tauri
+        run: cargo check --locked
+      - name: Exercise native SQLite and custom-field regression tests
+        working-directory: app/src-tauri
+        run: cargo test --locked --lib
