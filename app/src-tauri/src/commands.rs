@@ -165,6 +165,21 @@ pub fn save_field_visibility_preferences(app: AppHandle, json: String) -> Result
     Ok(())
 }
 
+
+#[tauri::command]
+pub fn get_custom_field_presentation(app: AppHandle) -> Result<String, AppError> {
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    crate::custom_presentation::get(&conn)
+}
+
+#[tauri::command]
+pub fn save_custom_field_presentation(app: AppHandle, json: String) -> Result<(), AppError> {
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    crate::custom_presentation::save(&conn, &json)
+}
+
 #[tauri::command]
 pub fn get_field_placement_preferences(app: AppHandle) -> Result<String, AppError> {
     let paths = AppPaths::from_app(&app)?;

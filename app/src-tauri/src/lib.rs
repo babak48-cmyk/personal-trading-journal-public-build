@@ -2,6 +2,7 @@ mod attachments;
 mod backup;
 mod commands;
 mod custom_fields;
+mod custom_presentation;
 mod db;
 mod diagnostics;
 mod error;
@@ -118,6 +119,8 @@ pub fn run() {
             commands::runtime_readiness,
             commands::run_beta_self_test,
             commands::get_field_requirement_overrides,
+            commands::get_custom_field_presentation,
+            commands::save_custom_field_presentation,
             commands::get_field_visibility_preferences,
             commands::save_field_visibility_preferences,
             commands::get_field_placement_preferences,
