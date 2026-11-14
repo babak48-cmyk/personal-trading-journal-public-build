@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {quickValidationRoute} from './quickValidationRoute';
+import {CAPTURABLE_CUSTOM_FIELD_STAGES,customFieldFocusId} from './customFieldStage';
 
 describe('Quick Workflow missing-required navigation',()=>{
   it('routes to the correct existing draft Zone without discarding another Zone',()=>{
@@ -24,6 +25,11 @@ describe('Quick Workflow missing-required navigation',()=>{
   it('does not jump into unrelated pages for unknown or nonconfirmed stages',()=>{
     expect(quickValidationRoute('unknown.data',false,true).notebookPage).toBeNull();
     expect(quickValidationRoute('review.note',true,false).notebookPage).toBeNull();
+  });
+  it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('%s routes encoded owner/field focus without parsing ambiguous identifiers',(stage)=>{
+    const id=customFieldFocusId(stage,'a-b','c-d');
+    const route=quickValidationRoute(id,false,true);
+    expect(route.notebookPage).toBe(stage==='trade'||stage==='post-trade-review'?'EXECUTION':stage==='session-review'?'REVIEW':'PLAN');
   });
   it('routes missing persisted custom field values by canonical owner stage',()=>{
     expect(quickValidationRoute('custom-required-premarket-plan-session1-fieldA',true,false))

@@ -39,6 +39,15 @@ describe('Cohesive Custom Field stage/owner and Required lifecycle matrix',()=>{
       }
     }
   );
+  it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('%s routes distinct punctuation-bearing owner IDs to distinct DOM focus targets',(stage)=>{
+    const first=customFieldFocusId(stage,'session-A-zone','required-note');
+    const second=customFieldFocusId(stage,'session-A','zone-required-note');
+    expect(first).not.toBe(second);
+    expect(first.startsWith('custom-required-'+stage+'-')).toBe(true);
+    const expected=stage==='trade'||stage==='post-trade-review'?'EXECUTION':stage==='session-review'?'REVIEW':'PLAN';
+    expect(quickValidationRoute(first,false,true).notebookPage).toBe(expected);
+    expect(quickValidationRoute(second,false,true).notebookPage).toBe(expected);
+  });
   it('does not rewrite original selected option labels or event IDs when checking Required',async()=>{
     const before=JSON.stringify(savedChoice);
     expect(await missingRequiredCustomValues(readerForOwnerA(),'zone','owner-A')).toEqual([]);

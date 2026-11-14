@@ -41,6 +41,17 @@ describe('canonical owner-stage custom-field capture',()=>{
     expect(eligibleCustomFields(fields,'session-review','typed').map(f=>f.field_id)).toEqual(['session-review-note']);
     expect(eligibleCustomFields(fields,'session-review','select').map(f=>f.field_id)).toEqual(['session-review-select']);
   });
+  it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('%s cannot conflate hyphenated owner and field identifiers',(stage)=>{
+    const first=customFieldFocusId(stage,'a-b','c');
+    const second=customFieldFocusId(stage,'a','b-c');
+    expect(first).not.toBe(second);
+    expect(customFieldFocusId(stage,'a-b','c')).toBe(first);
+    expect(first.startsWith('custom-required-'+stage+'-')).toBe(true);
+  });
+  it('retains identity in DOM focus targets even for empty or unicode boundary components',()=>{
+    expect(customFieldFocusId('zone','é','a-b')).not.toBe(customFieldFocusId('zone','é-a','b'));
+    expect(customFieldFocusId('zone','','a-b')).not.toBe(customFieldFocusId('zone','a','-b'));
+  });
   it('gives separate Zone records separate focus targets even for one field definition',()=>{
     expect(customFieldFocusId('zone','zone-A','field-X')).not.toBe(customFieldFocusId('zone','zone-B','field-X'));
     expect(customFieldFocusId('session','zone-A','field-X')).not.toBe(customFieldFocusId('zone','zone-A','field-X'));

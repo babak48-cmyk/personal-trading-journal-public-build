@@ -22,5 +22,10 @@ export function eligibleCustomFields(
 }
 
 export function customFieldFocusId(stage:CustomFieldOwnerStage,ownerId:string,fieldId:string):string{
-  return 'custom-required-'+stage+'-'+ownerId+'-'+fieldId;
+  // Stable, injective DOM-only focus target. Owner and field IDs may each
+  // contain '-' (or other punctuation): simple concatenation would collide,
+  // e.g. owner='a-b',field='c' versus owner='a',field='b-c'.
+  // Preserve the stage prefix used by Quick's lifecycle router; length-prefix
+  // each component without changing persisted SQLite owner/field IDs.
+  return 'custom-required-'+stage+'-'+ownerId.length+':'+ownerId+'-'+fieldId.length+':'+fieldId;
 }
