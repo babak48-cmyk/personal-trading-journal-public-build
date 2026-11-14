@@ -30,6 +30,11 @@ on:
       - app/src/fieldInventory.ts
       - app/src/fieldInventory.test.ts
       - app/src/fieldManagerSafety.test.ts
+      - app/src/customFieldStage.ts
+      - app/src/customFieldStage.test.ts
+      - app/src/quickValidationRoute.ts
+      - app/src/quickValidationRoute.test.ts
+      - app/tests/**
       - app/src/packageAContract.test.ts
       - app/scripts/build-approved-icon.py
       - app/src-tauri/icons/approved-teal-journal-source.webp.b64
