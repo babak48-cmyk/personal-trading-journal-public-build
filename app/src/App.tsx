@@ -28,7 +28,7 @@ import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTyp
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
-import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, type InventoryStage } from './fieldInventory';
+import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
 import { matchesPersistedPreferences, type PreferenceMap } from './fieldPreferenceVerification';
 import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './customFieldWriteVerification';
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
@@ -2783,13 +2783,13 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
         const definition=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
         const configuredRequired=definition?.defaultRequirement==='SYSTEM_REQUIRED'||(!!item.formalFieldId&&isUserRequired(item.formalFieldId,draft));
-        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='REQUIRED'&&configuredRequired)||(inventoryFilter==='CONDITIONAL'&&(definition?.defaultRequirement==='CONDITIONAL'||item.category==='conditional-journal-field'));
+        const matchesFilter=inventoryFilter==='ALL'||(inventoryFilter==='EDITABLE'&&(status==='CONNECTED'||status==='VISIBILITY_ONLY'||isEditableRequirementControl(item.id)))||(inventoryFilter==='PROTECTED'&&status==='PROTECTED')||(inventoryFilter==='OPEN'&&(status==='PENDING'||status==='VISIBILITY_ONLY'))||(inventoryFilter==='REQUIRED'&&configuredRequired)||(inventoryFilter==='CONDITIONAL'&&(definition?.defaultRequirement==='CONDITIONAL'||item.category==='conditional-journal-field'));
         return matchesFilter&&(stageFilter==='ALL'||item.stage===stageFilter)&&(!fieldSearch.trim()||`${item.label} ${item.id} ${item.stage} ${item.category}`.toLowerCase().includes(fieldSearch.trim().toLowerCase()));
       }).map(item=>{
         const status=coverageReport.find(row=>row.id===item.id)?.status??'PENDING';
         const def=item.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
         const connected=isActiveVisibilityControl(item.id);
-        const optionalRequirement=status==='CONNECTED'&&!!def&&!def.systemLocked&&!item.protectedReason&&def.requirementManaged!==false&&def.defaultRequirement==='OPTIONAL'&&item.candidateForCustomization;
+        const optionalRequirement=isEditableRequirementControl(item.id);
         const required=!!def&&isUserRequired(item.id,draft);
         return <div className="requirementRow" key={item.id}>
           <div><b>{fieldText[item.id]?.label?.trim()||item.label}</b><span>{item.stage} · {item.id}</span><small>{status.replaceAll('_',' ')}{def?.defaultRequirement==='SYSTEM_REQUIRED'?' · System required':def?.defaultRequirement==='CONDITIONAL'?' · Conditional':''}</small></div>
@@ -2798,6 +2798,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle visibility for ${item.label}`} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button>}
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle Quick placement for ${item.label}`} onClick={()=>togglePlacement(item.id)}>{effectivePlacement(item.id)==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button>}
             {connected&&RENDERED_FIELD_TEXT_IDS.some(fieldId=>fieldId===item.id)&&<button type="button" disabled={settingsSaving} onClick={()=>openFieldTextEditor(item.id)} aria-label={`Edit label and help for ${item.label}`}>Edit label/help</button>}
+            {optionalRequirement&&!connected&&<small>Visibility and Quick placement protected</small>}
             {!optionalRequirement&&!connected&&<small>{status==='PROTECTED'?'Protected':'Connection pending'}</small>}
             {rowSaveFeedback[item.id]&&<small role={rowSaveFeedback[item.id].ok?'status':'alert'} aria-live="polite" data-testid={'field-row-save-'+item.id.replaceAll('.','-')}>{rowSaveFeedback[item.id].message}</small>}
           </div>
