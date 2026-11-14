@@ -8,7 +8,6 @@ on:
       - fix/decision-trade-draft-guard-2026-11-13
       - feature/decision-history-execution-readability-2026-11-13
       - feature/evidence-field-manager-cohesive-2026-11-13
-      - feature/ptj-settings-from-accepted-demo-2026-11-14
     paths:
       - .github/workflows/ptj-isolated-demo-installer.yml
       - app/src-tauri/icons/approved-icon-source.webp
