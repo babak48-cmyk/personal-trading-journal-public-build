@@ -350,7 +350,7 @@ export function isFieldPresented(
  * "Protected" is intentional; "pending" means inventoried but not yet wired.
  * This report is descriptive only and never grants permission to hide a field.
  */
-export type FieldConnectionStatus = 'CONNECTED' | 'VISIBILITY_ONLY' | 'PROTECTED' | 'PENDING';
+export type FieldConnectionStatus = 'CONNECTED' | 'REQUIREMENT_ONLY' | 'VISIBILITY_ONLY' | 'PROTECTED' | 'PENDING';
 export type FieldConnectionReport = Readonly<{
   id:string;
   stage:InventoryStage;
@@ -364,6 +364,10 @@ export function fieldConnectionReport():FieldConnectionReport[] {
       return {id:item.id,stage:item.stage,status:'PROTECTED' as const,
         reason:item.protectedReason??(def?.systemLocked?'Canonical system-locked field':'Not eligible for customization')};
     }
+    if(isEditableRequirementControl(item.id)&&!isActiveVisibilityControl(item.id)){
+      return {id:item.id,stage:item.stage,status:'REQUIREMENT_ONLY' as const,
+        reason:'Required/Optional connected; visibility and Quick/Detailed placement are deliberately protected'};
+    }
     if(isActiveVisibilityControl(item.id)){
       if(!def)return {id:item.id,stage:item.stage,status:'VISIBILITY_ONLY' as const,
         reason:'Visibility and placement connected; formal requirement definition missing'};
@@ -375,7 +379,7 @@ export function fieldConnectionReport():FieldConnectionReport[] {
   });
 }
 export function fieldConnectionSummary():Record<FieldConnectionStatus,number> {
-  const result:Record<FieldConnectionStatus,number>={CONNECTED:0,VISIBILITY_ONLY:0,PROTECTED:0,PENDING:0};
+  const result:Record<FieldConnectionStatus,number>={CONNECTED:0,REQUIREMENT_ONLY:0,VISIBILITY_ONLY:0,PROTECTED:0,PENDING:0};
   for(const item of fieldConnectionReport())result[item.status]++;
   return result;
 }
