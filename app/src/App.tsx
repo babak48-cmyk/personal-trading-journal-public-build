@@ -2447,6 +2447,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const settingsSaveRef=useRef(false);
   const [settingsSaving,setSettingsSaving]=useState(false);
   const [resetConfirmationOpen,setResetConfirmationOpen]=useState(false);
+  const [rowSaveFeedback,setRowSaveFeedback]=useState<Record<string,{ok:boolean;message:string}>>({});
   const [resetFeedback,setResetFeedback]=useState<{kind:'success'|'cancel'|'error'|'working';message:string}|null>(null);
   async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>, verify:()=>Promise<boolean>):Promise<boolean>{
     if(settingsSaveRef.current){setMsg('A Field Manager change is already being saved.');return false;}
@@ -2492,7 +2493,8 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     if(!def||def.systemLocked)return;
     const next={...draft,[id]:!draft[id]};
     if(!next[id])delete next[id];
-    await save(next);
+    const ok=await save(next);
+    setRowSaveFeedback(v=>({...v,[id]:{ok,message:ok?'Required/Optional saved and verified.':'Required/Optional save not verified; reopen Settings before retrying.'}}));
   }
   async function reset(){
     if(settingsSaveRef.current)return;
@@ -2523,12 +2525,14 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   async function togglePlacement(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
     const next:Record<string,FieldPlacement>={...placements,[id]:effectivePlacement(id)==='DETAILED_ONLY'?'QUICK_AND_DETAILED':'DETAILED_ONLY'};
-    await persistSetting('Quick/Detailed placement',()=>localApi.saveFieldPlacementPreferences(next),onPlacementChanged,async()=>matchesPersistedPreferences('PLACEMENT',next,await localApi.getFieldPlacementPreferences()));
+    const ok=await persistSetting('Quick/Detailed placement',()=>localApi.saveFieldPlacementPreferences(next),onPlacementChanged,async()=>matchesPersistedPreferences('PLACEMENT',next,await localApi.getFieldPlacementPreferences()));
+    setRowSaveFeedback(v=>({...v,[id]:{ok,message:ok?'Quick/Detailed placement saved and verified.':'Quick/Detailed placement not verified; reopen Settings before retrying.'}}));
   }
   async function toggleVisible(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
     const next={...visibility,[id]:!isFieldShown(id,visibility,draft)};
-    await persistSetting('Field visibility',()=>localApi.saveFieldVisibilityPreferences(next),onVisibilityChanged,async()=>matchesPersistedPreferences('VISIBILITY',next,await localApi.getFieldVisibilityPreferences()));
+    const ok=await persistSetting('Field visibility',()=>localApi.saveFieldVisibilityPreferences(next),onVisibilityChanged,async()=>matchesPersistedPreferences('VISIBILITY',next,await localApi.getFieldVisibilityPreferences()));
+    setRowSaveFeedback(v=>({...v,[id]:{ok,message:ok?'Visibility saved and verified.':'Visibility save not verified; reopen Settings before retrying.'}}));
   }
   async function saveTextSettings(){
     if(settingsSaveRef.current)return;
@@ -2610,6 +2614,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle Quick placement for ${item.label}`} onClick={()=>togglePlacement(item.id)}>{effectivePlacement(item.id)==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button>}
             {connected&&RENDERED_FIELD_TEXT_IDS.some(fieldId=>fieldId===item.id)&&<button type="button" disabled={settingsSaving} onClick={()=>openFieldTextEditor(item.id)} aria-label={`Edit label and help for ${item.label}`}>Edit label/help</button>}
             {!optionalRequirement&&!connected&&<small>{status==='PROTECTED'?'Protected':'Connection pending'}</small>}
+            {rowSaveFeedback[item.id]&&<small role={rowSaveFeedback[item.id].ok?'status':'alert'} aria-live="polite" data-testid={'field-row-save-'+item.id.replaceAll('.','-')}>{rowSaveFeedback[item.id].message}</small>}
           </div>
         </div>;
       })}</div>
