@@ -237,9 +237,10 @@ describe('All-input connection audit and mandatory presentation invariants', () 
     const summary=fieldConnectionSummary();
     expect(report).toHaveLength(FIELD_CONTROL_INVENTORY.length);
     expect(new Set(report.map(x=>x.id)).size).toBe(report.length);
-    expect(summary.CONNECTED+summary.VISIBILITY_ONLY+summary.PROTECTED+summary.PENDING).toBe(report.length);
+    expect(summary.CONNECTED+summary.REQUIREMENT_ONLY+summary.VISIBILITY_ONLY+summary.PROTECTED+summary.PENDING).toBe(report.length);
     expect(report.find(x=>x.id==='candidate.trendRelationship')?.status).toBe('PROTECTED');
     expect(report.find(x=>x.id==='review.decisionQuality')?.status).toBe('CONNECTED');
+    expect(report.find(x=>x.id==='psychology.emotionAffected')?.status).toBe('REQUIREMENT_ONLY');
     expect(report.find(x=>x.id==='evidence.direction')?.status).toBe('CONNECTED');
   });
 
