@@ -2424,6 +2424,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const settingsSaveRef=useRef(false);
   const [settingsSaving,setSettingsSaving]=useState(false);
   const [resetConfirmationOpen,setResetConfirmationOpen]=useState(false);
+  const [resetFeedback,setResetFeedback]=useState<{kind:'success'|'cancel'|'error'|'working';message:string}|null>(null);
   async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>):Promise<boolean>{
     if(settingsSaveRef.current){setMsg('A Field Manager change is already being saved.');return false;}
     settingsSaveRef.current=true;setSettingsSaving(true);setMsg('Saving '+label+'…');
@@ -2457,7 +2458,24 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   async function reset(){
     if(settingsSaveRef.current)return;
     setResetConfirmationOpen(false);
-    if(await save({}))setMsg('Required/Optional settings reset to defaults. Other Field Manager preferences and saved journal data were not changed.');
+    setResetFeedback({kind:'working',message:'Resetting Required/Optional selections…'});
+    const saved=await save({});
+    if(!saved){
+      setResetFeedback({kind:'error',message:'Reset not confirmed. Please check the error above before trying again.'});
+      return;
+    }
+    try{
+      const persisted=await localApi.getFieldRequirementOverrides();
+      const stillRequired=Object.entries(persisted).filter(([,value])=>value===true).map(([id])=>id);
+      if(stillRequired.length){
+        setResetFeedback({kind:'error',message:'Reset could not be verified. These overrides are still required: '+stillRequired.join(', ')});
+        return;
+      }
+      setDraft(persisted);
+      setResetFeedback({kind:'success',message:'Required/Optional settings successfully reset to defaults. Verified against saved settings. Other preferences and journal history were not changed.'});
+    }catch(e){
+      setResetFeedback({kind:'error',message:'The reset was sent, but saved settings could not be verified. Reopen Field Requirements before retrying. '+String(e)});
+    }
   }
   function effectivePlacement(id:string):FieldPlacement {
     // Keep the pre-existing Decision quality Quick default (Detailed-only).
@@ -2561,12 +2579,13 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
         </div>
       </div>)}
     </section>)}</div>
-    <div className="rowActions"><button type="button" disabled={settingsSaving} onClick={()=>{setResetConfirmationOpen(true);setMsg('');}}>Reset to defaults</button></div>
+    <div className="rowActions"><button type="button" disabled={settingsSaving} onClick={()=>{setResetConfirmationOpen(true);setResetFeedback(null);setMsg('');}}>Reset to defaults</button></div>
     {resetConfirmationOpen&&<div role="alertdialog" aria-labelledby="field-reset-title" aria-describedby="field-reset-description" className="requirementGroup">
       <h3 id="field-reset-title">Confirm resetting Required/Optional settings</h3>
       <p id="field-reset-description">This resets your field Required/Optional selections to the journal defaults. It does not reset field visibility, ordering, Quick/Detailed placement, custom labels or previously saved journal entries.</p>
-      <div className="rowActions"><button type="button" disabled={settingsSaving} onClick={()=>{setResetConfirmationOpen(false);setMsg('Reset cancelled. Your settings were not changed.');}}>Cancel</button><button type="button" disabled={settingsSaving} aria-busy={settingsSaving} onClick={()=>void reset()}>Confirm reset</button></div>
+      <div className="rowActions"><button type="button" disabled={settingsSaving} onClick={()=>{setResetConfirmationOpen(false);setResetFeedback({kind:'cancel',message:'Reset cancelled. Your settings were not changed.'});}}>Cancel</button><button type="button" disabled={settingsSaving} aria-busy={settingsSaving} onClick={()=>void reset()}>Confirm reset</button></div>
     </div>}
+    {resetFeedback&&<p role={resetFeedback.kind==='error'?'alert':'status'} aria-live="polite" className={resetFeedback.kind==='error'?'warningBox':'subtle'} data-testid="field-requirement-reset-result">{resetFeedback.message}</p>}
     <p className="guideTip">Conditional requirements are enforced only when their triggering workflow condition is active (such as No-trade/Missed or emotion affecting a trade). They cannot be switched off. These settings affect future saves and edits only. Existing historical records are never invalidated retroactively.</p>
   </div></div>;
 }
