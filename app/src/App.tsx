@@ -35,6 +35,7 @@ import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
 import { CustomAdminValidationError, isPreWriteCustomAdminValidation } from './customAdminValidation';
 import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
+import { validCustomSelectionDraft } from './customSelectionDraftSafety';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -2162,9 +2163,10 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
     if(busyRef.current||uncertainWrites.includes(fieldId))return;
     const values=selected[fieldId]||[];
     const available=options[fieldId]||[];
-    if(values.length===0||values.length>100||!values.every(id=>available.some(o=>o.option_id===id&&o.active))){
+    const field=fields.find(f=>f.field_id===fieldId);
+    if(!field||!validCustomSelectionDraft(field.field_type,values,available)){
       setLocalErrors(v=>v.includes(fieldId)?v:[...v,fieldId]);
-      setFieldFeedback(v=>({...v,[fieldId]:'Select at least one active option before saving.'}));
+      setFieldFeedback(v=>({...v,[fieldId]:'Select a valid set of distinct active options (exactly one for Single Select) before saving.'}));
       return;
     }
     if(persistedValid[fieldId]&&values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
@@ -2175,8 +2177,8 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       writeAttempted=true;
       await localApi.recordCustomFieldSelection(request);
       const current=await localApi.currentCustomFieldSelection(ownerStage,ownerId,fieldId);
-      if(!verifiedCustomSelectionEvent(request,current))
-        throw new Error('Stored option IDs or event identity did not match the submitted selection.');
+      if(!verifiedCustomSelectionEvent(request,current)||!isUsableCustomSelection(current,field.field_type as 'SINGLE_SELECT'|'MULTI_SELECT'))
+        throw new Error('Stored event, option IDs, historical labels or selection cardinality did not match the submitted selection.');
       setOriginal(v=>({...v,[fieldId]:[...values]}));
       setPersistedValid(v=>({...v,[fieldId]:true}));
       setHistoricalLabels(v=>({...v,[fieldId]:current!.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.label_at_selection).join(', ')}));
@@ -2200,7 +2202,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
       const values=selected[field.field_id]||[];
       const available=options[field.field_id]||[];
       const same=values.length===(original[field.field_id]||[]).length&&values.every(v=>(original[field.field_id]||[]).includes(v));
-      const valid=(!same||!persistedValid[field.field_id])&&values.length>0&&values.length<=100&&values.every(id=>available.some(o=>o.option_id===id&&o.active));
+      const valid=(!same||!persistedValid[field.field_id])&&validCustomSelectionDraft(field.field_type,values,available);
       return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))||localErrors.includes(field.field_id)?'validationFieldError':'')}>
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
         {historicalLabels[field.field_id]&&<p className="subtle" data-testid={'custom-selection-historical-'+field.field_id}>Saved historical selection labels: {historicalLabels[field.field_id]}. The current options shown below may have been renamed or deactivated since that event.</p>}
@@ -2214,7 +2216,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,validationErrors,on
               onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.checked?[...values,o.option_id]:values.filter(id=>id!==o.option_id)}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}/>
             {o.label}{o.active?'':' (inactive)'}
           </label>)}</div>}
-        <button type="button" disabled={busy||uncertainWrites.includes(field.field_id)||(same&&values.length>0&&persistedValid[field.field_id])||(!valid&&values.length>0)} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
+        <button type="button" disabled={busy||uncertainWrites.includes(field.field_id)||(same&&values.length>0&&persistedValid[field.field_id])||!valid} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
         {fieldFeedback[field.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[field.field_id]}</small>}
       </div>;
     })}
