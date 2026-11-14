@@ -627,3 +627,35 @@ Checkpoint ID: PTJ-CUSTOM-RECOVERY-SELECTION-TEXT-NATIVE-CONTRACT-2026-11-14
 - **New source:** `87b0b749c8a9e625fe7aae0c1a523abae842874e`: added shared pure `app/src/customTextValidity.ts`, called by both pre-append `app/src/customTypedDraftSafety.ts` and historical Required guard `app/src/customFieldRequired.ts`. Rejects Unicode Cc control characters U+0000..001F and U+007F..009F as native Rust `char::is_control` does; retains UTF-8 4000 byte max and nonblank rule. The two existing tests now include U+0085 / U+009F, Persian text, historical invalid TEXT values. Does not rewrite or trim valid original text, immutable events, option snapshots or historical records.
 - **CI at checkpoint:** workflow `43640518285` on exact source; status in_progress, conclusion UNVERIFIED/IN PROGRESS. Frontend package-check job separately observed SUCCESS. Rust/SQLite source job not yet confirmed at time of this note; do not mark combined CI PASS without independent later read-back.
 - **Open gate:** Groups 3 Full All-Inputs Field Manager and 4 Custom Fields & Options remain PARTIAL, WINDOWS PENDING for source newer than installed user-tested DEMO. Genuine remaining work includes cross-stage complete input/owner/required/conditional audit, safe historical deactivation/edit snapshots and backup/restore compatibility acceptance plus one coherent isolated Windows installer acceptance gate; do not substitute repeated one-field CI runs for package closure. Keep all 12 roadmap categories and all approved MR/addenda.
+
+## PTJ-FIELD-MANAGER-COVERAGE-LEDGER-2026-11-15
+**Material read-only source audit — not an implementation/acceptance claim.**
+- Baseline: accepted 1.9.6-beta.1 SHA `c80ce859994127b7c961d0f3631a4094c4e7eda0`. Working branch `feature/ptj-settings-from-accepted-demo-2026-11-14`, verified source HEAD before this audit `f75f88581f7fa30d167ecf48e00d05578b013040`. User cancelled broad UX rewrite, no installer per micro-fix and no private repo/schema/data changes.
+- GitHub Actions `43640518285` on source `87b0b749c8a9e625fe7aae0c1a523abae842874e` is independently checked SUCCESS (frontend package-check and Windows-runner Rust/SQLite); this does NOT establish installed Windows acceptance.
+- Evidence: direct source read of `app/src/fieldInventory.ts`, `app/src/fieldDefinitions.ts`, `app/src/App.tsx`, `visibleOrderedEvidenceFields.ts`, `visibleOrderedDecisionFields.ts`. There are **89 static inventory controls**; **36 active visibility/placement IDs**, each linked to a formal definition and a rendered label/help preference entry. 50 entries have `candidateForCustomization=false`; another 3 true candidates are explicitly protected (`candidate.trendRelationship`, `psychology.state`, `psychology.stage`). **Do not equate the 53 non-active controls with 53 missing customizations.** Independently defined user-created fields are dynamic and not part of the 89 static controls.
+- Source inventory by lifecycle stage (counts are source inventory classifications, not completed acceptances):
+
+| Actual inventory stage | Controls | Currently visibility/placement managed |
+|---|---:|---:|
+| session-setup | 3 | 0 |
+| premarket-plan | 5 | 4 |
+| zone | 9 | 4 |
+| plan-revision | 4 | 1 |
+| live-evidence | 5 | 3 |
+| decision | 6 | 2 |
+| execution | 10 | 3 |
+| post-trade-review | 14 | 9 |
+| session-review | 9 | 9 |
+| attachment | 2 | 1 |
+| analytics | 9 | 0 |
+| settings | 13 | 0 |
+| **Total** | **89** | **36** |
+
+**Source-derived audit observations, not known defects until verified:** UI renders some Decision/Evidence fields through shared ordered helpers, and Session Review reflection fields through dynamic arrays. Source searches for plain `isFieldPresented('id')` therefore over-report "missing" connections; do not file these as broken. Conversely, visibility/label connection and presence in Settings alone cannot prove end-to-end ordering, validation focus, saved history, or Quick/Detailed parity on installed Windows. Current ordering controls are deliberately scoped to within-container sections; broad cross-stage reparenting violates lifecycle semantics. Check actual runtime for all 36 eligible controls and dynamic custom-field owner stages. Do not invent 36 individual new field fixes.
+
+**Cohesive remaining G3/G4 exit package (NOT COMPLETE):**
+1. Document per eligible input the existing form stage, owner/Quick/Detailed presentation, requirement/default/conditional, ordering scope, label/help and persisted value; distinguish verified frontend, Rust, Windows, unknown.
+2. Complete missing *actual* same-section ordering and missing-field navigation for stage cohorts without redesigning the approved notebook UX or moving stages.
+3. Reconcile protected conditional semantics and custom typed/select management with active/inactive option read-back, original labels/ordinals, write recovery, owner identity and historical data preservation; preserve prior successful CI checks.
+4. ONE later integrated installed isolated Windows DEMO covering quick/detailed configuration, restart, required focus and typed/selection history, with explicit user acceptance. No current accepted DEMO replacement.
+**Status:** Group 3 Full All-Inputs Field Manager PARTIAL, Group 4 Custom Fields & Options PARTIAL; all 12 future categories open per approved statuses. No credible time/% estimate until stage-by-stage acceptance matrix is fully evidenced.
