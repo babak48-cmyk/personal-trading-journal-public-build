@@ -2493,8 +2493,9 @@ function CustomFieldDiscovery(){
           <button type="button" disabled={busy} onClick={()=>{setCleanupPreflight(null);setCleanupConfirmText('');setNotice('Controlled cleanup cancelled; no data was deleted.');}}>Cancel</button>
           <button type="button" disabled={busy||uncertainAdmin||cleanupConfirmText!=='DELETE'} onClick={async()=>{
             if(customAdminBusyRef.current||uncertainAdminRef.current||cleanupConfirmText!=='DELETE')return;
-            customAdminBusyRef.current=true;setBusy(true);
             const snapshot=cleanupPreflight;
+            if(!snapshot)return;
+            customAdminBusyRef.current=true;setBusy(true);
             setCleanupPreflight(null);setCleanupConfirmText('');
             let attempted=false;
             try{
