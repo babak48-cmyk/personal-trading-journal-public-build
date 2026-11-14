@@ -29,6 +29,7 @@ import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, type InventoryStage } from './fieldInventory';
+import { matchesPersistedPreferences, type PreferenceMap } from './fieldPreferenceVerification';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   localApi,
@@ -2425,13 +2426,17 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   const [settingsSaving,setSettingsSaving]=useState(false);
   const [resetConfirmationOpen,setResetConfirmationOpen]=useState(false);
   const [resetFeedback,setResetFeedback]=useState<{kind:'success'|'cancel'|'error'|'working';message:string}|null>(null);
-  async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>):Promise<boolean>{
+  async function persistSetting(label:string, write:()=>Promise<unknown>, refresh:()=>Promise<void>, verify:()=>Promise<boolean>):Promise<boolean>{
     if(settingsSaveRef.current){setMsg('A Field Manager change is already being saved.');return false;}
     settingsSaveRef.current=true;setSettingsSaving(true);setMsg('Saving '+label+'…');
     try {
       await write();
-      setMsg(label+' saved. Existing journal history is unchanged.');
-      try{await refresh();}catch(e){setMsg(label+' saved, but settings display could not refresh: '+String(e));}
+      if(!(await verify())){
+        setMsg(label+' save not confirmed: stored preferences did not match the requested values. Reopen Settings and inspect them before retrying.');
+        return false;
+      }
+      setMsg(label+' saved and independently verified. Existing journal history is unchanged.');
+      try{await refresh();}catch(e){setMsg(label+' verified in storage, but the display could not refresh: '+String(e));}
       return true;
     }catch(e){
       setMsg(label+' save not confirmed. Reload settings and inspect the current value before retrying: '+String(e));
@@ -2443,7 +2448,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   useEffect(()=>setDraft(overrides),[overrides]);
 
   async function save(next:RequirementOverrides):Promise<boolean>{
-    const saved=await persistSetting('Field requirements',()=>localApi.saveFieldRequirementOverrides(next),onChanged);
+    const saved=await persistSetting('Field requirements',()=>localApi.saveFieldRequirementOverrides(next),onChanged,async()=>matchesPersistedPreferences('REQUIREMENTS',next,await localApi.getFieldRequirementOverrides()));
     if(saved)setDraft(next);
     return saved;
   }
@@ -2484,15 +2489,15 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
   async function togglePlacement(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
     const next:Record<string,FieldPlacement>={...placements,[id]:effectivePlacement(id)==='DETAILED_ONLY'?'QUICK_AND_DETAILED':'DETAILED_ONLY'};
-    await persistSetting('Quick/Detailed placement',()=>localApi.saveFieldPlacementPreferences(next),onPlacementChanged);
+    await persistSetting('Quick/Detailed placement',()=>localApi.saveFieldPlacementPreferences(next),onPlacementChanged,async()=>matchesPersistedPreferences('PLACEMENT',next,await localApi.getFieldPlacementPreferences()));
   }
   async function toggleVisible(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
     const next={...visibility,[id]:!isFieldShown(id,visibility,draft)};
-    await persistSetting('Field visibility',()=>localApi.saveFieldVisibilityPreferences(next),onVisibilityChanged);
+    await persistSetting('Field visibility',()=>localApi.saveFieldVisibilityPreferences(next),onVisibilityChanged,async()=>matchesPersistedPreferences('VISIBILITY',next,await localApi.getFieldVisibilityPreferences()));
   }
   async function saveTextSettings(){
-    await persistSetting('Field labels and help',()=>localApi.saveFieldTextPreferences(textDraft),onFieldTextChanged);
+    await persistSetting('Field labels and help',()=>localApi.saveFieldTextPreferences(textDraft),onFieldTextChanged,async()=>matchesPersistedPreferences('TEXT',textDraft as PreferenceMap,await localApi.getFieldTextPreferences()));
   }
   async function moveFieldOrder(id:string,direction:-1|1,section:readonly string[],label:string){
     if(settingsSaveRef.current)return;
@@ -2501,7 +2506,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     if(at<0||target<0||target>=ids.length)return;
     [ids[at],ids[target]]=[ids[target],ids[at]];
     const next={...order,...Object.fromEntries(ids.map((field,index)=>[field,index]))};
-    await persistSetting(label,()=>localApi.saveFieldOrderPreferences(next),onOrderChanged);
+    await persistSetting(label,()=>localApi.saveFieldOrderPreferences(next),onOrderChanged,async()=>matchesPersistedPreferences('ORDER',next,await localApi.getFieldOrderPreferences()));
   }
   async function moveSessionReflection(id:string,direction:-1|1){
     const section=id==='sessionReview.wentWell'||id==='sessionReview.nextImprovement'
