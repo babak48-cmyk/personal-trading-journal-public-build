@@ -32,6 +32,7 @@ on:
       - app/src/fieldManagerSafety.test.ts
       - app/src/customFieldStage.ts
       - app/src/customFieldStage.test.ts
+      - app/src/customOwnerFocus.test.ts
       - app/src/customFieldLifecycleMatrix.test.ts
       - app/src/quickValidationRoute.ts
       - app/src/quickValidationRoute.test.ts
