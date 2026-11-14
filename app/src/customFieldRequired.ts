@@ -20,8 +20,10 @@ export function isUsableCustomTypedValue(fieldType:string,value:CustomTypedValue
     :fieldType==='BOOLEAN'? value.value_type==='BOOLEAN'&&value.boolean_value!==null&&value.boolean_value!==undefined : false;
 }
 
-export function isUsableCustomSelection(value:CustomSelection|null):boolean{
+export function isUsableCustomSelection(value:CustomSelection|null,fieldType:'SINGLE_SELECT'|'MULTI_SELECT'='MULTI_SELECT'):boolean{
   return !!value?.event_id&&!!value.options.length
+    && value.options.length<=100
+    && (fieldType!=='SINGLE_SELECT'||value.options.length===1)
     && value.options.every(o=>!!o.option_id?.trim()&&!!o.label_at_selection?.trim())
     && new Set(value.options.map(o=>o.option_id)).size===value.options.length;
 }
@@ -45,7 +47,7 @@ export async function missingRequiredCustomValues(
     if(!valid)missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   for(const {field,value} of selectedValues){
-    if(!isUsableCustomSelection(value))missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
+    if(!isUsableCustomSelection(value,field.field_type as 'SINGLE_SELECT'|'MULTI_SELECT'))missing.push({id:field.field_id,label:field.label,fieldId:field.field_id});
   }
   return missing;
 }
