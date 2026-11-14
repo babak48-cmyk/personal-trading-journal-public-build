@@ -17,6 +17,8 @@ on:
       - app/src/customFieldOrderingCheck.test.ts
       - app/src/customFieldLabelSafety.ts
       - app/src/customFieldLabelSafety.test.ts
+      - app/src/customAdminValidation.ts
+      - app/src/customAdminValidation.test.ts
       - app/src/customFieldWriteVerification.ts
       - app/src/customFieldWriteVerification.test.ts
       - app/src/fieldInventory.ts
