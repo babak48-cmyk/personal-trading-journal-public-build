@@ -174,6 +174,8 @@ describe('shared Quick/Detailed persisted custom-field completion policy',()=>{
     expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'\n'})).toBe(false);
     expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'x'.repeat(4001)})).toBe(false);
     expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'é'.repeat(2001)})).toBe(false);
+    expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'note\u0085hidden'})).toBe(false);
+    expect(isUsableCustomTypedValue('TEXT',{...text,text_value:'یادداشت معتبر'})).toBe(true);
     const select:CustomSelection={event_id:'event',options:[
       {option_id:'oldA',label_at_selection:'Historical A',ordinal:0},
       {option_id:'oldB',label_at_selection:'Historical B',ordinal:1}]};

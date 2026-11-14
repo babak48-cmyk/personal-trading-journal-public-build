@@ -7,6 +7,9 @@ describe('Custom TEXT draft matches native append contract',()=>{
    expect(isValidCustomTextDraft('Line one\nLine two')).toBe(false);
    expect(isValidCustomTextDraft('x'.repeat(4000))).toBe(true);
    expect(isValidCustomTextDraft('x'.repeat(4001))).toBe(false);
+   expect(isValidCustomTextDraft('note\u0085hidden')).toBe(false);
+   expect(isValidCustomTextDraft('note\u009Fhidden')).toBe(false);
+   expect(isValidCustomTextDraft('Persian یادداشت')).toBe(true);
  });
  it('uses native UTF-8 byte length, not just JavaScript character count',()=>{
    expect(isValidCustomTextDraft('é'.repeat(2000))).toBe(true);

@@ -1,3 +1,4 @@
+import { isValidNativeCustomTextValue } from './customTextValidity';
 import type { CustomFieldDefinition, CustomSelection, CustomTypedValue } from './services/localApi';
 import { eligibleCustomFields, type CustomFieldOwnerStage } from './customFieldStage';
 
@@ -29,7 +30,7 @@ export function isValidCustomCalendarDate(value:string):boolean{
 
 export function isUsableCustomTypedValue(fieldType:string,value:CustomTypedValue|null):boolean{
   if(!value?.event_id)return false;
-  return fieldType==='TEXT'? value.value_type==='TEXT'&&typeof value.text_value==='string'&&value.text_value.trim().length>0&&new TextEncoder().encode(value.text_value).length<=4000&&![...value.text_value].some(ch=>ch.charCodeAt(0)<32||ch.charCodeAt(0)===127)
+  return fieldType==='TEXT'? value.value_type==='TEXT'&&typeof value.text_value==='string'&&isValidNativeCustomTextValue(value.text_value)
     :fieldType==='NUMBER'? value.value_type==='NUMBER'&&value.number_value!==null&&value.number_value!==undefined&&Number.isFinite(value.number_value)
     :fieldType==='DATE'? value.value_type==='DATE'&&typeof value.date_value==='string'&&isValidCustomCalendarDate(value.date_value)
     :fieldType==='BOOLEAN'? value.value_type==='BOOLEAN'&&typeof value.boolean_value==='boolean' : false;
