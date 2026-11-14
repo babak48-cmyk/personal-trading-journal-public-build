@@ -303,3 +303,22 @@ describe('Settings conditional-field audit regression', () => {
     }
   });
 });
+
+describe('Unfinished same-section ordering cohorts for Field Manager',()=>{
+  it('reorders only Plan readiness answers and does not touch Plan bias or scenario identity',()=>{
+    const readiness=['plan.preSessionState','plan.preSessionStateIntensity'] as const;
+    const ordered=orderFieldIdsWithinSection(readiness,{'plan.preSessionStateIntensity':0,'plan.preSessionState':1});
+    expect(ordered).toEqual(['plan.preSessionStateIntensity','plan.preSessionState']);
+    expect(readiness).toEqual(['plan.preSessionState','plan.preSessionStateIntensity']);
+    expect(isFieldPresented('plan.bias',true,{'plan.bias':false},{'plan.bias':'DETAILED_ONLY'},{})).toBe(true);
+    for(const id of readiness)expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+  });
+  it('reorders only same-container detailed Session Review assessments',()=>{
+    const assess=['sessionReview.planQuality','sessionReview.discipline'] as const;
+    expect(orderFieldIdsWithinSection(assess,{})).toEqual([...assess]);
+    expect(orderFieldIdsWithinSection(assess,{'sessionReview.discipline':0,'sessionReview.planQuality':1}))
+      .toEqual(['sessionReview.discipline','sessionReview.planQuality']);
+    for(const id of assess)expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
+    expect(isFieldPresented('sessionReview.overall',true,{'sessionReview.overall':false},{'sessionReview.overall':'DETAILED_ONLY'},{'sessionReview.overall':true})).toBe(true);
+  });
+});
