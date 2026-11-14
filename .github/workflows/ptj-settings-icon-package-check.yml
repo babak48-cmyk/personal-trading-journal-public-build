@@ -23,6 +23,8 @@ on:
       - app/src/customAdminRecovery.test.ts
       - app/src/customSelectionDraftSafety.ts
       - app/src/customSelectionDraftSafety.test.ts
+      - app/src/customTypedDraftSafety.ts
+      - app/src/customTypedDraftSafety.test.ts
       - app/src/customFieldWriteVerification.ts
       - app/src/customFieldWriteVerification.test.ts
       - app/src/fieldInventory.ts
