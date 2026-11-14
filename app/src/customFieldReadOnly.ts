@@ -1,4 +1,5 @@
 import type {CustomFieldDefinition,CustomSelection,CustomTypedValue} from './services/localApi';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES } from './customFieldStage';
 
 export type ReadOnlyCustomRow=Readonly<{
   id:string;
@@ -44,6 +45,14 @@ export function readOnlyCustomRow(
   };
 }
 
+/** Historical answers are grouped by actual capture lifecycle, never by
+ * accidental alphabetical stage names (candidate would otherwise precede session).
+ */
 export function orderedReadOnlyCustomRows(rows:readonly ReadOnlyCustomRow[]):ReadOnlyCustomRow[]{
-  return [...rows].sort((a,b)=>a.stage.localeCompare(b.stage)||a.displayOrder-b.displayOrder||a.id.localeCompare(b.id));
+  const rank=(stage:string)=>{
+    const i=(CAPTURABLE_CUSTOM_FIELD_STAGES as readonly string[]).indexOf(stage);
+    return i<0?Number.MAX_SAFE_INTEGER:i;
+  };
+  return [...rows].sort((a,b)=>rank(a.stage)-rank(b.stage)
+    ||a.stage.localeCompare(b.stage)||a.displayOrder-b.displayOrder||a.id.localeCompare(b.id));
 }
