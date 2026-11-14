@@ -9,6 +9,10 @@ on:
       - app/src/App.tsx
       - app/src/fieldPreferenceVerification.ts
       - app/src/fieldPreferenceVerification.test.ts
+      - app/src/customFieldRequired.ts
+      - app/src/customFieldRequired.test.ts
+      - app/src/customFieldWriteVerification.ts
+      - app/src/customFieldWriteVerification.test.ts
       - app/src/fieldInventory.ts
       - app/scripts/build-approved-icon.py
       - app/src-tauri/icons/approved-icon-source.webp
