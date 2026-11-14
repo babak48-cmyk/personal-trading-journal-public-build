@@ -2257,7 +2257,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
     const raw=values[field.field_id]??'';
     if(persistedValid[field.field_id]&&raw===original[field.field_id]&&raw.trim()){setFieldFeedback(v=>({...v,[field.field_id]:'No change to save.'}));return;}
     const number=field.field_type==='NUMBER'?Number(raw):null;
-    if(!raw.trim()||(field.field_type==='NUMBER'&&!Number.isFinite(number))){
+    if(!raw.trim()||(field.field_type==='TEXT'&&(raw.length>4000||/[\\u0000-\\u001f\\u007f]/u.test(raw)))||(field.field_type==='NUMBER'&&!Number.isFinite(number))){
       setLocalErrors(v=>v.includes(field.field_id)?v:[...v,field.field_id]);
       setFieldFeedback(v=>({...v,[field.field_id]:'Enter a valid value before saving.'}));
       return;
@@ -2299,7 +2299,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,validationErrors,o
       <label>{f.label}{f.required?' · Required':''}
         {f.field_type==='BOOLEAN'
           ?<select value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
-          :<input type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}/>}
+          :<input type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} maxLength={f.field_type==='TEXT'?4000:undefined} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}/>}
       </label>
       {f.help_text&&<p className="subtle">{f.help_text}</p>}
       <button type="button" disabled={busy||uncertainWrites.includes(f.field_id)||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??'')&&persistedValid[f.field_id])} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
