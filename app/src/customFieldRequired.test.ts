@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import type {CustomFieldDefinition,CustomTypedValue,CustomSelection} from './services/localApi';
-import {missingRequiredCustomValues,isUsableCustomTypedValue,isUsableCustomSelection,type CustomValueReader} from './customFieldRequired';
+import {missingRequiredCustomValues,isUsableCustomTypedValue,isUsableCustomSelection,isValidCustomCalendarDate,type CustomValueReader} from './customFieldRequired';
 
 const def=(id:string,stage:string,type:string,required=true,active=true):CustomFieldDefinition=>({
  field_id:id,label:id,stage,field_type:type,required,active,help_text:'',display_order:0,
@@ -112,6 +112,33 @@ describe('custom field semantic boundary required check',()=>{
  });
  it('propagates unavailable persistence errors rather than confirming without checking',async()=>{
   await expect(missingRequiredCustomValues({...reader,listCustomFieldDefinitions:async()=>{throw Error('database unavailable')}},'zone','z1')).rejects.toThrow('database unavailable');
+ });
+});
+
+describe('Native-aligned required custom DATE semantics',()=>{
+ it('accepts real Gregorian calendar dates, including leap-year rules',()=>{
+  for(const date of ['2024-02-29','2000-02-29','2026-11-14','0001-01-01','9999-12-31']){
+   expect(isValidCustomCalendarDate(date)).toBe(true);
+  }
+  for(const date of ['','2026-02-29','1900-02-29','2026-04-31','0000-01-01',
+    '2026-00-12','2026-13-01','2026-01-00','2026-01-32','2026-2-09',
+    '2026-02-09T00:00',' 2026-11-14','2026-11-14 ', '٢٠٢٦-١١-١٤']){
+   expect(isValidCustomCalendarDate(date)).toBe(false);
+  }
+ });
+ it('does not mark malformed historical DATE event as satisfying Required while preserving its record',async()=>{
+  const bad='2026-02-29';
+  const historical:CustomTypedValue={event_id:'historic',value_type:'DATE',date_value:bad,
+    text_value:null,number_value:null,boolean_value:null};
+  expect(isUsableCustomTypedValue('DATE',historical)).toBe(false);
+  const custom:CustomValueReader={...reader,
+   currentCustomFieldTypedValue:async(_stage,_owner,id)=>id==='z-date'?historical:null,
+  };
+  expect((await missingRequiredCustomValues(custom,'zone','zone-A')).map(v=>v.id))
+   .toEqual(['z-date','z-pick']);
+  expect(historical.date_value).toBe(bad);
+  expect(isUsableCustomTypedValue('DATE',{...historical,date_value:'2024-02-29'})).toBe(true);
+  expect(isUsableCustomTypedValue('DATE',{...historical,value_type:'TEXT'})).toBe(false);
  });
 });
 
