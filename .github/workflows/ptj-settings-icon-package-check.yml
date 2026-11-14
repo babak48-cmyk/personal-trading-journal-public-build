@@ -32,6 +32,7 @@ on:
       - app/src/fieldManagerSafety.test.ts
       - app/src/packageAContract.test.ts
       - app/scripts/build-approved-icon.py
+      - app/src-tauri/icons/approved-teal-journal-source.webp.b64
       - app/src-tauri/icons/approved-icon-source.webp
       - app/src-tauri/src/custom_fields.rs
       - app/src-tauri/src/db.rs
@@ -56,7 +57,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - name: Verify pinned user-selected 3D notebook artwork and generated transparent ICO
+      - name: Verify latest user-approved teal notebook artwork and generated transparent ICO
         run: |
           python3 -m pip install --disable-pip-version-check Pillow==11.3.0
           python3 scripts/build-approved-icon.py
@@ -69,7 +70,7 @@ jobs:
           assert ico.getpixel((ico.width//2,ico.height//2))[3]>0, 'Artwork was deleted'
           png=Image.open(p/'128x128@2x.png').convert('RGBA')
           assert png.getpixel((0,0))[3]==0, 'Tauri PNG corner is opaque'
-          print('Icon alpha verified: all original RGB retained; Windows ICO and PNG transparent corners.')
+          print('Approved teal icon: alpha verified for Windows ICO and PNG transparent corners.')
           PY
       - name: No generated installer / artifact
         run: echo "CI-only gate, no NSIS installer and no uploaded artifact"
