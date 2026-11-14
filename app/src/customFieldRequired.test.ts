@@ -97,6 +97,19 @@ describe('custom field semantic boundary required check',()=>{
   expect((await missingRequiredCustomValues(mismatched,'session','s1')).map(x=>x.id))
     .toEqual(['s-zero','s-false','s-empty']);
  });
+ it('requires real historical option snapshots rather than an empty or duplicate saved selection',async()=>{
+  const snapshots:CustomValueReader={...reader,currentCustomFieldSelection:async()=>({
+    event_id:'saved',options:[{option_id:'A',label_at_selection:'  ',ordinal:0}],
+  })};
+  expect((await missingRequiredCustomValues(snapshots,'zone','z1')).map(x=>x.id)).toEqual(['z-date','z-pick']);
+  const duplicates:CustomValueReader={...snapshots,currentCustomFieldSelection:async()=>({
+    event_id:'saved',options:[
+      {option_id:'A',label_at_selection:'Original',ordinal:0},
+      {option_id:'A',label_at_selection:'Duplicate',ordinal:1}
+    ]
+  })};
+  expect((await missingRequiredCustomValues(duplicates,'zone','z1')).map(x=>x.id)).toEqual(['z-date','z-pick']);
+ });
  it('propagates unavailable persistence errors rather than confirming without checking',async()=>{
   await expect(missingRequiredCustomValues({...reader,listCustomFieldDefinitions:async()=>{throw Error('database unavailable')}},'zone','z1')).rejects.toThrow('database unavailable');
  });
