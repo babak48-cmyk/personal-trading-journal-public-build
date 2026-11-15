@@ -7,6 +7,7 @@ mod db;
 mod diagnostics;
 mod error;
 mod exports;
+mod fill_corrections;
 mod paths;
 mod repository;
 mod restore;
