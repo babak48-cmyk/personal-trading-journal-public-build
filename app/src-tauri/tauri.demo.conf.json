@@ -5,7 +5,7 @@
   "app": {
     "windows": [
       {
-        "title": "Personal Trading Journal — ISOLATED DEMO — Field Manager & Custom Fields",
+        "title": "Personal Trading Journal — ISOLATED DEMO — Execution & Review",
         "width": 1180,
         "height": 780,
         "minWidth": 920,
