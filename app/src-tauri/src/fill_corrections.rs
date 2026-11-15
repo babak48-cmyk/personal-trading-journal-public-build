@@ -92,6 +92,14 @@ fn effective_scalar(conn:&Connection,execution_id:&str,field:FillField,original:
     }
     Ok((value,revision,last))
 }
+/// Single authoritative scalar resolver for all consumers of execution data.
+/// Original values stay in execution_fills; any chain inconsistency fails closed.
+pub(crate) fn effective_fill_number(
+ conn:&Connection,execution_id:&str,field:FillField,original:Option<f64>
+)->Result<Option<f64>,AppError>{
+    Ok(effective_scalar(conn,execution_id,field,original)?.0)
+}
+
 fn read_effective_fills(conn:&Connection,trade_id:&str)->Result<Vec<CorrectedFill>,AppError>{
     let mut stmt=conn.prepare(
       "SELECT execution_id,action,price,quantity,commission,fees FROM execution_fills
@@ -167,6 +175,9 @@ pub fn record_fill_correction(
     set_field(row,request.field,request.replacement)?;
     let (open,_entries)=validate_trade_ledger(&effective,tick)?;
     let status:String=tx.query_row("SELECT status FROM trades WHERE trade_id=?1",[&trade_id],|r|r.get(0))?;
+    if status!="CLOSED" {
+        return Err(AppError::Validation("historical correction of still-open trades is not enabled".into()));
+    }
     // Do not silently mutate stored trade state. In particular, a historical
     // closed position cannot acquire unmatched contracts via a correction.
     if (status=="CLOSED"&&open>1e-9) ||
