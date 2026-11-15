@@ -1407,6 +1407,94 @@ pub fn list_session_trades(conn:&Connection,session_id:&str)->Result<Vec<TradeMe
     ids.into_iter().map(|id|trade_metrics(conn,&id)).collect()
 }
 
+/// Read-only backlog across all sessions; reviews are never synthesized and
+/// completed records never re-enter the queue. No schema change or stored edits.
+#[derive(Debug, Serialize)]
+pub struct CrossSessionPendingReviewDto {
+    pub trade_id: String,
+    pub direction: String,
+    pub review_status: String,
+    pub session: SessionSummary,
+}
+
+pub fn list_cross_session_pending_reviews(
+    conn: &Connection, limit: i64,
+) -> Result<Vec<CrossSessionPendingReviewDto>, AppError> {
+    if !(1..=250).contains(&limit) {
+        return Err(AppError::Validation("Review queue limit must be 1..250".into()));
+    }
+    let mut stmt=conn.prepare(
+        "SELECT t.trade_id,t.direction,COALESCE(r.status,'NONE'),
+                s.session_id,s.session_date,
+                COALESCE(s.instrument_symbol_snapshot,i.symbol),
+                COALESCE(s.instrument_display_name_snapshot,i.display_name),
+                COALESCE(s.instrument_tick_size_snapshot,i.tick_size),
+                COALESCE(s.instrument_point_value_snapshot,i.point_value),
+                COALESCE(s.instrument_currency_snapshot,i.currency),
+                s.environment,s.status,s.opened_at
+         FROM trades t
+         JOIN sessions s ON s.session_id=t.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         LEFT JOIN trade_reviews r ON r.trade_id=t.trade_id
+         WHERE t.status='CLOSED' AND (r.status IS NULL OR r.status='DRAFT')
+         ORDER BY s.session_date DESC, s.opened_at DESC, t.rowid DESC LIMIT ?1"
+    )?;
+    let records=stmt.query_map([limit], |r| {
+        Ok(CrossSessionPendingReviewDto{
+            trade_id:r.get(0)?,direction:r.get(1)?,review_status:r.get(2)?,
+            session:SessionSummary{
+                session_id:r.get(3)?,session_date:r.get(4)?,
+                instrument_symbol:r.get(5)?,instrument_display_name:r.get(6)?,
+                instrument_tick_size:r.get(7)?,instrument_point_value:r.get(8)?,
+                instrument_currency:r.get(9)?,environment:r.get(10)?,
+                status:r.get(11)?,opened_at:r.get(12)?
+            },
+        })
+    })?.collect::<Result<Vec<_>,_>>()?;
+    Ok(records)
+}
+
+#[cfg(test)]
+mod cross_session_review_queue_tests {
+    use super::*;
+    #[test]
+    fn backlog_is_read_only_and_separates_sessions_and_review_statuses() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+          CREATE TABLE instruments(instrument_id TEXT PRIMARY KEY,symbol TEXT,display_name TEXT,
+            tick_size REAL,point_value REAL,currency TEXT);
+          CREATE TABLE sessions(session_id TEXT PRIMARY KEY,instrument_id TEXT,session_date TEXT,
+            environment TEXT,status TEXT,opened_at TEXT,
+            instrument_symbol_snapshot TEXT,instrument_display_name_snapshot TEXT,
+            instrument_tick_size_snapshot REAL,instrument_point_value_snapshot REAL,
+            instrument_currency_snapshot TEXT);
+          CREATE TABLE trades(trade_id TEXT PRIMARY KEY,session_id TEXT,direction TEXT,status TEXT);
+          CREATE TABLE trade_reviews(trade_id TEXT UNIQUE,status TEXT);
+          INSERT INTO instruments VALUES('i','ES','E-mini S&P 500',0.25,50,'USD');
+          INSERT INTO sessions(session_id,instrument_id,session_date,environment,status,opened_at)
+            VALUES('a','i','2026-11-12','DEMO','ACTIVE','2026-11-12T09:00:00'),
+                  ('b','i','2026-11-13','DEMO','CLOSED','2026-11-13T09:00:00');
+          INSERT INTO trades VALUES('a-pending','a','LONG','CLOSED'),
+                                   ('b-draft','b','SHORT','CLOSED'),
+                                   ('b-completed','b','LONG','CLOSED'),
+                                   ('b-open','b','LONG','OPEN');
+          INSERT INTO trade_reviews VALUES('b-draft','DRAFT'),('b-completed','COMPLETED');
+        ").unwrap();
+        let result=list_cross_session_pending_reviews(&db,250).unwrap();
+        assert_eq!(result.iter().map(|x| x.trade_id.as_str()).collect::<Vec<_>>(),
+                   vec!["b-draft","a-pending"]);
+        assert_eq!(result[0].review_status,"DRAFT");
+        assert_eq!(result[1].review_status,"NONE");
+        assert_eq!(result[0].session.session_id,"b");
+        assert_eq!(result[1].session.session_id,"a");
+        assert_eq!(result[0].session.instrument_symbol,"ES");
+        assert_eq!(list_cross_session_pending_reviews(&db,1).unwrap().len(),1);
+        assert!(list_cross_session_pending_reviews(&db,0).is_err());
+        let remaining:i64=db.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
+        assert_eq!(remaining,4);
+    }
+}
+
 // =============================
 // Phase 4 v0.8 — Lightweight Post-Trade Review Core
 // =============================

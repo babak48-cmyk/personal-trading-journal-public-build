@@ -656,6 +656,13 @@ pub fn get_trade_detail(app: AppHandle, trade_id: String) -> Result<TradeDetailD
 }
 
 #[tauri::command]
+pub fn list_cross_session_pending_reviews(app: AppHandle) -> Result<Vec<repository::CrossSessionPendingReviewDto>, AppError> {
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    repository::list_cross_session_pending_reviews(&conn,250)
+}
+
+#[tauri::command]
 pub fn list_session_trades(app: AppHandle, session_id: String) -> Result<Vec<TradeMetricsDto>, AppError> {
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;

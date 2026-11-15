@@ -174,6 +174,7 @@ pub fn run() {
             commands::get_trade_for_decision,
             commands::list_unexecuted_trade_decisions,
             commands::list_session_trades,
+            commands::list_cross_session_pending_reviews,
             commands::list_mistake_types,
             commands::save_trade_review,
             commands::get_trade_review,

@@ -60,6 +60,7 @@ export type AddTradeFillInput = {
   commission?:number|null; fees?:number|null; note?:string|null;
 };
 export type MoveStopInput = { trade_id:string; stop_price:number; reason?:string|null; was_rule_compliant?:boolean|null };
+export type CrossSessionPendingReview = {trade_id:string;direction:string;review_status:'NONE'|'DRAFT';session:SessionSummary};
 export type TradeMetrics = {
   trade_id:string; session_id:string; candidate_id?:string|null; direction:string; status:string; average_entry?:number|null;
   total_entry_quantity:number; total_exit_quantity:number; open_quantity:number; latest_stop_price?:number|null; initial_risk_dollars?:number|null;
@@ -185,6 +186,7 @@ export const localApi = {
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
   getTradeForDecision: (sessionId:string,decisionId:string) => invoke<TradeDetail|null>('get_trade_for_decision',{sessionId,decisionId}),
   listSessionTrades: (sessionId:string) => invoke<TradeMetrics[]>('list_session_trades',{sessionId}),
+  listCrossSessionPendingReviews: () => invoke<CrossSessionPendingReview[]>('list_cross_session_pending_reviews'),
   listMistakeTypes: () => invoke<MistakeType[]>('list_mistake_types'),
   saveTradeReview: (input:SaveTradeReviewInput) => invoke<TradeReview>('save_trade_review',{input}),
   getTradeReview: (tradeId:string) => invoke<TradeReview|null>('get_trade_review',{tradeId}),
