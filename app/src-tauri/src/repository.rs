@@ -1239,20 +1239,29 @@ fn execution_ledger(events: &[(String,f64,f64,f64,f64)],direction:&str,point_val
 fn trade_execution_ledger(conn:&Connection,trade_id:&str,direction:&str,point_value:f64)
     -> Result<ExecutionLedger,AppError>
 {
-    // Keep NULL distinct from confirmed zero. Old/manual/imported execution rows
-    // with unknown charges must not appear as cost-accurate net P&L or R.
-    let mut stmt=conn.prepare("SELECT action,price,quantity,commission,fees FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
+    use crate::fill_corrections::{effective_fill_number,FillField};
+    // Resolve the complete audited, append-only effective value chain before
+    // calculating Gross / Net / R. A missing charge remains UNKNOWN, not zero.
+    let mut stmt=conn.prepare(
+        "SELECT execution_id,action,price,quantity,commission,fees
+         FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
     let rows=stmt.query_map([trade_id],|r|Ok((
-        r.get::<_,String>(0)?,r.get::<_,f64>(1)?,r.get::<_,f64>(2)?,
-        r.get::<_,Option<f64>>(3)?,r.get::<_,Option<f64>>(4)?
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,f64>(2)?,
+        r.get::<_,f64>(3)?,r.get::<_,Option<f64>>(4)?,r.get::<_,Option<f64>>(5)?
     )))?;
     let persisted=rows.collect::<Result<Vec<_>,_>>()?;
-    let unknown_cost_fields=persisted.iter()
-        .map(|(_,_,_,commission,fees)|usize::from(commission.is_none())+usize::from(fees.is_none()))
-        .sum();
-    let events=persisted.into_iter().map(|(action,price,quantity,commission,fees)|
-        (action,price,quantity,commission.unwrap_or(0.0),fees.unwrap_or(0.0))
-    ).collect::<Vec<_>>();
+    let mut unknown_cost_fields=0;
+    let mut events=Vec::with_capacity(persisted.len());
+    for (id,action,original_price,original_qty,original_commission,original_fees) in persisted {
+        let price=effective_fill_number(conn,&id,FillField::Price,Some(original_price))?
+            .ok_or_else(||AppError::Validation("corrected price unexpectedly missing".into()))?;
+        let qty=effective_fill_number(conn,&id,FillField::Quantity,Some(original_qty))?
+            .ok_or_else(||AppError::Validation("corrected quantity unexpectedly missing".into()))?;
+        let commission=effective_fill_number(conn,&id,FillField::Commission,original_commission)?;
+        let fees=effective_fill_number(conn,&id,FillField::Fees,original_fees)?;
+        unknown_cost_fields+=usize::from(commission.is_none())+usize::from(fees.is_none());
+        events.push((action,price,qty,commission.unwrap_or(0.0),fees.unwrap_or(0.0)));
+    }
     let mut ledger=execution_ledger(&events,direction,point_value)?;
     ledger.unknown_cost_fields=unknown_cost_fields;
     Ok(ledger)
@@ -1378,7 +1387,19 @@ pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,A
     let metrics=trade_metrics(conn,trade_id)?;
     let mut stmt=conn.prepare("SELECT execution_id,occurred_at,action,side,price,quantity,order_type,commission,fees,note FROM execution_fills WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
     let rows=stmt.query_map([trade_id],|r|Ok(ExecutionFillDto{execution_id:r.get(0)?,occurred_at:r.get(1)?,action:r.get(2)?,side:r.get(3)?,price:r.get(4)?,quantity:r.get(5)?,order_type:r.get(6)?,commission:r.get(7)?,fees:r.get(8)?,note:r.get(9)?}))?;
-    let fills=rows.collect::<Result<Vec<_>,_>>()?;
+    // Return current effective values while preserving immutable recorded
+    // originals in SQLite and independent correction events for audit.
+    let mut fills=rows.collect::<Result<Vec<_>,_>>()?;
+    for fill in &mut fills {
+        use crate::fill_corrections::{effective_fill_number,FillField};
+        let id=&fill.execution_id;
+        fill.price=effective_fill_number(conn,id,FillField::Price,Some(fill.price))?
+            .ok_or_else(||AppError::Validation("corrected price unexpectedly missing".into()))?;
+        fill.quantity=effective_fill_number(conn,id,FillField::Quantity,Some(fill.quantity))?
+            .ok_or_else(||AppError::Validation("corrected quantity unexpectedly missing".into()))?;
+        fill.commission=effective_fill_number(conn,id,FillField::Commission,fill.commission)?;
+        fill.fees=effective_fill_number(conn,id,FillField::Fees,fill.fees)?;
+    }
     let risk_snapshots=trade_risk_history(conn,trade_id)?;
     Ok(TradeDetailDto{metrics,fills,risk_snapshots})
 }
