@@ -44,6 +44,14 @@ on:
       - app/src-tauri/src/custom_fields.rs
       - app/src-tauri/src/db.rs
       - app/src-tauri/src/repository.rs
+      - app/src-tauri/src/package_b_lifecycle_tests.rs
+      - app/src/reviewBacklogTarget.ts
+      - app/src/reviewBacklogTarget.test.ts
+      - app/src/crossSessionReviewQueue.ts
+      - app/src/crossSessionReviewQueue.test.ts
+      - app/src/reviewPending.ts
+      - app/src/tradeSessionPulse.ts
+      - app/src/tradeSessionPulse.test.ts
       - app/src-tauri/migrations/**
 permissions:
   contents: read
