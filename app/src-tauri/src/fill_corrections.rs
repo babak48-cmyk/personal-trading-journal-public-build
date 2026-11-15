@@ -361,11 +361,27 @@ mod tests{
         let make=|expected,replacement|FillCorrectionRequest{
             execution_id:"e2".into(),field:FillField::Price,expected_effective:expected,
             replacement,reason:"Transcription error from manual NinjaTrader record".into()};
+        let predicted=preview_fill_correction(&db,&make(Some(5004.0),Some(5005.0))).unwrap();
+        assert_eq!(predicted.original,Some(5004.0));
+        assert_eq!(predicted.before.gross_realized_pnl,Some(600.0));
+        assert_eq!(predicted.after.gross_realized_pnl,Some(650.0));
+        assert_eq!(predicted.after.net_realized_pnl,Some(642.5));
+        assert_eq!(predicted.after.realized_r,None);
+        assert!(predicted.explicit_confirmation_required);
+        let audit_before:i64=db.query_row("SELECT COUNT(*) FROM fill_correction_events",[],|r|r.get(0)).unwrap();
+        assert_eq!(audit_before,0,"Preview must never write audit events");
         let first=record_fill_correction(&mut db,make(Some(5004.0),Some(5005.0))).unwrap();
         assert_eq!(first.revision,1);
         assert!(record_fill_correction(&mut db,make(Some(5004.0),Some(5006.0))).is_err());
         let second=record_fill_correction(&mut db,make(Some(5005.0),Some(5004.25))).unwrap();
         assert_eq!(second.revision,2);
+        let history=list_fill_correction_history(&db,"e2").unwrap();
+        assert_eq!(history.len(),2);
+        assert_eq!(history[0].previous,Some(5004.0));
+        assert_eq!(history[1].previous,Some(5005.0));
+        assert_eq!(history[1].expected_prior_correction_id,Some(first.correction_id.clone()));
+        assert!(list_fill_correction_history(&db,"not-owned").is_err());
+        assert!(preview_fill_correction(&db,&make(Some(5004.0),Some(5006.0))).is_err());
         assert_eq!(effective_scalar(&db,"e2",FillField::Price,Some(5004.0)).unwrap().0,Some(5004.25));
         let original:f64=db.query_row("SELECT price FROM execution_fills WHERE execution_id='e2'",[],|r|r.get(0)).unwrap();
         assert_eq!(original,5004.0);
