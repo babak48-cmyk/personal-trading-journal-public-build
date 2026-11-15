@@ -15,6 +15,7 @@ describe('cross-session Review Pending presentation (server eligibility is autho
    expect(filterCrossSessionPendingReviews(rows,'es').map(x=>x.trade_id)).toEqual(['older-trade']);
    expect(filterCrossSessionPendingReviews(rows,'11-15').map(x=>x.trade_id)).toEqual(['newer-trade']);
    expect(filterCrossSessionPendingReviews(rows,'newer-trade').map(x=>x.session.session_id)).toEqual(['s2']);
+   expect(filterCrossSessionPendingReviews(rows,'demo').map(x=>x.trade_id)).toEqual(['older-trade','newer-trade']);
    expect(rows[0].trade_id).toBe('older-trade');
  });
  it('bounds visible rows and never manufactures a missing review record',()=>{

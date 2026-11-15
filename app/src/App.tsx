@@ -1770,7 +1770,7 @@ export function App(){
             {crossSessionReviewQueue.length===0&&<p className="subtle" role="status">No closed trades awaiting Review in the journal.</p>}
             {filterCrossSessionPendingReviews(crossSessionReviewQueue,crossSessionReviewSearch,12).map(item=>
               <button type="button" key={item.trade_id} className="sessionLink" onClick={()=>void loadActive(item.session)}>
-                {item.session.session_date} · {item.session.instrument_symbol} · {item.direction}
+                {item.session.session_date} · {item.session.instrument_symbol} · {item.session.environment} · {item.direction}
                 <small>{item.review_status==='DRAFT'?'Resume draft Review':'Review not started'} · {item.trade_id.slice(-6)} · Open session</small>
               </button>)}
             {crossSessionReviewQueue.length===250&&<p className="subtle">Showing at most 250 recent pending trades. Older records remain in their sessions.</p>}
