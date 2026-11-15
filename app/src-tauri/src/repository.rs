@@ -1178,22 +1178,22 @@ fn instrument_spec_for_session(conn: &Connection, session_id: &str) -> Result<(f
 
 
 #[derive(Debug, Clone, Default)]
-struct ExecutionLedger {
-    entry_qty: f64,
-    exit_qty: f64,
-    open_qty: f64,
-    open_average_entry: Option<f64>,
-    last_average_entry: Option<f64>,
-    gross_realized: Option<f64>,
-    costs: f64,
-    unknown_cost_fields: usize,
-    fill_count: i64,
+pub(crate) struct ExecutionLedger {
+    pub(crate) entry_qty: f64,
+    pub(crate) exit_qty: f64,
+    pub(crate) open_qty: f64,
+    pub(crate) open_average_entry: Option<f64>,
+    pub(crate) last_average_entry: Option<f64>,
+    pub(crate) gross_realized: Option<f64>,
+    pub(crate) costs: f64,
+    pub(crate) unknown_cost_fields: usize,
+    pub(crate) fill_count: i64,
 }
 
 /// Chronological moving-average cost basis. Exit prices are evaluated using the
 /// cost basis that existed at the time of that exit; future entries must not
 /// retrospectively change realized P&L. Does not modify stored execution events.
-fn execution_ledger(events: &[(String,f64,f64,f64,f64)],direction:&str,point_value:f64)
+pub(crate) fn execution_ledger(events: &[(String,f64,f64,f64,f64)],direction:&str,point_value:f64)
     -> Result<ExecutionLedger,AppError>
 {
     if !matches!(direction,"LONG"|"SHORT") || !point_value.is_finite() || point_value<=0.0 {
