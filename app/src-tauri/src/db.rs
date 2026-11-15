@@ -2,7 +2,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension};
 use crate::error::AppError;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 9;
+pub const CURRENT_SCHEMA_VERSION: u32 = 10;
 const MIGRATION_001: &str = include_str!("../migrations/001_initial.sql");
 const MIGRATION_002: &str = include_str!("../migrations/002_decision_workflow.sql");
 const MIGRATION_003: &str = include_str!("../migrations/003_execution_core.sql");
@@ -12,6 +12,7 @@ const MIGRATION_006: &str = include_str!("../migrations/006_attachments_indexes.
 const MIGRATION_007: &str = include_str!("../migrations/007_level_source_manager.sql");
 const MIGRATION_008: &str = include_str!("../migrations/008_instrument_manager.sql");
 const MIGRATION_009: &str = include_str!("../migrations/009_custom_field_foundation.sql");
+const MIGRATION_010: &str = include_str!("../migrations/010_audited_fill_corrections.sql");
 
 pub fn open_database(path: &Path) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
@@ -88,6 +89,13 @@ pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
         tx.execute("UPDATE schema_meta SET schema_version=9 WHERE id=1", [])?;
         tx.commit()?;
     }
+    let version: u32 = conn.query_row("SELECT schema_version FROM schema_meta WHERE id=1", [], |r| r.get(0))?;
+    if version < 10 {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(MIGRATION_010).map_err(|_| AppError::Migration(10))?;
+        tx.execute("UPDATE schema_meta SET schema_version=10 WHERE id=1", [])?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -139,7 +147,7 @@ mod custom_field_schema_tests {
         let before_sessions:i64 = conn.query_row("SELECT count(*) FROM sessions",[],|r|r.get(0)).unwrap();
         let before_trades:i64 = conn.query_row("SELECT count(*) FROM trades",[],|r|r.get(0)).unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),9);
+        assert_eq!(schema_version(&conn).unwrap(),10);
         assert_eq!(conn.query_row("SELECT session_date FROM sessions WHERE session_id='s-test'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-10-15");
         assert_eq!(conn.query_row("SELECT direction FROM trades WHERE trade_id='t-test'",[],|r|r.get::<_,String>(0)).unwrap(),"LONG");
         assert_eq!(conn.query_row("SELECT price,commission FROM execution_fills WHERE execution_id='fill-test'",[],|r|Ok((r.get::<_,f64>(0)?,r.get::<_,f64>(1)?))).unwrap(),before_fill);
@@ -148,7 +156,7 @@ mod custom_field_schema_tests {
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),9);
+        assert_eq!(schema_version(&conn).unwrap(),10);
     }
     #[test]
     fn custom_field_schema_v9_transaction_failure_rolls_back_on_disposable_v8() {
@@ -172,7 +180,7 @@ mod custom_field_schema_tests {
     fn custom_field_schema_v9_preserves_immutable_option_snapshots() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         conn.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label) VALUES('context','session-review','SINGLE_SELECT','Context')",[]).unwrap();
         conn.execute("INSERT INTO custom_field_options(option_id,field_id,label) VALUES('trend','context','Trending')",[]).unwrap();
         conn.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type) VALUES('e1','context','session-review','demo-session','SINGLE_SELECT')",[]).unwrap();
