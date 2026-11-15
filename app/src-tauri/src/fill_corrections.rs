@@ -449,6 +449,32 @@ mod tests{
         assert_eq!(analytics.eligible_r_count,0);
         assert_eq!(analytics.net_r,None);
         assert!(analytics.small_sample);
+        // Export the effective numeric results AND immutable original/new audit
+        // records; a trading report must not hide how a value was corrected.
+        let root=std::env::temp_dir().join(format!("ptj-package-c-export-{}",Uuid::new_v4()));
+        let paths=crate::paths::AppPaths{
+            data:root.join("data"),attachments:root.join("attachments"),
+            backups:root.join("backups"),exports:root.join("exports"),
+            logs:root.join("logs"),root:root.clone(),
+        };
+        let mk_filter=||crate::repository::JournalFilterInput{
+            date_from:None,date_to:None,instrument_symbol:None,direction:None,
+            decision_quality:None,rule_status:None,level_source_type_id:None,
+            evidence_type_id:None,evidence_timing:None,
+        };
+        let csv=crate::exports::export_csv(&db,&paths,mk_filter()).unwrap();
+        let csv_text=std::fs::read_to_string(&csv.path).unwrap();
+        assert!(csv_text.contains("net_pnl_effective"));
+        assert!(csv_text.contains("605"));
+        assert!(csv_text.contains("Transcription error from manual NinjaTrader record"));
+        assert!(csv_text.contains(&first.correction_id));
+        let html=crate::exports::export_html(&db,&paths,mk_filter()).unwrap();
+        let html_text=std::fs::read_to_string(&html.path).unwrap();
+        assert!(html_text.contains("Audited corrections"));
+        assert!(html_text.contains("605.00"));
+        assert!(html_text.contains("5004.25"));
+        assert!(html_text.contains(&second.correction_id));
+        std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(db::integrity_check(&db).unwrap(),"ok");
         assert_eq!(db::foreign_key_violation_count(&db).unwrap(),0);
     }
