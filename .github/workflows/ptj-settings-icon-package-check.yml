@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/ptj-settings-from-accepted-demo-2026-11-14
+      - feature/ptj-package-c-audited-corrections-2026-11-15
     paths:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
@@ -45,6 +46,8 @@ on:
       - app/src-tauri/src/db.rs
       - app/src-tauri/src/repository.rs
       - app/src-tauri/src/package_b_lifecycle_tests.rs
+      - app/src-tauri/src/fill_corrections.rs
+      - app/src-tauri/src/lib.rs
       - app/src/reviewBacklogTarget.ts
       - app/src/reviewBacklogTarget.test.ts
       - app/src/crossSessionReviewQueue.ts
