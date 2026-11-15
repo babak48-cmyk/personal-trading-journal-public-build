@@ -8,6 +8,14 @@ on:
     paths:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
+      - app/src/AuditedFillCorrectionPanel.tsx
+      - app/src/services/localApi.ts
+      - app/src-tauri/src/commands.rs
+      - app/src-tauri/src/exports.rs
+      - app/src-tauri/src/backup.rs
+      - app/src-tauri/src/restore.rs
+      - app/src-tauri/tauri.packagec.conf.json
+      - app/scripts/verify-package-c-isolation.mjs
       - app/src/fieldPreferenceVerification.ts
       - app/src/fieldPreferenceVerification.test.ts
       - app/src/customFieldRequired.ts
@@ -75,6 +83,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Check independent Package C DEMO identity and app-data source
+        if: github.ref_name == 'feature/ptj-package-c-audited-corrections-2026-11-15'
+        run: node scripts/verify-package-c-isolation.mjs
       - name: Verify latest user-approved teal notebook artwork and generated transparent ICO
         run: |
           python3 -m pip install --disable-pip-version-check Pillow==11.3.0
