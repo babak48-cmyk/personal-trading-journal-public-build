@@ -24,6 +24,7 @@ import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
 import { isCompletedReviewForTrade } from './reviewIdentity';
 import { filterCrossSessionPendingReviews } from './crossSessionReviewQueue';
+import { findClosedReviewTarget } from './reviewBacklogTarget';
 import { summarizeSessionTradeExecution } from './tradeSessionPulse';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
 import {isCustomFieldPresented,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
@@ -654,7 +655,7 @@ export function App(){
 
   async function loadActive(s:SessionSummary, requestedTradeId?:string){
     if(s.session_id===active?.session_id && requestedTradeId){
-      if(sessionTrades.some(t=>t.trade_id===requestedTradeId && t.session_id===s.session_id && t.status==='CLOSED')){
+      if(findClosedReviewTarget(s.session_id,requestedTradeId,sessionTrades)){
         setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
       }else setMessage('The selected pending Review trade could not be verified in this session. Refresh the backlog.');
       return;
@@ -701,7 +702,7 @@ export function App(){
       const restoredTrades=await localApi.listSessionTrades(s.session_id);
       setSessionTrades(restoredTrades);
       if(requestedTradeId){
-        if(restoredTrades.some(t=>t.trade_id===requestedTradeId && t.session_id===s.session_id && t.status==='CLOSED')){
+        if(findClosedReviewTarget(s.session_id,requestedTradeId,restoredTrades)){
           setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
         }else setMessage('The selected pending Review trade is no longer a verified closed trade in this session. Refresh the backlog.');
       }
@@ -726,7 +727,7 @@ export function App(){
   // unsaved-input and Review-verification guards in openTradeDetail.
   useEffect(()=>{
     if(!requestedReviewTarget||active?.session_id!==requestedReviewTarget.sessionId)return;
-    const target=sessionTrades.find(t=>t.session_id===requestedReviewTarget.sessionId && t.trade_id===requestedReviewTarget.tradeId && t.status==='CLOSED');
+    const target=findClosedReviewTarget(requestedReviewTarget.sessionId,requestedReviewTarget.tradeId,sessionTrades);
     if(!target)return;
     setRequestedReviewTarget(null);
     void openTradeDetail(target);
