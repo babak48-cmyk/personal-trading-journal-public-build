@@ -202,6 +202,19 @@ pub fn list_trade_correction_history(
     Ok(out)
 }
 
+/// Full read-only audit verification for backup and staged restore gates.
+/// A database integrity_check alone does not validate a correction's semantic
+/// old/new revision chain, so each affected execution must be independently
+/// reconciled to its immutable original values before packaging/restoring.
+pub fn verify_all_correction_chains(conn:&Connection)->Result<usize,AppError>{
+    let mut stmt=conn.prepare(
+      "SELECT DISTINCT execution_id FROM fill_correction_events ORDER BY execution_id")?;
+    let ids=stmt.query_map([],|r|r.get::<_,String>(0))?
+        .collect::<Result<Vec<_>,_>>()?;
+    for id in &ids { list_fill_correction_history(conn,id)?; }
+    Ok(ids.len())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CorrectionImpact {
     pub gross_realized_pnl:Option<f64>,
