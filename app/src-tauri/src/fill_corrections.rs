@@ -252,6 +252,28 @@ mod tests{
             replacement:Some(2.0),reason:"Invalid oversized exit".into()}).is_err());
         let count:i64=db.query_row("SELECT COUNT(*) FROM fill_correction_events",[],|r|r.get(0)).unwrap();
         assert_eq!(count,2);
+        // Every consumer of the repository TradeDetail must see the current
+        // effective price, not the immutable original recorded price.
+        let detail=crate::repository::get_trade_detail(&db,"t").unwrap();
+        assert_eq!(detail.fills[1].price,5004.25);
+        assert_eq!(detail.metrics.gross_realized_pnl,Some(612.5));
+        assert_eq!(detail.metrics.net_realized_pnl,Some(605.0));
+        // Unknown charges are not zero and must suppress Net/R.
+        record_fill_correction(&mut db,FillCorrectionRequest{
+            execution_id:"e2".into(),field:FillField::Fees,
+            expected_effective:Some(0.5),replacement:None,
+            reason:"Invoice does not substantiate original fee".into(),
+        }).unwrap();
+        let uncertain=crate::repository::get_trade_detail(&db,"t").unwrap();
+        assert_eq!(uncertain.metrics.gross_realized_pnl,Some(612.5));
+        assert_eq!(uncertain.metrics.net_realized_pnl,None);
+        assert_eq!(uncertain.metrics.realized_r,None);
+        record_fill_correction(&mut db,FillCorrectionRequest{
+            execution_id:"e2".into(),field:FillField::Fees,
+            expected_effective:None,replacement:Some(0.5),
+            reason:"Confirmed precise amount against execution statement".into(),
+        }).unwrap();
+        assert_eq!(crate::repository::get_trade_detail(&db,"t").unwrap().metrics.net_realized_pnl,Some(605.0));
         assert_eq!(db::integrity_check(&db).unwrap(),"ok");
         assert_eq!(db::foreign_key_violation_count(&db).unwrap(),0);
     }
