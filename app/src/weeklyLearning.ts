@@ -52,6 +52,7 @@ export type WeeklyLearningSnapshot=Readonly<{
   openCount:number;
   eligibleRCount:number;
   missingRCount:number;
+  correctedTradeCount:number;
   netR:number|null;
   ruleViolationCount:number;
   uncheckedRuleCount:number;
@@ -73,6 +74,11 @@ export function weeklyLearningSnapshot(
   const closed=weekly.filter(row=>row.status==='CLOSED');
   const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
   const missingRCount=closed.length-eligible.length;
+  // Count distinct trades with persisted corrections, not correction events.
+  // Revisions of the same Fill never inflate weekly sample size.
+  const correctedTradeCount=weekly.filter(row=>
+    Number.isInteger(row.audited_correction_count) && (row.audited_correction_count??0)>0
+  ).length;
   const count=new Map<string,number>();
   weekly.forEach(row=>new Set(row.mistakes||[]).forEach(id=>count.set(id,(count.get(id)||0)+1)));
   const labels=new Map(mistakeCatalog.map(m=>[m.mistake_type_id,m.label]));
@@ -94,7 +100,7 @@ export function weeklyLearningSnapshot(
     : 'Descriptive sample only: '+weekly.length+' trades, '+closed.length+' closed, '+eligible.length+' eligible for net R; no causal trading edge is inferred.';
   return {
     weekStart,tradeCount:weekly.length,closedCount:closed.length,openCount:weekly.length-closed.length,
-    eligibleRCount:eligible.length,missingRCount,
+    eligibleRCount:eligible.length,missingRCount,correctedTradeCount,
     netR:eligible.length?eligible.reduce((total,row)=>total+(row.realized_r as number),0):null,
     ruleViolationCount:violated,uncheckedRuleCount:unchecked,mistakes,
     observation,action,scope:'FILTERED_TRADES_ONLY',
@@ -112,6 +118,8 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot):string{
     'Trades: '+snapshot.tradeCount+'; closed: '+snapshot.closedCount+'; open/other: '+snapshot.openCount+'.',
     'Net R eligible: '+snapshot.eligibleRCount+'/'+snapshot.closedCount+' closed; missing eligible R: '+snapshot.missingRCount+'.',
     'Sum of eligible net R: '+(snapshot.netR==null?'unknown':snapshot.netR.toFixed(2)+'R')+'.',
+    'Audited-correction affected trades: '+snapshot.correctedTradeCount+
+      '. Reported results use effective values; original event records and reasons remain in the audit history.',
     'Rule violations: '+snapshot.ruleViolationCount+'; rule status unchecked: '+snapshot.uncheckedRuleCount+'.',
     'Most frequent recorded mistake: '+(snapshot.mistakes[0]?snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' trades)':'none recorded')+'.',
     'Suggested review action (not proven trading advice): '+snapshot.action,
