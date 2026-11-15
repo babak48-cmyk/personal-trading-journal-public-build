@@ -134,3 +134,47 @@ fn one_zone_two_trades_partial_exit_cost_risk_and_deferred_reviews_remain_indepe
     ).unwrap();
     assert_eq!(decisions,2,"Original independent Decisions must remain immutable");
 }
+
+#[test]
+fn gc_short_partial_exits_respect_real_contract_ticks_costs_and_original_risk() {
+    let mut conn=Connection::open_in_memory().unwrap();
+    conn.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+    db::migrate(&conn).unwrap();
+    ensure_default_workspace(&conn).unwrap();
+    conn.execute_batch("
+      INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+      VALUES ('gc-session','default-workspace','instrument-GC','2026-11-16','DEMO',
+              '2026-11-16T08:00:00Z','ACTIVE','2026-11-16T08:00:00Z','2026-11-16T08:00:00Z');
+    ").unwrap();
+    // An intentionally unplanned decision must have its own explicit reason.
+    let decision=create_candidate_decision(&conn,CreateCandidateDecisionInput{
+        session_id:"gc-session".into(),candidate_id:None,
+        decision_type:"TRADE".into(),intended_direction:Some("SHORT".into()),
+        reason_code:None,reason_note:Some("Synthetic short".into()),
+        decision_quality:None,decision_quality_note:None,
+        plan_mismatch_reason:Some("Explicit DEMO-only unplanned attempt".into()),
+    }).unwrap();
+    let opened=create_trade_with_entry(&mut conn,CreateTradeExecutionInput{
+        decision_id:decision.decision_id,entry_price:2350.0,
+        stop_price:2352.0,quantity:2.0,order_type:None,
+        planned_target_price:None,commission:Some(2.0),fees:Some(0.5),
+    }).unwrap();
+    assert_eq!(opened.metrics.initial_risk_dollars,Some(400.0));
+    assert!(add_trade_fill(&mut conn,fill(&opened.metrics.trade_id,"EXIT",2348.05,1.0,2.5)).is_err(),
+        "GC must reject prices not aligned to 0.10 ticks");
+    let partial=add_trade_fill(&mut conn,fill(&opened.metrics.trade_id,"EXIT",2348.0,1.0,2.5)).unwrap();
+    assert_eq!(partial.metrics.status,"PARTIALLY_CLOSED");
+    assert_eq!(partial.metrics.gross_realized_pnl,Some(200.0));
+    let closed=add_trade_fill(&mut conn,fill(&opened.metrics.trade_id,"EXIT",2346.0,1.0,2.5)).unwrap();
+    assert_eq!(closed.metrics.status,"CLOSED");
+    assert_eq!(closed.metrics.gross_realized_pnl,Some(600.0));
+    assert_eq!(closed.metrics.net_realized_pnl,Some(592.5));
+    assert_eq!(closed.metrics.realized_r,Some(592.5/400.0));
+    assert_eq!(closed.fills.len(),3);
+    let reviewed=save_trade_review(&mut conn,review(&opened.metrics.trade_id,true,Some(false))).unwrap();
+    assert_eq!(reviewed.status,"COMPLETED");
+    assert_eq!(reviewed.emotion_affected,Some(false));
+    assert!(list_cross_session_pending_reviews(&conn,250).unwrap().is_empty());
+    assert_eq!(db::integrity_check(&conn).unwrap(),"ok");
+    assert_eq!(db::foreign_key_violation_count(&conn).unwrap(),0);
+}
