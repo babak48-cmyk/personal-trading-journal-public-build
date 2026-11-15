@@ -3,11 +3,6 @@ name: PTJ Package C isolated DEMO installer (one cohesive release gate)
 # product and Tauri app identity from accepted main and prior DEMO.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/ptj-package-c-audited-corrections-2026-11-15
-    paths:
-      - .github/workflows/ptj-package-c-demo-installer.yml
 permissions:
   contents: read
 jobs:
