@@ -23,6 +23,7 @@ import { planRevisionEvidenceIssues } from './planRevisionValidation';
 import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
 import { isCompletedReviewForTrade } from './reviewIdentity';
+import { filterCrossSessionPendingReviews } from './crossSessionReviewQueue';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
 import {isCustomFieldPresented,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
@@ -320,6 +321,11 @@ export function App(){
       });
     return ()=>{cancelled=true;};
   },[active?.session_id,active?.status,sessionTrades.length,unexecutedRefreshToken]);
+  const [crossSessionReviewQueue,setCrossSessionReviewQueue]=useState<import('./services/localApi').CrossSessionPendingReview[]|null>(null);
+  const [crossSessionReviewLoading,setCrossSessionReviewLoading]=useState(false);
+  const [crossSessionReviewError,setCrossSessionReviewError]=useState('');
+  const [crossSessionReviewSearch,setCrossSessionReviewSearch]=useState('');
+  const crossSessionReviewRequestRef=useRef(0);
   const [reviewQueue,setReviewQueue]=useState<TradeMetrics[]|null>(null);
   const [reviewQueueLoading,setReviewQueueLoading]=useState(false);
   const [reviewQueueError,setReviewQueueError]=useState('');
@@ -351,6 +357,22 @@ export function App(){
       });
     return ()=>{cancelled=true;};
   },[active?.session_id,active?.status,sessionTrades,reviewQueueRefreshToken]);
+  // Cross-session Review Pending is read only, sourced from actual closed trades
+  // and their persisted Review state. A stale request may never replace a newer one.
+  useEffect(()=>{
+    let live=true;
+    const request=++crossSessionReviewRequestRef.current;
+    setCrossSessionReviewLoading(true);setCrossSessionReviewError('');
+    localApi.listCrossSessionPendingReviews().then(rows=>{
+      if(!live||request!==crossSessionReviewRequestRef.current)return;
+      setCrossSessionReviewQueue(rows);
+    }).catch(e=>{
+      if(!live||request!==crossSessionReviewRequestRef.current)return;
+      setCrossSessionReviewQueue(null);
+      setCrossSessionReviewError('Cross-session pending reviews could not be verified: '+String(e));
+    }).finally(()=>{if(live&&request===crossSessionReviewRequestRef.current)setCrossSessionReviewLoading(false);});
+    return ()=>{live=false;};
+  },[reviewQueueRefreshToken,sessionTrades,active?.session_id]);
   const [fillAction,setFillAction]=useState<'ENTRY'|'EXIT'>('EXIT');
   const [fillPrice,setFillPrice]=useState<number|null>(null);
   const [fillQty,setFillQty]=useState<number>(1);
@@ -1736,6 +1758,23 @@ export function App(){
 
         <button className={showRoadmap?'activeMode':''} onClick={()=>{setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}>Feature Roadmap</button>
         <div className="recent"><strong id="ptj-recent-heading">Recent</strong><div className="recentList" role="region" aria-labelledby="ptj-recent-heading" tabIndex={0}>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" disabled={active?.session_id===lastOpenedSessionId} onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div></div>
+        <details className="guidedMore" aria-label="Reviews pending across sessions">
+          <summary>Review backlog {crossSessionReviewQueue!==null?'· '+crossSessionReviewQueue.length+(crossSessionReviewQueue.length===250?'+':''):''}</summary>
+          <p className="subtle">Closed trades awaiting Review across sessions. Open the correct session, then select its pending trade. This does not block new entries.</p>
+          <button type="button" disabled={crossSessionReviewLoading} onClick={loadReviewPending}>{crossSessionReviewLoading?'Checking…':'Refresh backlog'}</button>
+          {crossSessionReviewError&&<p role="alert" className="warningBox">{crossSessionReviewError}</p>}
+          {crossSessionReviewLoading&&<p role="status">Checking saved Review status…</p>}
+          {crossSessionReviewQueue!==null&&!crossSessionReviewLoading&&<>
+            <label>Find session or instrument<input type="search" value={crossSessionReviewSearch} onChange={e=>setCrossSessionReviewSearch(e.target.value)} placeholder="ES, GC, date or trade"/></label>
+            {crossSessionReviewQueue.length===0&&<p className="subtle" role="status">No closed trades awaiting Review in the journal.</p>}
+            {filterCrossSessionPendingReviews(crossSessionReviewQueue,crossSessionReviewSearch,12).map(item=>
+              <button type="button" key={item.trade_id} className="sessionLink" onClick={()=>void loadActive(item.session)}>
+                {item.session.session_date} · {item.session.instrument_symbol} · {item.direction}
+                <small>{item.review_status==='DRAFT'?'Resume draft Review':'Review not started'} · {item.trade_id.slice(-6)} · Open session</small>
+              </button>)}
+            {crossSessionReviewQueue.length===250&&<p className="subtle">Showing at most 250 recent pending trades. Older records remain in their sessions.</p>}
+          </>}
+        </details>
       </aside>
 
       <section className="workspace">
