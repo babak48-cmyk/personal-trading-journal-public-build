@@ -367,6 +367,70 @@ pub fn record_fill_correction(
 
 #[cfg(test)]
 mod tests{
+    use crate::{backup,restore,paths::AppPaths};
+
+    #[test]
+    fn isolated_v10_backup_roundtrip_keeps_original_fill_and_complete_audit_chain(){
+        let root=std::env::temp_dir().join(format!("ptj-audit-backup-{}",Uuid::new_v4()));
+        let paths=AppPaths{
+            data:root.join("data"),attachments:root.join("attachments"),
+            backups:root.join("backups"),exports:root.join("exports"),
+            logs:root.join("logs"),root:root.clone(),
+        };
+        for dir in [&paths.root,&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        let mut conn=db::open_database(&paths.database()).unwrap();
+        conn.execute_batch("
+          INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','2026-11-15');
+          INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value) VALUES('i','w','GC',0.10,100);
+          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+            VALUES('s','w','i','2026-11-15','DEMO','now','ACTIVE','now','now');
+          INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+            VALUES('d','s','now','TRADE','SHORT');
+          INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+            VALUES('t','d','s','SHORT','CLOSED');
+          INSERT INTO execution_fills(execution_id,trade_id,action,side,price,quantity,commission,fees)
+            VALUES('entry','t','ENTRY','SELL',2350,1,1,1),
+                  ('exit','t','EXIT','BUY',2348,1,1,1);
+        ").unwrap();
+        let input=FillCorrectionRequest{
+            execution_id:"exit".into(),field:FillField::Price,
+            expected_effective:Some(2348.0),replacement:Some(2347.9),
+            reason:"GC synthetic historical fill correction".into(),
+        };
+        record_fill_correction(&mut conn,input).unwrap();
+        assert_eq!(verify_all_correction_chains(&conn).unwrap(),1);
+        drop(conn);
+        let archive=backup::create_backup(&paths).unwrap();
+        let info=restore::validate_backup(&archive).unwrap();
+        assert_eq!(info.schema_version,10);
+        let staged=restore::restore_to_staging(&paths,&archive).unwrap();
+        let restored=rusqlite::Connection::open(staged.join("database.sqlite")).unwrap();
+        assert_eq!(db::schema_version(&restored).unwrap(),10);
+        assert_eq!(verify_all_correction_chains(&restored).unwrap(),1);
+        let original:f64=restored.query_row("SELECT price FROM execution_fills WHERE execution_id='exit'",
+            [],|r|r.get(0)).unwrap();
+        assert_eq!(original,2348.0);
+        let corrected=crate::repository::get_trade_detail(&restored,"t").unwrap();
+        assert_eq!(corrected.fills[1].price,2347.9);
+        assert_eq!(corrected.metrics.net_realized_pnl,Some(206.0));
+        drop(restored);
+        // A semantically corrupted append-only revision must block a new
+        // backup even if SQLite integrity and foreign keys still pass.
+        let conn=db::open_database(&paths.database()).unwrap();
+        conn.execute("INSERT INTO fill_correction_events
+          (correction_id,execution_id,revision,field_code,recorded_at_utc,actor,reason,
+           previous_is_null,previous_number,replacement_is_null,replacement_number,expected_prior_correction_id)
+           VALUES ('forged','exit',2,'price','now','USER','Invalid chain',0,2348,0,2347.8,NULL)",[]).unwrap();
+        assert_eq!(db::integrity_check(&conn).unwrap(),"ok");
+        assert!(verify_all_correction_chains(&conn).is_err());
+        drop(conn);
+        assert!(backup::create_backup(&paths).is_err());
+        assert!(restore::validate_backup(&archive).is_ok(),"Existing verified ZIP must remain untouched");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
     use super::*;
     use crate::db;
     #[test]
