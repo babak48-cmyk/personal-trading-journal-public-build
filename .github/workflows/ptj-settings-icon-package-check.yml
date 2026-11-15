@@ -9,6 +9,8 @@ on:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
       - app/src/AuditedFillCorrectionPanel.tsx
+      - app/src/weeklyLearning.ts
+      - app/src/weeklyLearning.test.ts
       - app/src/services/localApi.ts
       - app/src-tauri/src/commands.rs
       - app/src-tauri/src/exports.rs
