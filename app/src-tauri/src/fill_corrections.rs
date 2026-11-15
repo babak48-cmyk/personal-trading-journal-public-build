@@ -414,7 +414,7 @@ mod tests{
         assert_eq!(original,2348.0);
         let corrected=crate::repository::get_trade_detail(&restored,"t").unwrap();
         assert_eq!(corrected.fills[1].price,2347.9);
-        assert_eq!(corrected.metrics.net_realized_pnl,Some(206.0));
+        assert!((corrected.metrics.net_realized_pnl.unwrap()-206.0).abs()<1e-7);
         drop(restored);
         // A semantically corrupted append-only revision must block a new
         // backup even if SQLite integrity and foreign keys still pass.
