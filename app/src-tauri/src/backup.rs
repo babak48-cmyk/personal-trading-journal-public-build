@@ -21,6 +21,10 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     let conn = db::open_database(&paths.database())?;
     let integrity = db::integrity_check(&conn)?;
     if integrity != "ok" { return Err(AppError::Validation(format!("database integrity: {integrity}"))); }
+    if db::foreign_key_violation_count(&conn)? > 0 {
+        return Err(AppError::Validation("backup blocked: database foreign key violation".into()));
+    }
+    crate::fill_corrections::verify_all_correction_chains(&conn)?;
     // Force committed WAL pages into the main database before packaging the file.
     // The app uses a single local database; backups are serialized through this command.
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
