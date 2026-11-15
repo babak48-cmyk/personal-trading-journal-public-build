@@ -8,9 +8,9 @@ import {localApi, type TradeDetail, type FillCorrectionField,
  * before explicit user confirmation and a transactional append-only write.
  */
 export function AuditedFillCorrectionPanel({
-  trade, reviewCompleted, onApplied,
+  trade, readOnly, onApplied,
 }:{
-  trade:TradeDetail; reviewCompleted:boolean;
+  trade:TradeDetail; readOnly:boolean;
   onApplied:(updated:TradeDetail)=>void;
 }){
   const [executionId,setExecutionId]=useState('');
@@ -26,7 +26,7 @@ export function AuditedFillCorrectionPanel({
   const requestEpoch=useRef(0);
   const saving=useRef(false);
   const closed=trade.metrics.status==='CLOSED';
-  const editable=closed&&!reviewCompleted;
+  const editable=closed&&!readOnly;
   const selected=trade.fills.find(x=>x.execution_id===executionId);
   const current=selected?(selected[field] as number|null|undefined)??null:null;
 
@@ -119,7 +119,7 @@ export function AuditedFillCorrectionPanel({
       <small>Fill {h.execution_id.slice(-8)} · previous {h.previous??'UNKNOWN'} → effective {h.replacement??'UNKNOWN'} · {h.actor}</small>
       <small>{h.reason}</small>
     </div>)}
-    {reviewCompleted&&<p className="subtle" role="status">Completed Review is locked. Editing these historical values is not enabled; the audit history above remains readable.</p>}
+    {readOnly&&<p className="subtle" role="status">Editing is unavailable while saved Review verification is pending, a Review is completed, or unsaved Review inputs exist. The audit history remains readable.</p>}
     {editable&&<div className="formGrid">
       <label>Saved Fill
         <select value={executionId} disabled={busy} onChange={e=>{invalidate();setExecutionId(e.target.value);setReplacementInput('');}}>
