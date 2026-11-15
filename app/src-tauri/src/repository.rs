@@ -1923,6 +1923,9 @@ pub struct JournalTradeRowDto {
     pub realized_r: Option<f64>,
     pub net_realized_pnl: Option<f64>,
     pub open_quantity: f64,
+    /// Number of immutable audit events recorded against this Trade's Fills;
+    /// counts audit provenance, not corrected/confirmed profitability.
+    pub audited_correction_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -2110,12 +2113,18 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             if !trade_has_evidence(conn,&trade_id,&candidate_id,v,decision_at.as_deref(),at_decision)?{continue;}
         }
         let metrics=trade_metrics(conn,&trade_id)?;
+        let audited_correction_count:i64=conn.query_row(
+          "SELECT COUNT(*) FROM fill_correction_events ce
+           JOIN execution_fills f ON f.execution_id=ce.execution_id
+           WHERE f.trade_id=?1",
+          [&trade_id],|r|r.get(0))?;
         out.push(JournalTradeRowDto{
             trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
             mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
-            realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,open_quantity:metrics.open_quantity
+            realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,
+            open_quantity:metrics.open_quantity,audited_correction_count,
         });
     }
     Ok(out)
