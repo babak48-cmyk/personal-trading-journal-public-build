@@ -136,6 +136,7 @@ fn validate_trade_ledger(fills:&[CorrectedFill],tick:f64)->Result<(f64,f64),AppE
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CorrectionHistoryEvent {
+    pub execution_id:String,
     pub correction_id:String,
     pub revision:i64,
     pub field:String,
@@ -162,6 +163,7 @@ pub fn list_fill_correction_history(
     let rows=stmt.query_map([execution_id],|r|{
         let old_null:i64=r.get(3)?;let new_null:i64=r.get(5)?;
         Ok(CorrectionHistoryEvent{
+            execution_id:execution_id.to_owned(),
             correction_id:r.get(0)?,revision:r.get(1)?,field:r.get(2)?,
             previous:if old_null==1{None}else{r.get(4)?},
             replacement:if new_null==1{None}else{r.get(6)?},
@@ -180,6 +182,24 @@ pub fn list_fill_correction_history(
         effective_scalar(conn,execution_id,field,initial)?;
     }
     Ok(entries)
+}
+
+/// All persisted correction events for a single Trade in original Fill order.
+/// A corrupted/tampered audit chain aborts the export instead of silently
+/// omitting corrections or representing effective values as original.
+pub fn list_trade_correction_history(
+ conn:&Connection,trade_id:&str
+)->Result<Vec<CorrectionHistoryEvent>,AppError>{
+    let exists:i64=conn.query_row("SELECT count(*) FROM trades WHERE trade_id=?1",
+        [trade_id],|r|r.get(0))?;
+    if exists!=1 {return Err(AppError::Validation("unknown trade for audit".into()));}
+    let mut stmt=conn.prepare("SELECT execution_id FROM execution_fills
+        WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid")?;
+    let ids=stmt.query_map([trade_id],|r|r.get::<_,String>(0))?
+        .collect::<Result<Vec<_>,_>>()?;
+    let mut out=Vec::new();
+    for id in ids {out.extend(list_fill_correction_history(conn,&id)?);}
+    Ok(out)
 }
 
 #[derive(Debug, Clone, Serialize)]
