@@ -202,3 +202,54 @@ mod custom_field_schema_tests {
         assert_eq!(schema_version(&conn).unwrap(),CURRENT_SCHEMA_VERSION);
     }
 }
+
+
+#[cfg(test)]
+mod audited_correction_migration_gate_tests {
+    use super::*;
+    #[test]
+    fn failed_v9_to_v10_install_keeps_existing_trade_and_schema_unchanged() {
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON; CREATE TABLE schema_meta(id INTEGER PRIMARY KEY CHECK(id=1), schema_version INTEGER NOT NULL); INSERT INTO schema_meta VALUES(1,0);").unwrap();
+        for (idx,sql) in [MIGRATION_001,MIGRATION_002,MIGRATION_003,MIGRATION_004,MIGRATION_005,MIGRATION_006,MIGRATION_007,MIGRATION_008,MIGRATION_009].iter().enumerate() {
+            let tx=conn.unchecked_transaction().unwrap();
+            tx.execute_batch(sql).unwrap();
+            tx.execute("UPDATE schema_meta SET schema_version=?1 WHERE id=1",[(idx+1) as i64]).unwrap();
+            tx.commit().unwrap();
+        }
+        assert_eq!(schema_version(&conn).unwrap(),9);
+        conn.execute_batch("
+          INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Original','2026-11-15');
+          INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value) VALUES('i','w','ES',0.25,50);
+          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+            VALUES('s','w','i','2026-11-15','DEMO','now','ACTIVE','now','now');
+          INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+            VALUES('d','s','now','TRADE','LONG');
+          INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+            VALUES('t','d','s','LONG','OPEN');
+          INSERT INTO execution_fills(execution_id,trade_id,action,side,price,quantity)
+            VALUES('f','t','ENTRY','BUY',5000,1);
+        ").unwrap();
+        let failure=(||->Result<(),rusqlite::Error>{
+            let tx=conn.unchecked_transaction()?;
+            tx.execute_batch(MIGRATION_010)?;
+            // Simulate an exception after table creation but before schema bump.
+            tx.execute("INSERT INTO deliberately_missing_table VALUES(1)",[])?;
+            tx.execute("UPDATE schema_meta SET schema_version=10 WHERE id=1",[])?;
+            tx.commit()
+        })();
+        assert!(failure.is_err());
+        assert_eq!(schema_version(&conn).unwrap(),9);
+        let old_price:f64=conn.query_row("SELECT price FROM execution_fills WHERE execution_id='f'",[],|r|r.get(0)).unwrap();
+        assert_eq!(old_price,5000.0);
+        let new_tables:i64=conn.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='fill_correction_events'",
+            [],|r|r.get(0)).unwrap();
+        assert_eq!(new_tables,0);
+        migrate(&conn).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(),10);
+        assert_eq!(conn.query_row("SELECT price FROM execution_fills WHERE execution_id='f'",[],|r|r.get::<_,f64>(0)).unwrap(),5000.0);
+        assert_eq!(integrity_check(&conn).unwrap(),"ok");
+        assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
+    }
+}
