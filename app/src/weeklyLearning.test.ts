@@ -56,6 +56,21 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
       {label:'Not recorded',tradeCount:1,closedCount:0,eligibleRCount:0,netR:null,ruleViolationCount:0},
     ]);
   });
+  it('reports distinct audited-correction trades without inflating R sample or trading outcomes',()=>{
+    const data=[
+      row('a','2026-11-09',{audited_correction_count:3,realized_r:1.25}),
+      row('b','2026-11-10',{audited_correction_count:1,realized_r:null}),
+      row('c','2026-11-11',{audited_correction_count:0,realized_r:-1}),
+      row('d','2026-11-02',{audited_correction_count:4,realized_r:9}),
+    ];
+    const snap=weeklyLearningSnapshot(data,'2026-11-09');
+    expect(snap.correctedTradeCount).toBe(2);
+    expect(snap.eligibleRCount).toBe(2);
+    expect(snap.missingRCount).toBe(1);
+    expect(snap.netR).toBeCloseTo(.25);
+    expect(weeklyLearningText(snap)).toContain('Audited-correction affected trades: 2');
+    expect(weeklyLearningText(snap)).toContain('original event records');
+  });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
     expect(s.netR).toBeNull();
