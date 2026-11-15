@@ -134,76 +134,202 @@ fn validate_trade_ledger(fills:&[CorrectedFill],tick:f64)->Result<(f64,f64),AppE
     Ok((open,total_entry))
 }
 
-/// Append correction only after full trade validation and stale-version check.
-/// This foundation intentionally is NOT a Tauri command and must not be used
-/// as production correction capability until all consumers are effective-aware.
-pub fn record_fill_correction(
- conn:&mut Connection, request:FillCorrectionRequest
-)->Result<FillCorrectionReceipt,AppError>{
-    if request.reason.trim().is_empty() || request.reason.trim().len()>500 {
+#[derive(Debug, Clone, Serialize)]
+pub struct CorrectionHistoryEvent {
+    pub correction_id:String,
+    pub revision:i64,
+    pub field:String,
+    pub previous:Option<f64>,
+    pub replacement:Option<f64>,
+    pub reason:String,
+    pub recorded_at_utc:String,
+    pub actor:String,
+    pub expected_prior_correction_id:Option<String>,
+}
+
+/// Read-only, original IDs and immutable event chain for one owning Fill.
+pub fn list_fill_correction_history(
+    conn:&Connection,execution_id:&str,
+)->Result<Vec<CorrectionHistoryEvent>,AppError>{
+    let exists:i64=conn.query_row(
+        "SELECT COUNT(*) FROM execution_fills WHERE execution_id=?1",
+        [execution_id],|r|r.get(0))?;
+    if exists==0 {return Err(AppError::Validation("unknown execution".into()));}
+    let mut stmt=conn.prepare(
+        "SELECT correction_id,revision,field_code,previous_is_null,previous_number,
+           replacement_is_null,replacement_number,reason,recorded_at_utc,actor,expected_prior_correction_id
+         FROM fill_correction_events WHERE execution_id=?1 ORDER BY recorded_at_utc, rowid")?;
+    let rows=stmt.query_map([execution_id],|r|{
+        let old_null:i64=r.get(3)?;let new_null:i64=r.get(5)?;
+        Ok(CorrectionHistoryEvent{
+            correction_id:r.get(0)?,revision:r.get(1)?,field:r.get(2)?,
+            previous:if old_null==1{None}else{r.get(4)?},
+            replacement:if new_null==1{None}else{r.get(6)?},
+            reason:r.get(7)?,recorded_at_utc:r.get(8)?,actor:r.get(9)?,
+            expected_prior_correction_id:r.get(10)?,
+        })
+    })?;
+    // Independently validate each field's linked revisions before surfacing
+    // historical audit data; do not accept a broken/edited event chain.
+    let entries=rows.collect::<Result<Vec<_>,_>>()?;
+    let row:(f64,f64,Option<f64>,Option<f64>)=conn.query_row(
+        "SELECT price,quantity,commission,fees FROM execution_fills WHERE execution_id=?1",
+        [execution_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+    for (field,initial) in [(FillField::Price,Some(row.0)),(FillField::Quantity,Some(row.1)),
+        (FillField::Commission,row.2),(FillField::Fees,row.3)] {
+        effective_scalar(conn,execution_id,field,initial)?;
+    }
+    Ok(entries)
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CorrectionImpact {
+    pub gross_realized_pnl:Option<f64>,
+    pub net_realized_pnl:Option<f64>,
+    pub realized_r:Option<f64>,
+    pub open_quantity:f64,
+    pub unknown_cost_fields:usize,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct FillCorrectionPreview {
+    pub execution_id:String,
+    pub trade_id:String,
+    pub field:String,
+    pub original:Option<f64>,
+    pub current_effective:Option<f64>,
+    pub proposed_effective:Option<f64>,
+    pub expected_revision:i64,
+    pub reason:String,
+    pub before:CorrectionImpact,
+    pub after:CorrectionImpact,
+    pub explicit_confirmation_required:bool,
+}
+
+fn impact(
+ fills:&[CorrectedFill],direction:&str,point_value:f64,initial_risk:Option<f64>
+)->Result<CorrectionImpact,AppError>{
+    let unknown=fills.iter().map(|f|usize::from(f.commission.is_none())+
+        usize::from(f.fees.is_none())).sum();
+    let input=fills.iter().map(|f|(
+        f.action.clone(),f.price,f.quantity,f.commission.unwrap_or(0.0),f.fees.unwrap_or(0.0)
+    )).collect::<Vec<_>>();
+    let ledger=crate::repository::execution_ledger(&input,direction,point_value)?;
+    let gross=ledger.gross_realized;
+    let net=if unknown==0{gross.map(|g|g-ledger.costs)}else{None};
+    let r=match(net,initial_risk){(Some(value),Some(risk)) if risk>0.0=>
+        Some(value/risk),_=>None};
+    Ok(CorrectionImpact{gross_realized_pnl:gross,net_realized_pnl:net,
+        realized_r:r,open_quantity:ledger.open_qty,unknown_cost_fields:unknown})
+}
+struct ValidatedCorrection {
+    trade_id:String,
+    original:Option<f64>,
+    previous:Option<f64>,
+    revision:i64,
+    previous_id:Option<String>,
+    before:CorrectionImpact,
+    after:CorrectionImpact,
+}
+fn validate_correction(
+ conn:&Connection,req:&FillCorrectionRequest
+)->Result<ValidatedCorrection,AppError>{
+    if req.reason.trim().is_empty() || req.reason.trim().len()>500 {
         return Err(AppError::Validation("a meaningful correction reason (max 500 chars) is mandatory".into()));
     }
-    let tx=conn.transaction()?;
-    let (trade_id,field_old,tick): (String,Option<f64>,f64)=tx.query_row(
-      "SELECT f.trade_id, CASE ?2 WHEN 'price' THEN f.price WHEN 'quantity' THEN f.quantity
-        WHEN 'commission' THEN f.commission ELSE f.fees END,
-        COALESCE(s.instrument_tick_size_snapshot,i.tick_size)
-       FROM execution_fills f JOIN trades t ON t.trade_id=f.trade_id
-       JOIN sessions s ON s.session_id=t.session_id
-       JOIN instruments i ON i.instrument_id=s.instrument_id
-       WHERE f.execution_id=?1",
-      params![request.execution_id,request.field.code()],
-      |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))
-    )?;
-    let complete:i64=tx.query_row(
+    let (trade_id,old,tick,point_value,direction,status,action):
+        (String,Option<f64>,f64,f64,String,String,String)=conn.query_row(
+       "SELECT f.trade_id,
+               CASE ?2 WHEN 'price' THEN f.price WHEN 'quantity' THEN f.quantity
+                     WHEN 'commission' THEN f.commission ELSE f.fees END,
+               COALESCE(s.instrument_tick_size_snapshot,i.tick_size),
+               COALESCE(s.instrument_point_value_snapshot,i.point_value),
+               t.direction,t.status,f.action
+        FROM execution_fills f JOIN trades t ON t.trade_id=f.trade_id
+        JOIN sessions s ON s.session_id=t.session_id
+        JOIN instruments i ON i.instrument_id=s.instrument_id
+        WHERE f.execution_id=?1",
+       params![req.execution_id,req.field.code()],
+       |r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,
+           r.get(4)?,r.get(5)?,r.get(6)?)))?;
+    if status!="CLOSED" {
+        return Err(AppError::Validation("historical correction of still-open trades is not enabled".into()));
+    }
+    let complete:i64=conn.query_row(
       "SELECT COUNT(*) FROM trade_reviews WHERE trade_id=?1 AND status='COMPLETED'",
       [&trade_id],|r|r.get(0))?;
     if complete>0 {
         return Err(AppError::Validation("completed trade review is locked: correction policy not yet approved".into()));
     }
-    validate_value(request.field,request.replacement,tick)?;
-    let (prior,revision,previous_id)=effective_scalar(&tx,&request.execution_id,request.field,field_old)?;
-    if prior!=request.expected_effective {
+    validate_value(req.field,req.replacement,tick)?;
+    let (prior,revision,previous_id)=effective_scalar(conn,&req.execution_id,req.field,old)?;
+    if prior!=req.expected_effective {
         return Err(AppError::Validation("stale correction: reopen the recorded effective value".into()));
     }
-    if prior==request.replacement {
+    if prior==req.replacement {
         return Err(AppError::Validation("no recorded change: correction is unnecessary".into()));
     }
-    let mut effective=read_effective_fills(&tx,&trade_id)?;
-    let row=effective.iter_mut().find(|f|f.execution_id==request.execution_id)
-        .ok_or_else(||AppError::Validation("target execution is not in its owning trade".into()))?;
-    set_field(row,request.field,request.replacement)?;
-    let (open,_entries)=validate_trade_ledger(&effective,tick)?;
-    let status:String=tx.query_row("SELECT status FROM trades WHERE trade_id=?1",[&trade_id],|r|r.get(0))?;
-    if status!="CLOSED" {
-        return Err(AppError::Validation("historical correction of still-open trades is not enabled".into()));
-    }
-    // Do not silently mutate stored trade state. In particular, a historical
-    // closed position cannot acquire unmatched contracts via a correction.
-    if (status=="CLOSED"&&open>1e-9) ||
-       (matches!(status.as_str(),"OPEN"|"PARTIALLY_CLOSED")&&open<=1e-9) {
-        return Err(AppError::Validation("corrected position disagrees with stored status; linked correction gate is not approved".into()));
-    }
-    // Initial entry corrections need independent risk-denominator policy.
-    let entry_action:String=tx.query_row("SELECT action FROM execution_fills WHERE execution_id=?1",
-        [&request.execution_id],|r|r.get(0))?;
-    if entry_action=="ENTRY" && matches!(request.field,FillField::Price|FillField::Quantity) {
+    if action=="ENTRY" && matches!(req.field,FillField::Price|FillField::Quantity) {
         return Err(AppError::Validation("entry price/quantity needs an explicitly linked initial-risk correction; not yet enabled".into()));
     }
+    let existing=read_effective_fills(conn,&trade_id)?;
+    let (open,_entry)=validate_trade_ledger(&existing,tick)?;
+    if open>1e-9 {
+        return Err(AppError::Validation("persisted CLOSED trade does not have a flat position".into()));
+    }
+    let initial_risk:Option<f64>=conn.query_row(
+        "SELECT risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='INITIAL'
+          ORDER BY occurred_at,rowid LIMIT 1",
+        [&trade_id],|r|r.get(0)).optional()?;
+    let before=impact(&existing,&direction,point_value,initial_risk)?;
+    let mut proposed=existing;
+    let target=proposed.iter_mut().find(|f|f.execution_id==req.execution_id)
+        .ok_or_else(||AppError::Validation("target execution does not belong to trade".into()))?;
+    set_field(target,req.field,req.replacement)?;
+    let (new_open,_)=validate_trade_ledger(&proposed,tick)?;
+    if new_open>1e-9 {
+        return Err(AppError::Validation("corrected position disagrees with stored CLOSED status".into()));
+    }
+    let after=impact(&proposed,&direction,point_value,initial_risk)?;
+    Ok(ValidatedCorrection{trade_id,original:old,previous:prior,revision,
+        previous_id,before,after})
+}
+
+/// Preview uses the same pure fail-closed validation as transactional append.
+/// Does not insert any rows, change a trade, or update the audit ledger.
+pub fn preview_fill_correction(
+ conn:&Connection,req:&FillCorrectionRequest
+)->Result<FillCorrectionPreview,AppError>{
+    let candidate=validate_correction(conn,req)?;
+    Ok(FillCorrectionPreview{
+        execution_id:req.execution_id.clone(),trade_id:candidate.trade_id,
+        field:req.field.code().into(),original:candidate.original,
+        current_effective:candidate.previous,proposed_effective:req.replacement,
+        expected_revision:candidate.revision,reason:req.reason.clone(),
+        before:candidate.before,after:candidate.after,
+        explicit_confirmation_required:true,
+    })
+}
+
+/// Not exposed as a Tauri command until audit UI, exports and backup gates pass.
+pub fn record_fill_correction(
+ conn:&mut Connection, request:FillCorrectionRequest
+)->Result<FillCorrectionReceipt,AppError>{
+    let tx=conn.transaction()?;
+    let checked=validate_correction(&tx,&request)?;
     let id=Uuid::new_v4().to_string();let at=Utc::now().to_rfc3339();
     tx.execute(
       "INSERT INTO fill_correction_events(
         correction_id,execution_id,revision,field_code,recorded_at_utc,actor,reason,
         previous_is_null,previous_number,replacement_is_null,replacement_number,expected_prior_correction_id)
        VALUES (?1,?2,?3,?4,?5,'USER',?6,?7,?8,?9,?10,?11)",
-      params![id,request.execution_id,revision+1,request.field.code(),at,request.reason,
-        i64::from(prior.is_none()),prior,i64::from(request.replacement.is_none()),
-        request.replacement,previous_id]
+      params![id,request.execution_id,checked.revision+1,request.field.code(),at,request.reason,
+        i64::from(checked.previous.is_none()),checked.previous,
+        i64::from(request.replacement.is_none()),request.replacement,checked.previous_id]
     )?;
     tx.commit()?;
     Ok(FillCorrectionReceipt{correction_id:id,execution_id:request.execution_id,
-      field:request.field.code().into(),revision:revision+1,previous:prior,
-      replacement:request.replacement,recorded_at_utc:at})
+      field:request.field.code().into(),revision:checked.revision+1,
+      previous:checked.previous,replacement:request.replacement,recorded_at_utc:at})
 }
 
 #[cfg(test)]
