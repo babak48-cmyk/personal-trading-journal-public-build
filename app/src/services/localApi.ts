@@ -73,6 +73,33 @@ export type RiskSnapshot = {
   change_reason:string|null; was_rule_compliant:boolean|null; provenance:string|null;
 };
 export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[] };
+export type FillCorrectionField = 'price'|'quantity'|'commission'|'fees';
+export type FillCorrectionInput = {
+  execution_id:string; field:FillCorrectionField; expected_effective:number|null;
+  replacement:number|null; reason:string;
+};
+export type FillCorrectionImpact = {
+  gross_realized_pnl:number|null; net_realized_pnl:number|null;
+  realized_r:number|null; open_quantity:number; unknown_cost_fields:number;
+};
+export type FillCorrectionPreview = {
+  execution_id:string; trade_id:string; field:FillCorrectionField;
+  original:number|null; current_effective:number|null;
+  proposed_effective:number|null; expected_revision:number; reason:string;
+  before:FillCorrectionImpact; after:FillCorrectionImpact;
+  explicit_confirmation_required:boolean;
+};
+export type CorrectionHistoryEvent = {
+  execution_id:string; correction_id:string; revision:number; field:FillCorrectionField;
+  previous:number|null; replacement:number|null; reason:string;
+  recorded_at_utc:string; actor:string; expected_prior_correction_id:string|null;
+};
+export type FillCorrectionReceipt = {
+  correction_id:string; execution_id:string; field:FillCorrectionField;
+  revision:number; previous:number|null; replacement:number|null;
+  recorded_at_utc:string;
+};
+
 
 export type MistakeType = { mistake_type_id:string; code:string; label:string; mistake_group:string };
 export type SaveTradeReviewInput = {
@@ -184,6 +211,9 @@ export const localApi = {
   addTradeFill: (input:AddTradeFillInput) => invoke<TradeDetail>('add_trade_fill',{input}),
   moveTradeStop: (input:MoveStopInput) => invoke<TradeDetail>('move_trade_stop',{input}),
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
+  listTradeCorrectionHistory: (tradeId:string) => invoke<CorrectionHistoryEvent[]>('list_trade_correction_history',{tradeId}),
+  previewFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionPreview>('preview_fill_correction',{input}),
+  recordFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionReceipt>('record_fill_correction',{input}),
   getTradeForDecision: (sessionId:string,decisionId:string) => invoke<TradeDetail|null>('get_trade_for_decision',{sessionId,decisionId}),
   listSessionTrades: (sessionId:string) => invoke<TradeMetrics[]>('list_session_trades',{sessionId}),
   listCrossSessionPendingReviews: () => invoke<CrossSessionPendingReview[]>('list_cross_session_pending_reviews'),
