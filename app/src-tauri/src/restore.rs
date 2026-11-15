@@ -90,6 +90,10 @@ pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBu
     let conn = db::open_database(&restored_db)?;
     let integrity = db::integrity_check(&conn)?;
     if integrity != "ok" { return Err(AppError::Validation(format!("restored database integrity: {integrity}"))); }
+    if db::foreign_key_violation_count(&conn)? > 0 {
+        return Err(AppError::Validation("restored database foreign key violation".into()));
+    }
+    crate::fill_corrections::verify_all_correction_chains(&conn)?;
     Ok(staging)
 }
 
