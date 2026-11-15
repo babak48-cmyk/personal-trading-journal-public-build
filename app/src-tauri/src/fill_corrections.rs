@@ -274,6 +274,19 @@ mod tests{
             reason:"Confirmed precise amount against execution statement".into(),
         }).unwrap();
         assert_eq!(crate::repository::get_trade_detail(&db,"t").unwrap().metrics.net_realized_pnl,Some(605.0));
+        // Package C #9: the existing analytics aggregation consumes
+        // trade_metrics, so corrected net flows through with honest R count.
+        let analytics=crate::repository::get_analytics_summary(&db,
+            crate::repository::JournalFilterInput{
+                date_from:None,date_to:None,instrument_symbol:None,direction:None,
+                decision_quality:None,rule_status:None,level_source_type_id:None,
+                evidence_type_id:None,evidence_timing:None,
+            }).unwrap();
+        assert_eq!(analytics.trade_count,1);
+        assert_eq!(analytics.net_pnl,Some(605.0));
+        assert_eq!(analytics.eligible_r_count,0);
+        assert_eq!(analytics.net_r,None);
+        assert!(analytics.small_sample);
         assert_eq!(db::integrity_check(&db).unwrap(),"ok");
         assert_eq!(db::foreign_key_violation_count(&db).unwrap(),0);
     }
