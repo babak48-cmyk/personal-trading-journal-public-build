@@ -2949,3 +2949,8 @@ mod exact_decision_trade_recovery_tests {
         assert_eq!(unchanged,2);
     }
 }
+
+// Cohesive Package B lifecycle acceptance against isolated migrated SQLite.
+#[cfg(test)]
+#[path = "package_b_lifecycle_tests.rs"]
+mod package_b_lifecycle_tests;
