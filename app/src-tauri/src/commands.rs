@@ -655,6 +655,32 @@ pub fn get_trade_detail(app: AppHandle, trade_id: String) -> Result<TradeDetailD
     repository::get_trade_detail(&conn, &trade_id)
 }
 
+// Correction commands use the isolated application's SQLite path, not a
+// caller-supplied path. Values are validated transactionally in Rust.
+#[tauri::command]
+pub fn list_trade_correction_history(app:AppHandle,trade_id:String)
+    ->Result<Vec<crate::fill_corrections::CorrectionHistoryEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::fill_corrections::list_trade_correction_history(&conn,&trade_id)
+}
+
+#[tauri::command]
+pub fn preview_fill_correction(app:AppHandle,input:crate::fill_corrections::FillCorrectionRequest)
+    ->Result<crate::fill_corrections::FillCorrectionPreview,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::fill_corrections::preview_fill_correction(&conn,&input)
+}
+
+#[tauri::command]
+pub fn record_fill_correction(app:AppHandle,input:crate::fill_corrections::FillCorrectionRequest)
+    ->Result<crate::fill_corrections::FillCorrectionReceipt,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::fill_corrections::record_fill_correction(&mut conn,input)
+}
+
 #[tauri::command]
 pub fn list_cross_session_pending_reviews(app: AppHandle) -> Result<Vec<repository::CrossSessionPendingReviewDto>, AppError> {
     let paths=AppPaths::from_app(&app)?;
