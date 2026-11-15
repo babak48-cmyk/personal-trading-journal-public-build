@@ -327,6 +327,7 @@ export function App(){
   const [crossSessionReviewError,setCrossSessionReviewError]=useState('');
   const [crossSessionReviewSearch,setCrossSessionReviewSearch]=useState('');
   const crossSessionReviewRequestRef=useRef(0);
+  const [requestedReviewTarget,setRequestedReviewTarget]=useState<{sessionId:string;tradeId:string}|null>(null);
   const [reviewQueue,setReviewQueue]=useState<TradeMetrics[]|null>(null);
   const [reviewQueueLoading,setReviewQueueLoading]=useState(false);
   const [reviewQueueError,setReviewQueueError]=useState('');
@@ -651,7 +652,13 @@ export function App(){
     return window.confirm('Switch '+context+'? The following UNSAVED inputs will be discarded: '+parts.join('; ')+'. Previously saved Decision, execution, risk and Review history will NOT be deleted. Continue?');
   }
 
-  async function loadActive(s:SessionSummary){
+  async function loadActive(s:SessionSummary, requestedTradeId?:string){
+    if(s.session_id===active?.session_id && requestedTradeId){
+      if(sessionTrades.some(t=>t.trade_id===requestedTradeId && t.session_id===s.session_id && t.status==='CLOSED')){
+        setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
+      }else setMessage('The selected pending Review trade could not be verified in this session. Refresh the backlog.');
+      return;
+    }
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(evidenceCandidate&&!confirmCloseEvidenceEditor())return;
@@ -659,6 +666,7 @@ export function App(){
       if(!confirmDiscardUnsavedTradeCapture('sessions'))return;
       // Invalidate any in-flight Review fetch before changing the session owner.
       reviewSelectionRequestRef.current++;
+      setRequestedReviewTarget(null);
       applyReview(null,null);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('');
       resetManagementCapture();
       setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
@@ -692,6 +700,11 @@ export function App(){
       setConsistency(await localApi.checkPlanConsistency(s.session_id));
       const restoredTrades=await localApi.listSessionTrades(s.session_id);
       setSessionTrades(restoredTrades);
+      if(requestedTradeId){
+        if(restoredTrades.some(t=>t.trade_id===requestedTradeId && t.session_id===s.session_id && t.status==='CLOSED')){
+          setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
+        }else setMessage('The selected pending Review trade is no longer a verified closed trade in this session. Refresh the backlog.');
+      }
       // Quick page access is a view state, not evidence that earlier steps were incomplete.
       // Allow return to recorded trades and review after a full application restart.
       if(restoredTrades.length>0)setNotebookMaxPage(v=>Math.max(v,4));
@@ -708,6 +721,17 @@ export function App(){
       setMessage(`Could not load the confirmed plan for this ${s.status.toLowerCase()} session: ${String(e)}`);
     }
   }
+  // Open the exact persisted trade only after its session and trade list are loaded.
+  // This must never carry a selected trade across sessions or bypass existing
+  // unsaved-input and Review-verification guards in openTradeDetail.
+  useEffect(()=>{
+    if(!requestedReviewTarget||active?.session_id!==requestedReviewTarget.sessionId)return;
+    const target=sessionTrades.find(t=>t.session_id===requestedReviewTarget.sessionId && t.trade_id===requestedReviewTarget.tradeId && t.status==='CLOSED');
+    if(!target)return;
+    setRequestedReviewTarget(null);
+    void openTradeDetail(target);
+  },[requestedReviewTarget,active?.session_id,sessionTrades]);
+
   async function refreshPlan(){
     if(!active)return;
     const p=await localApi.getCurrentPlan(active.session_id); setPlan(p);
@@ -1761,7 +1785,7 @@ export function App(){
         <div className="recent"><strong id="ptj-recent-heading">Recent</strong><div className="recentList" role="region" aria-labelledby="ptj-recent-heading" tabIndex={0}>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" disabled={active?.session_id===lastOpenedSessionId} onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div></div>
         <details className="guidedMore" aria-label="Reviews pending across sessions">
           <summary>Review backlog {crossSessionReviewQueue!==null?'· '+crossSessionReviewQueue.length+(crossSessionReviewQueue.length===250?'+':''):''}</summary>
-          <p className="subtle">Closed trades awaiting Review across sessions. Open the correct session, then select its pending trade. This does not block new entries.</p>
+          <p className="subtle">Closed trades awaiting Review across sessions. Select a trade to open its saved session and exact Review. This does not block new entries; unsaved-input guards still apply.</p>
           <button type="button" disabled={crossSessionReviewLoading} onClick={loadReviewPending}>{crossSessionReviewLoading?'Checking…':'Refresh backlog'}</button>
           {crossSessionReviewError&&<p role="alert" className="warningBox">{crossSessionReviewError}</p>}
           {crossSessionReviewLoading&&<p role="status">Checking saved Review status…</p>}
@@ -1769,9 +1793,9 @@ export function App(){
             <label>Find session or instrument<input type="search" value={crossSessionReviewSearch} onChange={e=>setCrossSessionReviewSearch(e.target.value)} placeholder="ES, GC, date or trade"/></label>
             {crossSessionReviewQueue.length===0&&<p className="subtle" role="status">No closed trades awaiting Review in the journal.</p>}
             {filterCrossSessionPendingReviews(crossSessionReviewQueue,crossSessionReviewSearch,12).map(item=>
-              <button type="button" key={item.trade_id} className="sessionLink" onClick={()=>void loadActive(item.session)}>
+              <button type="button" key={item.trade_id} className="sessionLink" onClick={()=>void loadActive(item.session,item.trade_id)}>
                 {item.session.session_date} · {item.session.instrument_symbol} · {item.session.environment} · {item.direction}
-                <small>{item.review_status==='DRAFT'?'Resume draft Review':'Review not started'} · {item.trade_id.slice(-6)} · Open session</small>
+                <small>{item.review_status==='DRAFT'?'Resume draft Review':'Review not started'} · {item.trade_id.slice(-6)} · Open Review</small>
               </button>)}
             {crossSessionReviewQueue.length===250&&<p className="subtle">Showing at most 250 recent pending trades. Older records remain in their sessions.</p>}
           </>}
