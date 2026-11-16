@@ -36,6 +36,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState('');
  const [expanded,setExpanded]=useState(false);
+ const [editorDirty,setEditorDirty]=useState(false);
  const [linkTradeId,setLinkTradeId]=useState('');
  const [linkVersionId,setLinkVersionId]=useState('');
  const [linkNote,setLinkNote]=useState('');
@@ -50,10 +51,17 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
    setVersions(v);setPerformance(p);
  }
  useEffect(()=>{void reload().catch(e=>setStatus('Playbook read failed: '+String(e)));},[]);
- const update=(field:keyof SaveSetupVersionInput,value:string|null)=>
+ const hasUncommittedEditorChanges=editorDirty||!!newEvidence.trim()||!!evidenceHelp.trim();
+ function confirmEditorChange(){
+   return !hasUncommittedEditorChanges||window.confirm('The current Setup editor contains unsaved changes. Discard them and switch?');
+ }
+ const update=(field:keyof SaveSetupVersionInput,value:string|null)=>{
+   setEditorDirty(true);
    setInput(prev=>({...prev,[field]:value}));
+ };
  function fromTrade(){
    if(!seed)return;
+   setEditorDirty(true);
    setInput(prev=>({...prev,source_trade_id:seed.trade_id,
      zone_location:seed.candidate_label||prev.zone_location,
      notes:setupPlaybookCandidate(seed),
@@ -62,6 +70,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  }
  function addEvidence(){
    if(!newEvidence.trim()||input.evidence_priorities.some(v=>v.evidence_label.trim().toLowerCase()===newEvidence.trim().toLowerCase()))return;
+   setEditorDirty(true);
    setInput(prev=>({...prev,evidence_priorities:[...prev.evidence_priorities,
      {evidence_label:newEvidence.trim(),priority_role:evidenceRole,explanation:evidenceHelp.trim()||null}]}));
    setNewEvidence('');setEvidenceHelp('');
@@ -74,7 +83,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      const [fresh,perf]=await Promise.all([localApi.listSetupVersions(),localApi.setupPlaybookPerformance()]);
      if(!fresh.some(x=>x.version_id===result.version_id))throw new Error('Saved version could not be read back.');
      setVersions(fresh);setPerformance(perf);setSelectedVersion(result.version_id);
-     setInput(toDraft(result));
+     setInput(toDraft(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');
      setStatus('Version '+result.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
    }catch(e){setStatus('Version NOT verified: '+String(e));}
    finally{setBusy(false);}
@@ -107,13 +116,14 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
       <span><b>Attributed closed trades</b>{performance.reduce((a,v)=>a+v.trade_count,0)}</span>
    </div>
    <div className="rowActions">
-    <button type="button" onClick={()=>setExpanded(v=>!v)}>{expanded?'Close editor':'Open Setup editor / new revision'}</button>
+    <button type="button" onClick={()=>{if(expanded&&!confirmEditorChange())return;setExpanded(v=>!v);if(expanded)setEditorDirty(false);}}>{expanded?'Close editor':'Open Setup editor / new revision'}</button>
    </div>
    {versions.length>0&&<label>Read a saved version or create its next immutable revision
      <select value={selectedVersion} onChange={e=>{
+       if(!confirmEditorChange())return;
        const ver=versions.find(v=>v.version_id===e.target.value);
        setSelectedVersion(e.target.value);
-       if(ver){setInput(toDraft(ver));setExpanded(true);}
+       if(ver){setInput(toDraft(ver));setExpanded(true);setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');}
      }}>
        <option value="">Select saved version…</option>
        {versions.map(v=><option key={v.version_id} value={v.version_id}>
@@ -122,7 +132,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      </select>
    </label>}
    {selected&&<div className="rowActions">
-      <button type="button" onClick={()=>{setInput(blank());setSelectedVersion('');setExpanded(true);setStatus('New independent Setup (not a revision).');}}>New independent Setup</button>
+      <button type="button" onClick={()=>{if(!confirmEditorChange())return;setInput(blank());setSelectedVersion('');setExpanded(true);setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setStatus('New independent Setup (not a revision).');}}>New independent Setup</button>
       {selected.is_active&&<button type="button" disabled={busy} onClick={()=>void deactivate()}>Deactivate Setup (preserve history)</button>}
    </div>}
    {selected&&<details className="guidedMore"><summary>Read immutable v{selected.version_number} evidence priorities</summary>
@@ -147,7 +157,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
        <p className="subtle">REQUIRED must be observed; SUPPORTING is optional; CONTRADICTORY conflicts with the thesis; NOT_RELEVANT need not be reviewed. No total-score shortcut or automatic trade permission.</p>
        {input.evidence_priorities.map((e,i)=><div className="rowActions" key={i}>
           <span>{e.priority_role}: {e.evidence_label}</span>
-          <button type="button" onClick={()=>setInput(p=>({...p,evidence_priorities:p.evidence_priorities.filter((_,j)=>i!==j)}))}>Remove from NEXT version</button>
+          <button type="button" onClick={()=>{setEditorDirty(true);setInput(p=>({...p,evidence_priorities:p.evidence_priorities.filter((_,j)=>i!==j)}));}}>Remove from NEXT version</button>
        </div>)}
        <input value={newEvidence} maxLength={120} placeholder="Evidence name, e.g. DOM pressure" onChange={e=>setNewEvidence(e.target.value)}/>
        <select value={evidenceRole} onChange={e=>setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role'])}>
@@ -156,11 +166,12 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
        <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
        <button type="button" onClick={addEvidence} disabled={!newEvidence.trim()}>Add evidence requirement</button>
      </fieldset>
+     {hasUncommittedEditorChanges&&<p role="status" className="subtle">Unsaved Setup editor changes. Save a NEW version before switching or closing this editor.</p>}
      <div className="rowActions">
        <button type="button" disabled={busy||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
        <button className="primary" type="button" disabled={busy||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
      </div>
-     <p className="subtle">Approval requires context, Zone, prerequisites, triggers, contrary evidence and thesis invalidation. A rejected incomplete draft is never silently approved.</p>
+     <p className="subtle">Every save creates a NEW immutable version. Saving a DRAFT does not later change that version into APPROVED: after completing the conditions, Approve creates the NEXT version. To make v1 approved directly, use Approve on a new Setup without first saving a draft. Approval requires context, Zone, prerequisites, triggers, contrary evidence and thesis invalidation.</p>
    </div>}
    {performance.length>0&&<details className="guidedMore" open><summary>Performance by Setup VERSION · descriptive sample sizes only</summary>
      <div className="weeklyBreakdown">{performance.map(p=><div className="weeklyBreakdownRow" key={p.version_id}>
