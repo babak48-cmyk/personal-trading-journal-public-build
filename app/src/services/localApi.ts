@@ -136,6 +136,27 @@ export type ImportAttachmentInput = { owner_type:'SESSION'|'CANDIDATE'|'DECISION
 export type UpdateAttachmentInput = { attachment_id:string; stage:'PRE_MARKET'|'PRE_ENTRY'|'ENTRY'|'DURING'|'POST_EXIT'|'FOLLOW_UP'|'ORDER_FLOW'|'OTHER'; caption?:string|null };
 export type ReplaceAttachmentFileInput = { attachment_id:string; source_path:string };
 export type ExportResult = { path:string; row_count:number; created_at:string };
+export type SetupEvidencePriority = {
+  evidence_label:string; priority_role:'REQUIRED'|'SUPPORTING'|'CONTRADICTORY'|'NOT_RELEVANT';
+  explanation:string|null;
+};
+export type SaveSetupVersionInput = {
+  setup_id:string|null;name:string;source_trade_id:string|null;
+  market_context:string|null;zone_location:string|null;
+  prerequisites:string|null;entry_triggers:string|null;
+  supporting_evidence:string|null;contrary_evidence:string|null;
+  thesis_invalidation:string|null;notes:string|null;
+  evidence_priorities:SetupEvidencePriority[];approve:boolean;
+};
+export type SetupVersion = Omit<SaveSetupVersionInput,'approve'> & {
+  version_id:string;version_number:number;is_active:boolean;is_approved:boolean;
+  created_at:string;
+};
+export type SetupPerformance = {
+  setup_id:string;version_id:string;setup_name:string;version_number:number;
+  trade_count:number;eligible_r_count:number;net_r:number|null;
+  win_count:number;unknown_r_count:number;
+};
 export type NinjaTraderCsvReadiness = {
   file_name:string; detected_delimiter:string; column_count:number;
   headers:string[]; ready_for_import:boolean; rows_imported:number;
@@ -218,6 +239,11 @@ export const localApi = {
   moveTradeStop: (input:MoveStopInput) => invoke<TradeDetail>('move_trade_stop',{input}),
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
   inspectNinjaTraderCsvHeaders: (path:string) => invoke<NinjaTraderCsvReadiness>('inspect_ninjatrader_csv_headers',{path}),
+  listSetupVersions: () => invoke<SetupVersion[]>('list_setup_versions'),
+  saveSetupVersion: (input:SaveSetupVersionInput) => invoke<SetupVersion>('save_setup_version',{input}),
+  deactivateSetup: (setupId:string) => invoke<void>('deactivate_setup',{setupId}),
+  linkSetupTrade: (tradeId:string,versionId:string,linkNote:string|null) => invoke<void>('link_setup_trade',{tradeId,versionId,linkNote}),
+  setupPlaybookPerformance: () => invoke<SetupPerformance[]>('setup_playbook_performance'),
   listTradeCorrectionHistory: (tradeId:string) => invoke<CorrectionHistoryEvent[]>('list_trade_correction_history',{tradeId}),
   previewFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionPreview>('preview_fill_correction',{input}),
   recordFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionReceipt>('record_fill_correction',{input}),
