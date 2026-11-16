@@ -690,6 +690,13 @@ pub fn inspect_ninjatrader_csv_headers(path:String)
 }
 
 #[tauri::command]
+pub fn assign_setup_to_zone(app:AppHandle,candidate_id:String,version_id:String,reason:String)
+ -> Result<String,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let mut c=db::open_database(&paths.database())?;
+ crate::setup_playbook::assign_setup_to_zone(&mut c,&candidate_id,&version_id,&reason)
+}
+#[tauri::command]
 pub fn list_setup_versions(app:AppHandle)
  -> Result<Vec<crate::setup_playbook::SetupVersion>,AppError>{
  let paths=AppPaths::from_app(&app)?;
