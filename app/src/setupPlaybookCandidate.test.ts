@@ -11,7 +11,7 @@ describe('setup playbook candidate is source-only and not a trading edge',()=>{
  it('preserves historical ID and unknown R without inventing setup parameters',()=>{
   const x=setupPlaybookCandidate(row);
   expect(x).toContain('trade-001');
-  expect(x).toContain('decision-time level sources: VWAP');
+  expect(x).toContain('Decision-time level sources: VWAP');
   expect(x).toContain('Net R: UNKNOWN');
   expect(x).toContain('Audited correction events: 2');
   expect(x).toContain('Thesis invalidation: NOT RECORDED');
