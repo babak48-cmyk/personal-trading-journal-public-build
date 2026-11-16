@@ -174,6 +174,62 @@ pub fn deactivate(conn:&Connection,id:&str)->Result<(),AppError>{
     if affected!=1{return Err(AppError::Validation("Unknown Setup ID".into()));}
     Ok(())
 }
+/// Assign a previously APPROVED Setup version to a planned/active Zone
+/// by APPENDING a new immutable candidate revision with original level sources
+/// preserved. This is a PLAN change, never an observed evidence event.
+pub fn assign_setup_to_zone(conn:&mut Connection,candidate_id:&str,version_id:&str,reason:&str)
+ -> Result<String,AppError>{
+    nonempty(reason,500,"Reason for assigning Setup to Zone")?;
+    let tx=conn.transaction()?;
+    let status:String=tx.query_row(
+      "SELECT s.status FROM candidates c JOIN sessions s ON s.session_id=c.session_id WHERE c.candidate_id=?1",
+      [candidate_id],|r|r.get(0))?;
+    if status!="ACTIVE" && status!="PLANNING" {
+        return Err(AppError::Validation("Assign Setup only to a planning or active Zone".into()));
+    }
+    let (approved,active):(i64,i64)=tx.query_row(
+      "SELECT d.is_approved,s.active FROM setup_playbook_details d
+       JOIN setup_versions v ON v.setup_version_id=d.version_id
+       JOIN setups s ON s.setup_id=v.setup_id WHERE d.version_id=?1",
+       [version_id],|r|Ok((r.get(0)?,r.get(1)?)))?;
+    if approved!=1||active!=1{return Err(AppError::Validation("Only active approved Setup versions can be assigned to a Zone".into()));}
+    let (previous,number,old_version):(String,i64,Option<String>)=tx.query_row(
+      "SELECT candidate_revision_id,revision_number,setup_version_id FROM candidate_revisions
+       WHERE candidate_id=?1 ORDER BY revision_number DESC LIMIT 1",
+       [candidate_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+    if old_version.as_deref()==Some(version_id){return Err(AppError::Validation("Zone already uses this Setup version".into()));}
+    let id=Uuid::new_v4().to_string();
+    let stamp=Utc::now().to_rfc3339();
+    tx.execute(
+      "INSERT INTO candidate_revisions(
+         candidate_revision_id,candidate_id,revision_number,created_at,previous_revision_id,
+         directional_intent,trend_relationship,price_mode,price_from,price_to,reference_price,
+         setup_version_id,required_conditions_json,invalidation_conditions_json,notes,
+         change_type,change_reason,provenance)
+       SELECT ?1,candidate_id,?2,?3,candidate_revision_id,
+         directional_intent,trend_relationship,price_mode,price_from,price_to,reference_price,
+         ?4,required_conditions_json,invalidation_conditions_json,notes,
+         'SETUP_SELECTION',?5,'NATIVE'
+       FROM candidate_revisions WHERE candidate_revision_id=?6",
+       params![id,number+1,stamp,version_id,reason,previous])?;
+    let mut stmt=tx.prepare(
+      "SELECT source_type_id,source_price,direction,numeric_value,occurred_at,note,is_primary,provenance
+       FROM candidate_sources WHERE candidate_id=?1 AND candidate_revision_id=?2 ORDER BY rowid")?;
+    let old=stmt.query_map(params![candidate_id,previous],|r|Ok((
+      r.get::<_,String>(0)?,r.get::<_,Option<f64>>(1)?,r.get::<_,Option<String>>(2)?,
+      r.get::<_,Option<f64>>(3)?,r.get::<_,Option<String>>(4)?,r.get::<_,Option<String>>(5)?,
+      r.get::<_,i64>(6)?,r.get::<_,String>(7)?)))?.collect::<Result<Vec<_>,_>>()?;
+    drop(stmt);
+    for (source,price,direction,value,observed,note,primary,provenance) in old {
+      tx.execute(
+        "INSERT INTO candidate_sources(candidate_source_id,candidate_id,candidate_revision_id,source_type_id,source_price,direction,numeric_value,occurred_at,note,is_primary,provenance)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+        params![Uuid::new_v4().to_string(),candidate_id,id,source,price,direction,value,observed,note,primary,provenance])?;
+    }
+    tx.commit()?;
+    Ok(id)
+}
+
 pub fn link_closed_trade(conn:&Connection,trade_id:&str,version_id:&str,link_note:Option<String>)
  -> Result<(),AppError>{
     bounded(&link_note,500,"Attribution note")?;
