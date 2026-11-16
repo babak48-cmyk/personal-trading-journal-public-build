@@ -13,6 +13,8 @@ on:
       - app/src/SetupPlaybookCandidatePanel.tsx
       - app/src/SetupPlaybookWorkspace.tsx
       - app/src/ZoneSetupGuide.tsx
+      - app/src-tauri/tauri.group10.conf.json
+      - app/scripts/verify-group10-isolation.mjs
       - app/src/NinjaTraderImportReadinessPanel.tsx
       - app/src/setupPlaybookCandidate.ts
       - app/src/setupPlaybookCandidate.test.ts
@@ -98,6 +100,9 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Verify Group 10 isolated Setup DEMO identity
+        if: github.ref_name == 'feature/ptj-group10-versioned-playbook-2026-11-16'
+        run: node scripts/verify-group10-isolation.mjs
       - name: Check independent Package C DEMO identity and app-data source
         if: github.ref_name == 'feature/ptj-package-c-audited-corrections-2026-11-15'
         run: node scripts/verify-package-c-isolation.mjs
