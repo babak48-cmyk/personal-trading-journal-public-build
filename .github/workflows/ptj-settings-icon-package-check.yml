@@ -6,6 +6,7 @@ on:
       - feature/ptj-settings-from-accepted-demo-2026-11-14
       - feature/ptj-package-c-audited-corrections-2026-11-15
       - feature/ptj-backup-and-next-roadmap-2026-11-16
+      - feature/ptj-group10-versioned-playbook-2026-11-16
     paths:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
@@ -14,6 +15,8 @@ on:
       - app/src/setupPlaybookCandidate.ts
       - app/src/setupPlaybookCandidate.test.ts
       - app/src-tauri/src/import_readiness.rs
+      - app/src-tauri/src/setup_playbook.rs
+      - app/src-tauri/migrations/011_setup_playbook.sql
       - app/src/services/localApi.ts
       - app/src-tauri/src/commands.rs
       - app/src/AuditedFillCorrectionPanel.tsx
