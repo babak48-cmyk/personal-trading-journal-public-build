@@ -36,7 +36,7 @@ export type ConfirmInitialPlanInput = {
   session_id: string; initial_bias: 'LONG'|'SHORT'|'NEUTRAL'|'MIXED'|'UNKNOWN'; market_posture?: string|null; main_scenario?: string|null; alternative_scenario?: string|null;
   expected_context: string[]; scenario_invalidation?: string|null; things_not_to_do: string[]; max_daily_risk?: number|null; max_daily_risk_unit?: 'USD'|'PERCENT'|'R'|null; max_trades?: number|null; pre_session_state?:string|null; pre_session_state_intensity?:number|null; candidates: CandidateDraftInput[];
 };
-export type CurrentCandidate = { candidate_id:string; label?:string|null; directional_intent:string; trend_relationship?:string|null; price_mode:string; price_from?:number|null; price_to?:number|null; reference_price?:number|null; required_conditions:string[]; invalidation_conditions:string[]; notes?:string|null; current_status:string; sources:string[]; source_type_ids:string[] };
+export type CurrentCandidate = { setup_version_id?:string|null; candidate_id:string; label?:string|null; directional_intent:string; trend_relationship?:string|null; price_mode:string; price_from?:number|null; price_to?:number|null; reference_price?:number|null; required_conditions:string[]; invalidation_conditions:string[]; notes?:string|null; current_status:string; sources:string[]; source_type_ids:string[] };
 export type CurrentPlan = { session_id:string; revision_id:string; revision_number:number; created_at:string; initial_bias:string; market_posture?:string|null; main_scenario?:string|null; alternative_scenario?:string|null; candidates:CurrentCandidate[] };
 export type CreatePlanRevisionInput = { session_id:string; initial_bias?:string|null; market_posture?:string|null; main_scenario?:string|null; alternative_scenario?:string|null; why_changed:string; change_type:string; new_evidence_summary?:string|null };
 export type ReviseCandidateInput = { candidate_id:string; directional_intent:string; trend_relationship?:string|null; price_mode:string; price_from?:number|null; price_to?:number|null; reference_price?:number|null; required_conditions:string[]; invalidation_conditions:string[]; notes?:string|null; change_type:string; change_reason:string; sources:CandidateSourceInput[] };
@@ -240,6 +240,7 @@ export const localApi = {
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
   inspectNinjaTraderCsvHeaders: (path:string) => invoke<NinjaTraderCsvReadiness>('inspect_ninjatrader_csv_headers',{path}),
   listSetupVersions: () => invoke<SetupVersion[]>('list_setup_versions'),
+  assignSetupToZone: (candidateId:string,versionId:string,reason:string) => invoke<string>('assign_setup_to_zone',{candidateId,versionId,reason}),
   saveSetupVersion: (input:SaveSetupVersionInput) => invoke<SetupVersion>('save_setup_version',{input}),
   deactivateSetup: (setupId:string) => invoke<void>('deactivate_setup',{setupId}),
   linkSetupTrade: (tradeId:string,versionId:string,linkNote:string|null) => invoke<void>('link_setup_trade',{tradeId,versionId,linkNote}),
