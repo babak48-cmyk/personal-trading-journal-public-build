@@ -404,10 +404,10 @@ mod tests{
         drop(conn);
         let archive=backup::create_backup(&paths).unwrap();
         let info=restore::validate_backup(&archive).unwrap();
-        assert_eq!(info.schema_version,10);
+        assert_eq!(info.schema_version,11);
         let staged=restore::restore_to_staging(&paths,&archive).unwrap();
         let restored=rusqlite::Connection::open(staged.join("database.sqlite")).unwrap();
-        assert_eq!(db::schema_version(&restored).unwrap(),10);
+        assert_eq!(db::schema_version(&restored).unwrap(),11);
         assert_eq!(verify_all_correction_chains(&restored).unwrap(),1);
         let original:f64=restored.query_row("SELECT price FROM execution_fills WHERE execution_id='exit'",
             [],|r|r.get(0)).unwrap();
@@ -438,9 +438,9 @@ mod tests{
         let mut db=Connection::open_in_memory().unwrap();
         db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
         db::migrate(&db).unwrap();
-        assert_eq!(db::schema_version(&db).unwrap(),10);
+        assert_eq!(db::schema_version(&db).unwrap(),11);
         db::migrate(&db).unwrap();
-        assert_eq!(db::schema_version(&db).unwrap(),10);
+        assert_eq!(db::schema_version(&db).unwrap(),11);
         db.execute_batch("
           INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','test','2026-11-15');
           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value) VALUES('i','w','ES',0.25,50);
