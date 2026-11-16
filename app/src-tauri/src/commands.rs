@@ -681,6 +681,14 @@ pub fn record_fill_correction(app:AppHandle,input:crate::fill_corrections::FillC
     crate::fill_corrections::record_fill_correction(&mut conn,input)
 }
 
+/// Header-only, user-selected CSV introspection. No journal writes and no
+/// implied NinjaTrader mapping; this is NOT an import command.
+#[tauri::command]
+pub fn inspect_ninjatrader_csv_headers(path:String)
+    ->Result<crate::import_readiness::CsvReadinessReport,AppError>{
+    crate::import_readiness::inspect_execution_csv(std::path::Path::new(&path))
+}
+
 #[tauri::command]
 pub fn list_cross_session_pending_reviews(app: AppHandle) -> Result<Vec<repository::CrossSessionPendingReviewDto>, AppError> {
     let paths=AppPaths::from_app(&app)?;
