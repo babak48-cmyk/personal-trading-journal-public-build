@@ -254,8 +254,10 @@ pub fn setup_performance(conn:&Connection)->Result<Vec<SetupPerformance>,AppErro
     let mut out=Vec::new();
     for v in list_versions(conn)?.into_iter().filter(|v|v.is_approved){
         let mut stmt=conn.prepare(
-           "SELECT trade_id FROM trades WHERE setup_version_id=?1
-            UNION SELECT trade_id FROM setup_trade_links WHERE version_id=?1")?;
+           "SELECT trade_id FROM trades WHERE setup_version_id=?1 AND status='CLOSED'
+            UNION SELECT l.trade_id FROM setup_trade_links l
+              JOIN trades t ON t.trade_id=l.trade_id
+              WHERE l.version_id=?1 AND t.status='CLOSED'")?;
         let ids=stmt.query_map([&v.version_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
         let mut eligible=0;let mut sum=0.0;let mut wins=0;
         for id in &ids{
