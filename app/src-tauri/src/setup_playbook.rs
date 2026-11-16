@@ -276,6 +276,42 @@ mod tests {
  use super::*;
  use crate::{db,repository};
  #[test]
+ fn planned_zone_setup_version_is_snapshotted_by_decision_and_trade(){
+    let mut c=Connection::open_in_memory().unwrap();
+    c.execute_batch("PRAGMA foreign_keys=ON").unwrap();db::migrate(&c).unwrap();
+    repository::ensure_default_workspace(&c).unwrap();
+    c.execute_batch("INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at) VALUES ('s','default-workspace','instrument-ES','2026-11-16','DEMO','now','ACTIVE','now','now');
+      INSERT INTO session_plan_revisions(revision_id,session_id,revision_number,revision_type,created_at) VALUES ('p','s',1,'INITIAL','now');
+      INSERT INTO candidates(candidate_id,session_id,instrument_id,identified_when,created_at,created_from_plan_revision_id) VALUES('z','s','instrument-ES','PRE_SESSION','now','p');
+      INSERT INTO candidate_revisions(candidate_revision_id,candidate_id,revision_number,created_at,directional_intent,price_mode,change_type) VALUES('r1','z',1,'now','LONG','RANGE','INITIAL');
+      INSERT INTO candidate_status_events(status_event_id,candidate_id,occurred_at,status) VALUES('st','z','now','PLANNED');").unwrap();
+    let inp=|id:Option<String>|SaveSetupVersionInput{
+      setup_id:id,name:"Zone rejection".into(),source_trade_id:None,
+      market_context:Some("Rejection".into()),zone_location:Some("Value low".into()),
+      prerequisites:Some("Preselected Zone".into()),entry_triggers:Some("Observed reclaim".into()),
+      supporting_evidence:Some("DOM or Delta".into()),contrary_evidence:Some("Acceptance lower".into()),
+      thesis_invalidation:Some("Thesis no longer valid".into()),notes:None,
+      evidence_priorities:vec![],approve:true,
+    };
+    let a=save_version(&mut c,inp(None)).unwrap();
+    let b=save_version(&mut c,inp(Some(a.setup_id.clone()))).unwrap();
+    let zone_revision=assign_setup_to_zone(&mut c,"z",&a.version_id,"Explicit plan selection").unwrap();
+    let chosen:String=c.query_row("SELECT setup_version_id FROM candidate_revisions WHERE candidate_revision_id=?1",[&zone_revision],|r|r.get(0)).unwrap();
+    assert_eq!(chosen,a.version_id);
+    c.execute("INSERT INTO candidate_decisions(decision_id,candidate_id,session_id,occurred_at,decision_type,intended_direction,based_on_candidate_revision_id) VALUES('d','z','s','now','TRADE','LONG',?1)",[&zone_revision]).unwrap();
+    let trade=repository::create_trade_with_entry(&mut c,repository::CreateTradeExecutionInput{
+      decision_id:"d".into(),entry_price:5000.0,stop_price:4996.0,
+      quantity:1.0,order_type:None,planned_target_price:None,commission:Some(0.0),fees:Some(0.0),
+    }).unwrap();
+    let recorded:String=c.query_row("SELECT setup_version_id FROM trades WHERE trade_id=?1",[&trade.metrics.trade_id],|r|r.get(0)).unwrap();
+    assert_eq!(recorded,a.version_id);
+    let newer=assign_setup_to_zone(&mut c,"z",&b.version_id,"Changed plan after first trade").unwrap();
+    assert_ne!(newer,zone_revision);
+    let persisted:String=c.query_row("SELECT setup_version_id FROM trades WHERE trade_id=?1",[&trade.metrics.trade_id],|r|r.get(0)).unwrap();
+    assert_eq!(persisted,a.version_id,"Later revisions cannot rewrite the Setup actually captured at Decision time");
+    assert_eq!(db::integrity_check(&c).unwrap(),"ok");
+ }
+ #[test]
  fn versions_are_immutable_and_group_metrics_do_not_invent_r(){
     let mut c=Connection::open_in_memory().unwrap();
     c.execute_batch("PRAGMA foreign_keys=ON").unwrap();db::migrate(&c).unwrap();
