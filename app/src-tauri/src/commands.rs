@@ -690,6 +690,41 @@ pub fn inspect_ninjatrader_csv_headers(path:String)
 }
 
 #[tauri::command]
+pub fn list_setup_versions(app:AppHandle)
+ -> Result<Vec<crate::setup_playbook::SetupVersion>,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let c=db::open_database(&paths.database())?;
+ crate::setup_playbook::list_versions(&c)
+}
+#[tauri::command]
+pub fn save_setup_version(app:AppHandle,input:crate::setup_playbook::SaveSetupVersionInput)
+ -> Result<crate::setup_playbook::SetupVersion,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let mut c=db::open_database(&paths.database())?;
+ crate::setup_playbook::save_version(&mut c,input)
+}
+#[tauri::command]
+pub fn deactivate_setup(app:AppHandle,setup_id:String)->Result<(),AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let c=db::open_database(&paths.database())?;
+ crate::setup_playbook::deactivate(&c,&setup_id)
+}
+#[tauri::command]
+pub fn link_setup_trade(app:AppHandle,trade_id:String,version_id:String,link_note:Option<String>)
+ -> Result<(),AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let c=db::open_database(&paths.database())?;
+ crate::setup_playbook::link_closed_trade(&c,&trade_id,&version_id,link_note)
+}
+#[tauri::command]
+pub fn setup_playbook_performance(app:AppHandle)
+ -> Result<Vec<crate::setup_playbook::SetupPerformance>,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let c=db::open_database(&paths.database())?;
+ crate::setup_playbook::setup_performance(&c)
+}
+
+#[tauri::command]
 pub fn list_cross_session_pending_reviews(app: AppHandle) -> Result<Vec<repository::CrossSessionPendingReviewDto>, AppError> {
     let paths=AppPaths::from_app(&app)?;
     let conn=db::open_database(&paths.database())?;
