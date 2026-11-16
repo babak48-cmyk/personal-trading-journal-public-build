@@ -5,6 +5,7 @@ on:
     branches:
       - feature/ptj-settings-from-accepted-demo-2026-11-14
       - feature/ptj-package-c-audited-corrections-2026-11-15
+      - feature/ptj-backup-and-next-roadmap-2026-11-16
     paths:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
