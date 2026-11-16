@@ -11,6 +11,7 @@ on:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
       - app/src/SetupPlaybookCandidatePanel.tsx
+      - app/src/SetupPlaybookWorkspace.tsx
       - app/src/NinjaTraderImportReadinessPanel.tsx
       - app/src/setupPlaybookCandidate.ts
       - app/src/setupPlaybookCandidate.test.ts
