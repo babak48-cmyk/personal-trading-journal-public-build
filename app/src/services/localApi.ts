@@ -148,8 +148,8 @@ export type SaveSetupVersionInput = {
   thesis_invalidation:string|null;notes:string|null;
   evidence_priorities:SetupEvidencePriority[];approve:boolean;
 };
-export type SetupVersion = Omit<SaveSetupVersionInput,'approve'> & {
-  version_id:string;version_number:number;is_active:boolean;is_approved:boolean;
+export type SetupVersion = Omit<SaveSetupVersionInput,'approve'|'setup_id'> & {
+  setup_id:string;version_id:string;version_number:number;is_active:boolean;is_approved:boolean;
   created_at:string;
 };
 export type SetupPerformance = {
