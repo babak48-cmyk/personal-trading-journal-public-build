@@ -155,7 +155,7 @@ mod custom_field_schema_tests {
         let before_sessions:i64 = conn.query_row("SELECT count(*) FROM sessions",[],|r|r.get(0)).unwrap();
         let before_trades:i64 = conn.query_row("SELECT count(*) FROM trades",[],|r|r.get(0)).unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),10);
+        assert_eq!(schema_version(&conn).unwrap(),11);
         assert_eq!(conn.query_row("SELECT session_date FROM sessions WHERE session_id='s-test'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-10-15");
         assert_eq!(conn.query_row("SELECT direction FROM trades WHERE trade_id='t-test'",[],|r|r.get::<_,String>(0)).unwrap(),"LONG");
         assert_eq!(conn.query_row("SELECT price,commission FROM execution_fills WHERE execution_id='fill-test'",[],|r|Ok((r.get::<_,f64>(0)?,r.get::<_,f64>(1)?))).unwrap(),before_fill);
@@ -164,7 +164,7 @@ mod custom_field_schema_tests {
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),10);
+        assert_eq!(schema_version(&conn).unwrap(),11);
     }
     #[test]
     fn custom_field_schema_v9_transaction_failure_rolls_back_on_disposable_v8() {
@@ -188,7 +188,7 @@ mod custom_field_schema_tests {
     fn custom_field_schema_v9_preserves_immutable_option_snapshots() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 11);
         conn.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label) VALUES('context','session-review','SINGLE_SELECT','Context')",[]).unwrap();
         conn.execute("INSERT INTO custom_field_options(option_id,field_id,label) VALUES('trend','context','Trending')",[]).unwrap();
         conn.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type) VALUES('e1','context','session-review','demo-session','SINGLE_SELECT')",[]).unwrap();
@@ -255,7 +255,7 @@ mod audited_correction_migration_gate_tests {
             [],|r|r.get(0)).unwrap();
         assert_eq!(new_tables,0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),10);
+        assert_eq!(schema_version(&conn).unwrap(),11);
         assert_eq!(conn.query_row("SELECT price FROM execution_fills WHERE execution_id='f'",[],|r|r.get::<_,f64>(0)).unwrap(),5000.0);
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
