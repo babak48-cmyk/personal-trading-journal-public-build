@@ -12,6 +12,7 @@ on:
       - app/src/App.tsx
       - app/src/SetupPlaybookCandidatePanel.tsx
       - app/src/SetupPlaybookWorkspace.tsx
+      - app/src/ZoneSetupGuide.tsx
       - app/src/NinjaTraderImportReadinessPanel.tsx
       - app/src/setupPlaybookCandidate.ts
       - app/src/setupPlaybookCandidate.test.ts
