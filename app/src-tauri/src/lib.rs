@@ -9,6 +9,7 @@ mod error;
 mod exports;
 mod fill_corrections;
 mod import_readiness;
+mod setup_playbook;
 mod paths;
 mod repository;
 mod restore;
@@ -173,6 +174,11 @@ pub fn run() {
             commands::add_trade_fill,
             commands::move_trade_stop,
             commands::get_trade_detail,
+            commands::list_setup_versions,
+            commands::save_setup_version,
+            commands::deactivate_setup,
+            commands::link_setup_trade,
+            commands::setup_playbook_performance,
             commands::inspect_ninjatrader_csv_headers,
             commands::list_trade_correction_history,
             commands::preview_fill_correction,
