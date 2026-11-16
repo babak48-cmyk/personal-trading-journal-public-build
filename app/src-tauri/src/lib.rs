@@ -174,6 +174,7 @@ pub fn run() {
             commands::add_trade_fill,
             commands::move_trade_stop,
             commands::get_trade_detail,
+            commands::assign_setup_to_zone,
             commands::list_setup_versions,
             commands::save_setup_version,
             commands::deactivate_setup,
