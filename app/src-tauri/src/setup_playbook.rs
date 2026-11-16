@@ -184,6 +184,12 @@ pub fn link_closed_trade(conn:&Connection,trade_id:&str,version_id:&str,link_not
       "SELECT d.is_approved,s.active FROM setup_playbook_details d JOIN setup_versions v ON v.setup_version_id=d.version_id JOIN setups s ON s.setup_id=v.setup_id WHERE v.setup_version_id=?1",
       [version_id],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
     if ok!=Some((1,1)){return Err(AppError::Validation("Only an approved and active version can be linked".into()));}
+    let existing:Option<String>=conn.query_row(
+        "SELECT setup_version_id FROM trades WHERE trade_id=?1",
+        [trade_id],|r|r.get(0))?;
+    if existing.is_some(){
+        return Err(AppError::Validation("Trade already has an original at-entry SetupVersion; retrospective reassignment prohibited".into()));
+    }
     conn.execute("INSERT INTO setup_trade_links(trade_id,version_id,linked_at,link_note) VALUES (?1,?2,?3,?4)",
        params![trade_id,version_id,Utc::now().to_rfc3339(),link_note])?;
     Ok(())
@@ -191,7 +197,9 @@ pub fn link_closed_trade(conn:&Connection,trade_id:&str,version_id:&str,link_not
 pub fn setup_performance(conn:&Connection)->Result<Vec<SetupPerformance>,AppError>{
     let mut out=Vec::new();
     for v in list_versions(conn)?.into_iter().filter(|v|v.is_approved){
-        let mut stmt=conn.prepare("SELECT trade_id FROM setup_trade_links WHERE version_id=?1")?;
+        let mut stmt=conn.prepare(
+           "SELECT trade_id FROM trades WHERE setup_version_id=?1
+            UNION SELECT trade_id FROM setup_trade_links WHERE version_id=?1")?;
         let ids=stmt.query_map([&v.version_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
         let mut eligible=0;let mut sum=0.0;let mut wins=0;
         for id in &ids{
