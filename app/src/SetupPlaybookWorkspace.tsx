@@ -77,6 +77,10 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  }
  async function save(approve:boolean){
    if(busy)return;
+   if(newEvidence.trim()||evidenceHelp.trim()){
+     setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
+     return;
+   }
    setBusy(true);setStatus('');
    try{
      const result=await localApi.saveSetupVersion({...input,approve});
