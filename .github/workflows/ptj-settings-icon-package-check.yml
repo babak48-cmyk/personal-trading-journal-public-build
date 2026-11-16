@@ -9,6 +9,13 @@ on:
     paths:
       - .github/workflows/ptj-settings-icon-package-check.yml
       - app/src/App.tsx
+      - app/src/SetupPlaybookCandidatePanel.tsx
+      - app/src/NinjaTraderImportReadinessPanel.tsx
+      - app/src/setupPlaybookCandidate.ts
+      - app/src/setupPlaybookCandidate.test.ts
+      - app/src-tauri/src/import_readiness.rs
+      - app/src/services/localApi.ts
+      - app/src-tauri/src/commands.rs
       - app/src/AuditedFillCorrectionPanel.tsx
       - app/src/weeklyLearning.ts
       - app/src/weeklyLearning.test.ts
