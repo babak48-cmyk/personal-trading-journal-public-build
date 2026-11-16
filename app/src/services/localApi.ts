@@ -136,6 +136,12 @@ export type ImportAttachmentInput = { owner_type:'SESSION'|'CANDIDATE'|'DECISION
 export type UpdateAttachmentInput = { attachment_id:string; stage:'PRE_MARKET'|'PRE_ENTRY'|'ENTRY'|'DURING'|'POST_EXIT'|'FOLLOW_UP'|'ORDER_FLOW'|'OTHER'; caption?:string|null };
 export type ReplaceAttachmentFileInput = { attachment_id:string; source_path:string };
 export type ExportResult = { path:string; row_count:number; created_at:string };
+export type NinjaTraderCsvReadiness = {
+  file_name:string; detected_delimiter:string; column_count:number;
+  headers:string[]; ready_for_import:boolean; rows_imported:number;
+  required_next_evidence:string[]; privacy_notice:string;
+};
+
 
 export const localApi = {
   createCustomFieldDefinition: (input:CustomFieldDefinitionInput) => invoke<void>('create_custom_field_definition',{input}),
@@ -211,6 +217,7 @@ export const localApi = {
   addTradeFill: (input:AddTradeFillInput) => invoke<TradeDetail>('add_trade_fill',{input}),
   moveTradeStop: (input:MoveStopInput) => invoke<TradeDetail>('move_trade_stop',{input}),
   getTradeDetail: (tradeId:string) => invoke<TradeDetail>('get_trade_detail',{tradeId}),
+  inspectNinjaTraderCsvHeaders: (path:string) => invoke<NinjaTraderCsvReadiness>('inspect_ninjatrader_csv_headers',{path}),
   listTradeCorrectionHistory: (tradeId:string) => invoke<CorrectionHistoryEvent[]>('list_trade_correction_history',{tradeId}),
   previewFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionPreview>('preview_fill_correction',{input}),
   recordFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionReceipt>('record_fill_correction',{input}),
