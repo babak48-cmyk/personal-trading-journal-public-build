@@ -1,6 +1,6 @@
 //! Group 11, evidence gate ONLY. Never writes to SQLite, never imports fills,
 //! and makes no assumption about the user's NinjaTrader export schema.
-use std::{fs::File,io::Read,path::Path};
+use std::{fs::File,io::{BufRead,BufReader,Read},path::Path};
 use serde::Serialize;
 use crate::error::AppError;
 
@@ -53,8 +53,11 @@ pub fn inspect_execution_csv(path:&Path)->Result<CsvReadinessReport,AppError>{
     if !meta.is_file()||meta.len()==0||meta.len()>10_000_000{
         return Err(AppError::Validation("CSV file must be nonempty and at most 10 MB".into()));
     }
+    // Stop reading at the header newline, even when the selected file has
+    // thousands of private execution rows. The hard 32-KB limit prevents
+    // oversized headers and does not copy trade-body records into memory.
     let mut bytes=Vec::new();
-    File::open(path)?.take(32768).read_to_end(&mut bytes)?;
+    BufReader::new(File::open(path)?.take(32768)).read_until(b'\n',&mut bytes)?;
     let nl=bytes.iter().position(|b|*b==b'\n').ok_or_else(||AppError::Validation(
         "No complete header record in first 32 KB; no import".into()))?;
     let first=std::str::from_utf8(&bytes[..=nl])
