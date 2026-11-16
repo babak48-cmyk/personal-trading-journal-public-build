@@ -3,11 +3,6 @@ name: PTJ Group 10 versioned Setup Playbook isolated NSIS (release gate)
 # installer on the previously accepted production/Package B/Package C paths.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/ptj-group10-versioned-playbook-2026-11-16
-    paths:
-      - .github/workflows/ptj-group10-demo-installer.yml
 permissions:
   contents: read
 jobs:
