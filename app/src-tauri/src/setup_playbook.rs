@@ -95,27 +95,41 @@ pub fn save_version(conn:&mut Connection,input:SaveSetupVersionInput)->Result<Se
     let now=Utc::now().to_rfc3339();
     let tx=conn.transaction()?;
     let setup_id=if let Some(ref existing)=input.setup_id {
-       let count:i64=tx.query_row("SELECT COUNT(*) FROM setup_playbooks WHERE setup_id=?1",[existing],|r|r.get(0))?;
-       if count!=1{return Err(AppError::Validation("Unknown Setup ID; cannot fabricate a historical version".into()));}
+       let count:i64=tx.query_row("SELECT COUNT(*) FROM setups WHERE setup_id=?1 AND active=1",[existing],|r|r.get(0))?;
+       if count!=1{return Err(AppError::Validation("Unknown or inactive Setup ID".into()));}
        existing.clone()
     }else{Uuid::new_v4().to_string()};
     let revision:i64=tx.query_row(
-        "SELECT COALESCE(MAX(version_number),0)+1 FROM setup_versions WHERE setup_id=?1",
+        "SELECT COUNT(*)+1 FROM setup_versions WHERE setup_id=?1",
         [&setup_id],|r|r.get(0))?;
     if input.setup_id.is_none(){
-        tx.execute("INSERT INTO setup_playbooks(setup_id,name,is_active,created_at,updated_at)
-                    VALUES (?1,?2,1,?3,?3)",params![setup_id,input.name.trim(),now])?;
+        tx.execute("INSERT INTO setups(setup_id,workspace_id,name,active,user_defined)
+                    VALUES (?1,'default-workspace',?2,1,1)",
+                   params![setup_id,input.name.trim()])?;
     }else{
-        tx.execute("UPDATE setup_playbooks SET name=?2,updated_at=?3 WHERE setup_id=?1",
-                   params![setup_id,input.name.trim(),now])?;
+        // Historical name is snapshotted per version in setup_playbook_details.
+        // The canonical mutable display name is only updated for new future use.
+        tx.execute("UPDATE setups SET name=?2 WHERE setup_id=?1",
+                   params![setup_id,input.name.trim()])?;
     }
     let id=Uuid::new_v4().to_string();
+    // Use the PRE-EXISTING canonical SetupVersion identity so that Zone and
+    // Trade setup_version_id references remain valid and referentially stable.
     tx.execute("INSERT INTO setup_versions(
-      version_id,setup_id,version_number,created_at,source_trade_id,
+      setup_version_id,setup_id,version_label,status,effective_from,
+      location_requirements_json,context_requirements_json,trigger_definition,
+      confirmation_requirements_json,invalidation_definition,notes)
+      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+      params![id,setup_id,format!("v{revision}"),
+       if input.approve{"ACTIVE"}else{"DRAFT"},now,
+       input.zone_location,input.market_context,input.entry_triggers,
+       input.supporting_evidence,input.thesis_invalidation,input.notes])?;
+    tx.execute("INSERT INTO setup_playbook_details(
+      version_id,version_number,created_at,name_snapshot,source_trade_id,
       market_context,zone_location,prerequisites,entry_triggers,supporting_evidence,
       contrary_evidence,thesis_invalidation,notes,is_approved)
       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
-      params![id,setup_id,revision,now,input.source_trade_id,input.market_context,
+      params![id,revision,now,input.name.trim(),input.source_trade_id,input.market_context,
       input.zone_location,input.prerequisites,input.entry_triggers,input.supporting_evidence,
       input.contrary_evidence,input.thesis_invalidation,input.notes,i64::from(input.approve)])?;
     for (index,p) in input.evidence_priorities.iter().enumerate(){
@@ -128,11 +142,12 @@ pub fn save_version(conn:&mut Connection,input:SaveSetupVersionInput)->Result<Se
 }
 pub fn get_version(conn:&Connection,id:&str)->Result<SetupVersion,AppError>{
     let mut v=conn.query_row(
-      "SELECT p.setup_id,v.version_id,v.version_number,p.name,p.is_active,v.is_approved,
-       v.created_at,v.source_trade_id,v.market_context,v.zone_location,v.prerequisites,
-       v.entry_triggers,v.supporting_evidence,v.contrary_evidence,v.thesis_invalidation,v.notes
-       FROM setup_versions v JOIN setup_playbooks p ON p.setup_id=v.setup_id
-       WHERE v.version_id=?1",
+      "SELECT v.setup_id,v.setup_version_id,d.version_number,d.name_snapshot,s.active,d.is_approved,
+       d.created_at,d.source_trade_id,d.market_context,d.zone_location,d.prerequisites,
+       d.entry_triggers,d.supporting_evidence,d.contrary_evidence,d.thesis_invalidation,d.notes
+       FROM setup_versions v JOIN setups s ON s.setup_id=v.setup_id
+       JOIN setup_playbook_details d ON d.version_id=v.setup_version_id
+       WHERE v.setup_version_id=?1",
        [id],|r|Ok(SetupVersion{
          setup_id:r.get(0)?,version_id:r.get(1)?,version_number:r.get(2)?,
          name:r.get(3)?,is_active:r.get::<_,i64>(4)?!=0,is_approved:r.get::<_,i64>(5)?!=0,
@@ -149,13 +164,13 @@ pub fn get_version(conn:&Connection,id:&str)->Result<SetupVersion,AppError>{
     Ok(v)
 }
 pub fn list_versions(conn:&Connection)->Result<Vec<SetupVersion>,AppError>{
-    let mut stmt=conn.prepare("SELECT version_id FROM setup_versions ORDER BY created_at DESC,version_number DESC")?;
+    let mut stmt=conn.prepare("SELECT d.version_id FROM setup_playbook_details d ORDER BY d.created_at DESC,d.version_number DESC")?;
     let ids=stmt.query_map([],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
     ids.iter().map(|id|get_version(conn,id)).collect()
 }
 pub fn deactivate(conn:&Connection,id:&str)->Result<(),AppError>{
-    let affected=conn.execute("UPDATE setup_playbooks SET is_active=0,updated_at=?2 WHERE setup_id=?1",
-        params![id,Utc::now().to_rfc3339()])?;
+    let affected=conn.execute("UPDATE setups SET active=0 WHERE setup_id=?1",
+        params![id])?;
     if affected!=1{return Err(AppError::Validation("Unknown Setup ID".into()));}
     Ok(())
 }
@@ -166,7 +181,7 @@ pub fn link_closed_trade(conn:&Connection,trade_id:&str,version_id:&str,link_not
         [trade_id],|r|r.get(0)).optional()?;
     if state.as_deref()!=Some("CLOSED"){return Err(AppError::Validation("Only a CLOSED Trade can be attributed retrospectively".into()));}
     let ok:Option<(i64,i64)>=conn.query_row(
-      "SELECT v.is_approved,p.is_active FROM setup_versions v JOIN setup_playbooks p ON p.setup_id=v.setup_id WHERE v.version_id=?1",
+      "SELECT d.is_approved,s.active FROM setup_playbook_details d JOIN setup_versions v ON v.setup_version_id=d.version_id JOIN setups s ON s.setup_id=v.setup_id WHERE v.setup_version_id=?1",
       [version_id],|r|Ok((r.get(0)?,r.get(1)?))).optional()?;
     if ok!=Some((1,1)){return Err(AppError::Validation("Only an approved and active version can be linked".into()));}
     conn.execute("INSERT INTO setup_trade_links(trade_id,version_id,linked_at,link_note) VALUES (?1,?2,?3,?4)",
