@@ -137,35 +137,45 @@ export function App(){
   const [backupBusy,setBackupBusy]=useState(false);
   const [backupResult,setBackupResult]=useState('');
   const [backupDestination,setBackupDestination]=useState<string|null>(null);
+  const [backupPathDraft,setBackupPathDraft]=useState('');
   const [backupFolderBusy,setBackupFolderBusy]=useState(false);
+  const [backupLocationFeedback,setBackupLocationFeedback]=useState('');
   useEffect(()=>{
     let mounted=true;
-    localApi.getBackupDestination().then(dir=>{if(mounted)setBackupDestination(dir);})
-      .catch(e=>{if(mounted)setMessage('Backup destination preference unavailable: '+String(e));});
+    localApi.getBackupDestination().then(dir=>{
+      if(mounted){setBackupDestination(dir);setBackupPathDraft(dir??'');}
+    }).catch(e=>{if(mounted)setBackupLocationFeedback('Backup destination preference unavailable: '+String(e));});
     return ()=>{mounted=false;};
   },[]);
+  async function saveBackupLocation(destination:string|null){
+    if(backupFolderBusy||backupBusy)return;
+    setBackupFolderBusy(true);setBackupLocationFeedback('');
+    try{
+      // Persisted independent reread; never claim success from an unchecked
+      // setter response. No backup is created or overwritten by this action.
+      await localApi.setBackupDestination(destination);
+      const persisted=await localApi.getBackupDestination();
+      if(persisted!==(destination?.trim()||null)){
+        throw new Error('Folder save could not be independently verified. Reopen Safety before backing up.');
+      }
+      setBackupDestination(persisted);setBackupPathDraft(persisted??'');
+      setBackupLocationFeedback(persisted
+        ? 'Verified destination: '+persisted+'. Each backup also keeps an internal safety copy.'
+        : 'Verified: app-managed backup folder selected.');
+    }catch(e){
+      setBackupLocationFeedback('Backup folder NOT confirmed: '+String(e));
+      try{const persisted=await localApi.getBackupDestination();setBackupDestination(persisted);setBackupPathDraft(persisted??'');}
+      catch{/* Preserve failure until user can inspect persistence. */}
+    }finally{setBackupFolderBusy(false);}
+  }
   async function chooseBackupFolder(){
     if(backupFolderBusy||backupBusy)return;
-    setBackupFolderBusy(true);
     try{
-      const selected=await open({directory:true,multiple:false,title:'Select the folder for your backup copies'});
-      if(typeof selected!=='string')return;
-      await localApi.setBackupDestination(selected);
-      setBackupDestination(selected);
-      setMessage('Backup destination saved. Internal safety backups are retained.');
-    }catch(e){setMessage('Could not change backup destination: '+String(e));}
-    finally{setBackupFolderBusy(false);}
+      const selected=await open({directory:true,multiple:false,title:'Choose an EXISTING backup folder on any accessible Windows drive'});
+      if(typeof selected==='string')await saveBackupLocation(selected);
+    }catch(e){setBackupLocationFeedback('Windows folder picker failed; enter an existing full folder path below. '+String(e));}
   }
-  async function resetBackupFolder(){
-    if(backupFolderBusy||backupBusy)return;
-    setBackupFolderBusy(true);
-    try{
-      await localApi.setBackupDestination(null);
-      setBackupDestination(null);
-      setMessage('Backup destination reset to the app-managed folder.');
-    }catch(e){setMessage('Could not reset backup destination: '+String(e));}
-    finally{setBackupFolderBusy(false);}
-  }
+  async function resetBackupFolder(){await saveBackupLocation(null);}
   async function createBackupWithFeedback(){
     if(backupBusy)return;
     setBackupBusy(true);setBackupResult('');
@@ -1775,7 +1785,7 @@ export function App(){
         <button className={showAnalysis?'activeMode':''} onClick={openAnalysis}>Analyze</button>
         <button className={showSafety?'activeMode':''} onClick={async()=>{setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}}>Safety</button>
         <button className={showSettings?'activeMode':''} onClick={()=>{setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}>Settings</button>
-        <button onClick={createBackupWithFeedback} disabled={backupBusy}>{backupBusy?'Creating backup…':'Create backup'}</button>
+        <button onClick={async()=>{setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}} disabled={backupBusy}>Backup location &amp; create</button>
         <div className="panel" aria-label="Windows quick shortcut diagnosis" style={{padding:9,overflowWrap:'anywhere'}}>
           <strong>Quick shortcut</strong>
           <p className="subtle">{quickShortcutReport===null?'Checking Windows registration…':quickShortcutReport.registered?'Ctrl+Alt+J: registered with Windows':'Ctrl+Alt+J: unavailable'}</p>
