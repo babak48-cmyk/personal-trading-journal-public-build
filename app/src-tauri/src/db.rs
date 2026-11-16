@@ -261,3 +261,50 @@ mod audited_correction_migration_gate_tests {
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
     }
 }
+
+
+#[cfg(test)]
+mod setup_playbook_v11_migration_tests {
+    use super::*;
+    #[test]
+    fn canonical_v10_setup_ids_are_preserved_and_injected_migration_failure_rolls_back(){
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys=ON;
+          CREATE TABLE schema_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL);
+          INSERT INTO schema_meta(id,schema_version) VALUES(1,0);").unwrap();
+        for (index,sql) in [MIGRATION_001,MIGRATION_002,MIGRATION_003,MIGRATION_004,MIGRATION_005,
+            MIGRATION_006,MIGRATION_007,MIGRATION_008,MIGRATION_009,MIGRATION_010].iter().enumerate(){
+            let tx=c.unchecked_transaction().unwrap();
+            tx.execute_batch(sql).unwrap();
+            tx.execute("UPDATE schema_meta SET schema_version=?1",[(index+1) as i64]).unwrap();
+            tx.commit().unwrap();
+        }
+        c.execute_batch("
+          INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Original','now');
+          INSERT INTO setups(setup_id,workspace_id,name,active,user_defined) VALUES('original-setup','w','Historical','1','1');
+          INSERT INTO setup_versions(setup_version_id,setup_id,version_label,status)
+             VALUES('original-version','original-setup','v1','ACTIVE');").unwrap();
+        assert_eq!(schema_version(&c).unwrap(),10);
+        let failed=(||->Result<(),rusqlite::Error>{
+            let tx=c.unchecked_transaction()?;
+            tx.execute_batch(MIGRATION_011)?;
+            tx.execute("INSERT INTO intentionally_missing_table VALUES(1)",[])?;
+            tx.execute("UPDATE schema_meta SET schema_version=11",[])?;
+            tx.commit()
+        })();
+        assert!(failed.is_err());
+        assert_eq!(schema_version(&c).unwrap(),10);
+        let details:i64=c.query_row(
+           "SELECT COUNT(*) FROM sqlite_master WHERE name='setup_playbook_details'",[],|r|r.get(0)).unwrap();
+        assert_eq!(details,0);
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),11);
+        let saved:String=c.query_row("SELECT setup_version_id FROM setup_versions WHERE setup_id='original-setup'",[],
+            |r|r.get(0)).unwrap();
+        assert_eq!(saved,"original-version");
+        let version_count:i64=c.query_row("SELECT COUNT(*) FROM setup_versions",[],|r|r.get(0)).unwrap();
+        assert_eq!(version_count,1);
+        assert_eq!(integrity_check(&c).unwrap(),"ok");
+        assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
