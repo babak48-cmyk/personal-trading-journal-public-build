@@ -27,6 +27,7 @@ import { filterCrossSessionPendingReviews } from './crossSessionReviewQueue';
 import { findClosedReviewTarget } from './reviewBacklogTarget';
 import { AuditedFillCorrectionPanel } from './AuditedFillCorrectionPanel';
 import { SetupPlaybookCandidatePanel } from './SetupPlaybookCandidatePanel';
+import { NinjaTraderImportReadinessPanel } from './NinjaTraderImportReadinessPanel';
 import { summarizeSessionTradeExecution } from './tradeSessionPulse';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
 import {isCustomFieldPresented,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
@@ -2169,6 +2170,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   </section>
   <div className="panel"><div className="panelTitle"><div><h2>Trade journal</h2><p className="subtle">Click a row to open the underlying trade. Analysis never edits historical records.</p></div></div>{analyticsLoading?<p className="subtle">Loading trade rows…</p>:analyticsError?<p role="alert" className="subtle">Trade journal rows unavailable; retry Apply filters.</p>:rows.length===0?<p className="subtle">No trades match the applied filters.</p>:<div className="tradeList">{rows.map(r=><button className="tradeRow analyticsRow" key={r.trade_id} onClick={()=>openTrade(r.trade_id)}><b>{r.session_date} · {r.instrument_symbol} · {r.direction}</b><span>{r.candidate_label||'Unplanned / unlabeled'}</span><span>{r.decision_quality?`DQ ${r.decision_quality}`:'DQ —'} · {r.rule_status}</span><span>{r.level_source_snapshot_missing?'Level provenance unknown (decision snapshot missing)':(r.level_sources.slice(0,3).join(' · ')||'No level source recorded at decision')}</span><span>{r.realized_r==null?'R —':`${r.realized_r.toFixed(2)}R`}</span></button>)}</div>}</div>
   <SetupPlaybookCandidatePanel rows={rows}/>
+  <NinjaTraderImportReadinessPanel/>
   {mistakes.length>0&&<div className="panel"><h2>Most frequent mistakes</h2><div className="tradeList">{mistakes.slice(0,8).map(m=><div className="tradeRow" key={m.mistake_type_id}><b>{m.label}</b><span>{m.count}</span></div>)}</div></div>}
   </>;
 }
