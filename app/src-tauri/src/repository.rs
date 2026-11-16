@@ -212,6 +212,7 @@ pub struct CandidateCurrentDto {
     pub current_status: String,
     pub sources: Vec<String>,
     pub source_type_ids: Vec<String>,
+    pub setup_version_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -739,10 +740,10 @@ pub fn get_current_plan(conn: &Connection, session_id: &str) -> Result<CurrentPl
     let (revision_id, rev_num, created_at, bias, posture, main_scenario, alternative_scenario):(String,i64,String,String,Option<String>,Option<String>,Option<String>) = conn.query_row(
         "SELECT revision_id,revision_number,created_at,COALESCE(initial_bias,'UNKNOWN'),market_posture,main_scenario,alternative_scenario FROM session_plan_revisions WHERE session_id=?1 ORDER BY revision_number DESC LIMIT 1",
         [session_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?)))?;
-    let mut stmt=conn.prepare("SELECT c.candidate_id,c.label,cr.directional_intent,cr.trend_relationship,cr.price_mode,cr.price_from,cr.price_to,cr.reference_price,cr.candidate_revision_id,cr.required_conditions_json,cr.invalidation_conditions_json,cr.notes FROM candidates c JOIN candidate_revisions cr ON cr.candidate_id=c.candidate_id AND cr.revision_number=(SELECT MAX(cr2.revision_number) FROM candidate_revisions cr2 WHERE cr2.candidate_id=c.candidate_id) WHERE c.session_id=?1 AND c.archived_at IS NULL ORDER BY c.created_at")?;
-    let base=stmt.query_map([session_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<f64>>(5)?,r.get::<_,Option<f64>>(6)?,r.get::<_,Option<f64>>(7)?,r.get::<_,String>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let mut stmt=conn.prepare("SELECT c.candidate_id,c.label,cr.directional_intent,cr.trend_relationship,cr.price_mode,cr.price_from,cr.price_to,cr.reference_price,cr.candidate_revision_id,cr.required_conditions_json,cr.invalidation_conditions_json,cr.notes,cr.setup_version_id FROM candidates c JOIN candidate_revisions cr ON cr.candidate_id=c.candidate_id AND cr.revision_number=(SELECT MAX(cr2.revision_number) FROM candidate_revisions cr2 WHERE cr2.candidate_id=c.candidate_id) WHERE c.session_id=?1 AND c.archived_at IS NULL ORDER BY c.created_at")?;
+    let base=stmt.query_map([session_id], |r| Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<f64>>(5)?,r.get::<_,Option<f64>>(6)?,r.get::<_,Option<f64>>(7)?,r.get::<_,String>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?,r.get::<_,Option<String>>(12)?)))?.collect::<Result<Vec<_>,_>>()?;
     let mut candidates=Vec::new();
-    for (id,label,intent,trend,pm,pf,pt,rp,current_revision_id,required_json,invalidation_json,notes) in base {
+    for (id,label,intent,trend,pm,pf,pt,rp,current_revision_id,required_json,invalidation_json,notes,setup_version_id) in base {
         let status:String=conn.query_row("SELECT status FROM candidate_status_events WHERE candidate_id=?1 ORDER BY occurred_at DESC,rowid DESC LIMIT 1",[&id],|r|r.get(0)).optional()?.unwrap_or_else(||"PLANNED".into());
         let mut sstmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_id=?1 AND cs.candidate_revision_id=?2 ORDER BY cs.is_primary DESC,lst.label")?;
         let rows=sstmt.query_map(params![&id,&current_revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
@@ -750,7 +751,7 @@ pub fn get_current_plan(conn: &Connection, session_id: &str) -> Result<CurrentPl
         let sources=rows.into_iter().map(|x|x.1).collect();
         let required_conditions=required_json.as_deref().and_then(|x|serde_json::from_str(x).ok()).unwrap_or_default();
         let invalidation_conditions=invalidation_json.as_deref().and_then(|x|serde_json::from_str(x).ok()).unwrap_or_default();
-        candidates.push(CandidateCurrentDto{candidate_id:id,label,directional_intent:intent,trend_relationship:trend,price_mode:pm,price_from:pf,price_to:pt,reference_price:rp,required_conditions,invalidation_conditions,notes,current_status:status,sources,source_type_ids});
+        candidates.push(CandidateCurrentDto{candidate_id:id,label,directional_intent:intent,trend_relationship:trend,price_mode:pm,price_from:pf,price_to:pt,reference_price:rp,required_conditions,invalidation_conditions,notes,current_status:status,sources,source_type_ids,setup_version_id});
     }
     Ok(CurrentPlanDto{session_id:session_id.to_string(),revision_id,revision_number:rev_num,created_at,initial_bias:bias,market_posture:posture,main_scenario,alternative_scenario,candidates})
 }
@@ -1308,11 +1309,18 @@ pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionIn
     }
     if direction=="LONG" && input.stop_price>=input.entry_price {return Err(AppError::Validation("for a LONG trade, stop must be below entry".into()));}
     if direction=="SHORT" && input.stop_price<=input.entry_price {return Err(AppError::Validation("for a SHORT trade, stop must be above entry".into()));}
+    let at_decision_setup:Option<String>=tx.query_row(
+        "SELECT cr.setup_version_id FROM candidate_decisions d
+         LEFT JOIN candidate_revisions cr ON cr.candidate_revision_id=d.based_on_candidate_revision_id
+         WHERE d.decision_id=?1",
+        [&input.decision_id],|r|r.get(0))?;
     let now=Utc::now().to_rfc3339(); let trade_id=Uuid::new_v4().to_string(); let fill_id=Uuid::new_v4().to_string(); let risk_id=Uuid::new_v4().to_string();
     let side=if direction=="LONG"{"BUY"}else{"SELL"};
     let risk=(input.entry_price-input.stop_price).abs()*point_value*input.quantity;
-    tx.execute("INSERT INTO trades(trade_id,decision_id,session_id,candidate_id,direction,planned_entry_price,planned_stop_price,planned_target_price,status,provenance) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,'OPEN','NATIVE')",
-        params![trade_id,input.decision_id,session_id,candidate_id,direction,input.entry_price,input.stop_price,input.planned_target_price])?;
+    // Snapshot the exact Setup version AT DECISION time. Later Zone revisions
+    // must never silently relabel a saved Trade.
+    tx.execute("INSERT INTO trades(trade_id,decision_id,session_id,candidate_id,setup_version_id,direction,planned_entry_price,planned_stop_price,planned_target_price,status,provenance) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,'OPEN','NATIVE')",
+        params![trade_id,input.decision_id,session_id,candidate_id,at_decision_setup,direction,input.entry_price,input.stop_price,input.planned_target_price])?;
     tx.execute("INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,order_type,commission,fees,source,note) VALUES(?1,?2,?3,'ENTRY',?4,?5,?6,?7,?8,?9,'MANUAL','Initial manual entry')",
         params![fill_id,trade_id,now,side,input.entry_price,input.quantity,input.order_type,input.commission,input.fees])?;
     tx.execute("INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars,provenance) VALUES(?1,?2,?3,'INITIAL',?4,?5,?6,'NATIVE')",
