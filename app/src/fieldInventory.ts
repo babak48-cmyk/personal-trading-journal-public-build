@@ -213,6 +213,7 @@ export function isEditableRequirementControl(id:string):boolean{
 
 /** Controls with an actual form binding; inventory-only fields cannot be toggled yet. */
 export const ACTIVE_VISIBILITY_FIELD_IDS = [
+  'setup.sourceTrade', 'setup.notes', 'setup.evidenceHelp',
   'plan.mainScenario',
   'plan.alternativeScenario',
   'plan.preSessionStateIntensity',
@@ -256,6 +257,7 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
  * Restrict editable text settings to verifiably consumed UI controls.
  * Other inventoried controls remain visible for audit, without fake customization. */
 export const RENDERED_FIELD_TEXT_IDS = [
+  'setup.sourceTrade', 'setup.notes', 'setup.evidenceHelp',
   'attachment.caption',
   'candidate.invalidationConditions',
   'candidate.label',
