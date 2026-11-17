@@ -1130,8 +1130,18 @@ pub struct RiskSnapshotDto {
 }
 
 #[derive(Debug, Serialize)]
+pub struct SetupAtDecisionDto {
+    pub version_id: String,
+    pub name: Option<String>,
+    pub version_number: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct TradeDetailDto {
     pub metrics: TradeMetricsDto,
+    /// Read-only snapshot from the TRADE's stored decision-time version ID,
+    /// never from the latest mutable Zone revision.
+    pub setup_at_decision: Option<SetupAtDecisionDto>,
     pub fills: Vec<ExecutionFillDto>,
     /// Read-only, timestamped risk history. Existing events never rewritten.
     pub risk_snapshots: Vec<RiskSnapshotDto>,
@@ -1409,7 +1419,15 @@ pub fn get_trade_detail(conn:&Connection,trade_id:&str)->Result<TradeDetailDto,A
         fill.fees=effective_fill_number(conn,id,FillField::Fees,fill.fees)?;
     }
     let risk_snapshots=trade_risk_history(conn,trade_id)?;
-    Ok(TradeDetailDto{metrics,fills,risk_snapshots})
+    let setup_at_decision=conn.query_row(
+        "SELECT t.setup_version_id,d.name_snapshot,d.version_number
+         FROM trades t LEFT JOIN setup_playbook_details d ON d.version_id=t.setup_version_id
+         WHERE t.trade_id=?1 AND t.setup_version_id IS NOT NULL",
+        [trade_id],|r|Ok(SetupAtDecisionDto{
+            version_id:r.get(0)?,name:r.get(1)?,version_number:r.get(2)?
+        })
+    ).optional()?;
+    Ok(TradeDetailDto{metrics,fills,risk_snapshots,setup_at_decision})
 }
 
 /// Exact, read-only recovery for a possibly committed entry whose response
