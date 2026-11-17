@@ -40,9 +40,8 @@ describe('Quick Workflow missing-required navigation',()=>{
     expect(quickValidationRoute('custom-required-post-trade-review-trade1-fieldD',false,true).notebookPage).toBe('EXECUTION');
   });
   it.each([
-    ['candidate','PLAN'],['zone','PLAN'],['trade','EXECUTION'],
-    ['post-trade-review','EXECUTION'],['session-review','REVIEW']
-  ] as const)('does not force %s Custom Field into confirmed %s before Plan confirmation',(stage,_page)=>{
+    'candidate','zone','trade','post-trade-review','session-review'
+  ] as const)('does not force %s Custom Field into a confirmed page before Plan confirmation',(stage)=>{
     const fieldId=customFieldFocusId(stage,'owner-123','field-456');
     const route=quickValidationRoute(fieldId,true,false);
     expect(route.notebookPage).toBeNull();
