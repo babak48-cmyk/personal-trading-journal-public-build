@@ -3,6 +3,7 @@ import {localApi,type JournalTradeRow,type SaveSetupVersionInput,type SetupVersi
 import {setupPlaybookCandidate} from './setupPlaybookCandidate';
 import {sameSetupDefinition} from './setupDefinitionEquality';
 import {hasPendingSetupEvidence} from './pendingSetupEvidence';
+import {isFieldPresented,type FieldPlacement} from './fieldInventory';
 
 const blank=():SaveSetupVersionInput=>({
  setup_id:null,name:'',source_trade_id:null,market_context:null,zone_location:null,
@@ -30,7 +31,15 @@ const fieldDefs=[
 const roles=['REQUIRED','SUPPORTING','CONTRADICTORY','NOT_RELEVANT'] as const;
 type EditorTransition={kind:'close'|'switch'|'new';versionId?:string};
 
-export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]}){
+export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fieldText}:{
+ rows:readonly JournalTradeRow[];quickMode:boolean;
+ visibility:Readonly<Record<string,boolean>>;placements:Readonly<Record<string,FieldPlacement>>;
+ fieldText:Readonly<Record<string,{label?:string;help?:string}>>;
+}){
+ // Setup approval-critical definitions always render. Only connected optional
+ // inputs honor presentation preferences, and their saved values are never erased.
+ const shown=(id:string,force=false)=>isFieldPresented(id,quickMode,visibility,placements,{},force);
+ const labelFor=(id:string,fallback:string)=>fieldText[id]?.label?.trim()||fallback;
  const [versions,setVersions]=useState<SetupVersion[]>([]);
  const [performance,setPerformance]=useState<SetupPerformance[]>([]);
  const [input,setInput]=useState<SaveSetupVersionInput>(blank);
@@ -169,14 +178,16 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
    </details>}
    {expanded&&<div className="formGrid">
      <label>Setup name <input value={input.name} onChange={e=>update('name',e.target.value)} maxLength={120} placeholder="e.g. Rejection at Value Boundary"/></label>
-     <label>Seed from saved CLOSED trade (optional; not automatically attributed)
+     {shown('setup.sourceTrade',!!seedTrade)&&<label>{labelFor('setup.sourceTrade','Seed from saved CLOSED trade')} (optional; not automatically attributed)
+       {fieldText['setup.sourceTrade']?.help&&<small title={fieldText['setup.sourceTrade'].help}>ⓘ</small>}
        <select value={seedTrade} onChange={e=>setSeedTrade(e.target.value)}>
         <option value="">Choose a historical Trade…</option>
         {closed.map(r=><option key={r.trade_id} value={r.trade_id}>{r.session_date} · {r.instrument_symbol} · {r.candidate_label||'No Zone label'} · {r.trade_id.slice(-8)}</option>)}
        </select>
-     </label>
+     </label>}
      {seed&&<button type="button" onClick={fromTrade}>Copy historical source facts into editable draft</button>}
-     {fieldDefs.map(([key,label,hint])=><label key={key}>{label}
+     {fieldDefs.map(([key,label,hint])=>key==='notes'&&!shown('setup.notes')?null:<label key={key}>{key==='notes'?labelFor('setup.notes',label):label}
+       {key==='notes'&&fieldText['setup.notes']?.help&&<small title={fieldText['setup.notes'].help}>ⓘ</small>}
        <textarea rows={key==='notes'?4:2} value={input[key]??''} maxLength={2000}
         onChange={e=>update(key,e.target.value)} placeholder={hint}/>
      </label>)}
@@ -190,7 +201,10 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
        <select value={evidenceRole} onChange={e=>{setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role']);setEditorDirty(true);}}>
         {roles.map(role=><option value={role} key={role}>{role}</option>)}
        </select>
-       <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
+       {shown('setup.evidenceHelp',!!evidenceHelp.trim())&&<label>{labelFor('setup.evidenceHelp','Optional evidence explanation')}
+         {fieldText['setup.evidenceHelp']?.help&&<small title={fieldText['setup.evidenceHelp'].help}>ⓘ</small>}
+         <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
+       </label>}
        <button type="button" onClick={addEvidence} disabled={!newEvidence.trim()}>Add evidence requirement</button>
      </fieldset>
      {hasUncommittedEditorChanges&&<p role="status" className="subtle">Unsaved Setup editor changes. Save a NEW version before switching or closing this editor.</p>}
