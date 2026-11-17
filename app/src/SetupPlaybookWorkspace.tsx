@@ -55,7 +55,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
    setVersions(v);setPerformance(p);
  }
  useEffect(()=>{void reload().catch(e=>setStatus('Playbook read failed: '+String(e)));},[]);
- const hasUncommittedEditorChanges=editorDirty||!!newEvidence.trim()||!!evidenceHelp.trim();
+ const hasUncommittedEditorChanges=editorDirty||!!newEvidence.trim()||!!evidenceHelp.trim()||evidenceRole!=='SUPPORTING';
  function applyTransition(action:EditorTransition){
    if(action.kind==='close'){
      setExpanded(false);
@@ -71,7 +71,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      setSelectedVersion(action.versionId??'');
      if(ver){setInput(toDraft(ver));setExpanded(true);}
    }
-   setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');
+   setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
    setPendingTransition(null);
  }
  function requestTransition(action:EditorTransition){
@@ -186,7 +186,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
           <button type="button" onClick={()=>{setEditorDirty(true);setInput(p=>({...p,evidence_priorities:p.evidence_priorities.filter((_,j)=>i!==j)}));}}>Remove from NEXT version</button>
        </div>)}
        <input value={newEvidence} maxLength={120} placeholder="Evidence name, e.g. DOM pressure" onChange={e=>setNewEvidence(e.target.value)}/>
-       <select value={evidenceRole} onChange={e=>setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role'])}>
+       <select value={evidenceRole} onChange={e=>{setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role']);setEditorDirty(true);}}>
         {roles.map(role=><option value={role} key={role}>{role}</option>)}
        </select>
        <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
