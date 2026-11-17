@@ -539,10 +539,6 @@ export function App(){
     if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
     if(route.draftZonePage!==null)setDraftZonePage(route.draftZonePage);
     if(targetPage==='REVIEW')setShowSessionReview(true);
-    if(id.startsWith('custom-required-premarket-plan-')&&active?.status==='DRAFT')setDraftStep(1);
-    if(id.startsWith('custom-required-session-')&&active?.status==='DRAFT'){
-      setDraftStep(1);setDraftPlanPage(0);
-    }
     const focusVisible=(attempt:number)=>{
       const candidates=[
         ...Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]')).filter(el=>el.dataset.validationId===id),
