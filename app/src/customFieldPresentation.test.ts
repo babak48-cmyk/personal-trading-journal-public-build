@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES } from './customFieldStage';
-import { defaultCustomPresentation, effectiveCustomPresentation,isCustomFieldPresented,nextCustomPresentation,compactCustomPresentation } from './customFieldPresentation';
+import { defaultCustomPresentation, effectiveCustomPresentation,isCustomFieldPresented,nextCustomPresentation,compactCustomPresentation,safeVisibleCustomFields } from './customFieldPresentation';
 import type {CustomFieldDefinition} from './services/localApi';
 const def=(stage:string,required=false,active=true):CustomFieldDefinition=>({
  field_id:stage+'-field',stage,field_type:'TEXT',label:'Test',help_text:'',required,active,display_order:0
@@ -42,5 +42,35 @@ describe('Safe preference cleanup after controlled deletion of a NEVER-used fiel
      [inactive.field_id]:prefs[inactive.field_id],
    });
    expect(prefs['deleted-unused-field']).toBeDefined(); // original map is not mutated
+ });
+});
+
+describe('Required Custom Fields remain available when display preferences fail to load',()=>{
+ it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('keeps Required %s editable without disclosing optional saved-hidden fields',(stage)=>{
+  const required=def(stage,true);
+  const optional=def(stage,false);
+  const inactive=def(stage,true,false);
+  const fields=[required,optional,inactive];
+  const stalePreferences={
+   [required.field_id]:{visible:false,placement:'DETAILED_ONLY' as const},
+   [optional.field_id]:{visible:false,placement:'DETAILED_ONLY' as const},
+  };
+  // The definition helper produces duplicate IDs for required and optional
+  // in the same stage, but the fallback must rely on required/active flags,
+  // never stale saved preferences or bare ID guesses.
+  for(const quick of [true,false]){
+   expect(safeVisibleCustomFields(fields,quick,stalePreferences,false)).toEqual([required]);
+  }
+  expect(safeVisibleCustomFields([optional],true,stalePreferences,false)).toEqual([]);
+  expect(safeVisibleCustomFields([inactive],false,{},false)).toEqual([]);
+ });
+ it('restores optional visibility/placement ONLY after saved presentation was loaded',()=>{
+  const optional=def('trade');
+  const prefs={[optional.field_id]:{visible:true,placement:'DETAILED_ONLY' as const}};
+  expect(safeVisibleCustomFields([optional],true,prefs,false)).toEqual([]);
+  expect(safeVisibleCustomFields([optional],true,prefs,true)).toEqual([]);
+  expect(safeVisibleCustomFields([optional],false,prefs,true)).toEqual([optional]);
+  const hidden={[optional.field_id]:{visible:false,placement:'QUICK_AND_DETAILED' as const}};
+  expect(safeVisibleCustomFields([optional],false,hidden,true)).toEqual([]);
  });
 });
