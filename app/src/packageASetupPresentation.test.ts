@@ -19,18 +19,18 @@ describe('Package A: real Setup Playbook Field Manager integration',()=>{
     expect(FIELD_DEFINITION_BY_ID[id]?.requirementManaged).toBe(false);
     expect(isUserRequired(id,{[id]:true})).toBe(false);
     expect(isFieldPresented(id,true,{}, {},{})).toBe(true);
-    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(false);
-    expect(isFieldPresented(id,false,{[id]:true},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY' as const},{})).toBe(false);
+    expect(isFieldPresented(id,false,{[id]:true},{[id]:'DETAILED_ONLY' as const},{})).toBe(true);
     expect(isFieldPresented(id,false,{[id]:false},{},{})).toBe(false);
     // Force-show an unfinished draft so the user can see and complete it;
     // this is independent of approval-required rules or persisted values.
-    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{},true)).toBe(true);
+    expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY' as const},{},true)).toBe(true);
   });
   it('never hides approval-critical Setup definition fields or structural evidence roles',()=>{
     for(const id of [...protectedSetup,...approvalCriticalSetup]){
       expect(fieldConnectionReport().find(field=>field.id===id)?.status)
         .toMatch(/PROTECTED|PENDING/);
-      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY' as const},{})).toBe(true);
     }
     expect(activeVisibilityInventoryIssues()).toEqual([]);
     expect(requiredPresentationIssues({},Object.fromEntries(optionalSetup.map(id=>[id,false])),{})).toEqual([]);
