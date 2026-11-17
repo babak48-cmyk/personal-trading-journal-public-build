@@ -3,21 +3,9 @@ import {localApi,type JournalTradeRow,type SaveSetupVersionInput,type SetupVersi
 import {setupPlaybookCandidate} from './setupPlaybookCandidate';
 import {sameSetupDefinition} from './setupDefinitionEquality';
 import {hasPendingSetupEvidence} from './pendingSetupEvidence';
+import {blankSetupDraft,setupDraftFromVersion,setupSwitchDraft} from './setupDraftLifecycle';
 import {isFieldPresented,type FieldPlacement} from './fieldInventory';
 
-const blank=():SaveSetupVersionInput=>({
- setup_id:null,name:'',source_trade_id:null,market_context:null,zone_location:null,
- prerequisites:null,entry_triggers:null,supporting_evidence:null,contrary_evidence:null,
- thesis_invalidation:null,notes:null,evidence_priorities:[],approve:false
-});
-const toDraft=(v:SetupVersion):SaveSetupVersionInput=>({
- setup_id:v.setup_id,name:v.name,source_trade_id:v.source_trade_id,
- market_context:v.market_context,zone_location:v.zone_location,
- prerequisites:v.prerequisites,entry_triggers:v.entry_triggers,
- supporting_evidence:v.supporting_evidence,contrary_evidence:v.contrary_evidence,
- thesis_invalidation:v.thesis_invalidation,notes:v.notes,
- evidence_priorities:v.evidence_priorities.map(x=>({...x})),approve:false
-});
 const fieldDefs=[
  ['market_context','Market regime/context','e.g. Range boundary rejection vs acceptance'],
  ['zone_location','Location / relevant Zone','e.g. prior value-area low with provenance'],
@@ -42,7 +30,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  const labelFor=(id:string,fallback:string)=>fieldText[id]?.label?.trim()||fallback;
  const [versions,setVersions]=useState<SetupVersion[]>([]);
  const [performance,setPerformance]=useState<SetupPerformance[]>([]);
- const [input,setInput]=useState<SaveSetupVersionInput>(blank);
+ const [input,setInput]=useState<SaveSetupVersionInput>(blankSetupDraft);
  const [seedTrade,setSeedTrade]=useState('');
  const [selectedVersion,setSelectedVersion]=useState('');
  const [busy,setBusy]=useState(false);
@@ -70,16 +58,18 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    if(action.kind==='close'){
      setExpanded(false);
      const current=versions.find(v=>v.version_id===selectedVersion);
-     setInput(current?toDraft(current):blank());
+     setInput(current?setupDraftFromVersion(current):blankSetupDraft());
    }
    if(action.kind==='new'){
-     setInput(blank());setSelectedVersion('');setExpanded(true);
+     setInput(blankSetupDraft());setSelectedVersion('');setExpanded(true);
      setStatus('New independent Setup (not a revision).');
    }
    if(action.kind==='switch'){
-     const ver=versions.find(v=>v.version_id===action.versionId);
-     setSelectedVersion(action.versionId??'');
-     if(ver){setInput(toDraft(ver));setExpanded(true);}
+     const switched=setupSwitchDraft(versions,action.versionId??'');
+     setSelectedVersion(switched.selectedVersion);
+     setInput(switched.draft);
+     setExpanded(true);
+     setStatus(switched.selectedVersion?'Selected saved version for an immutable revision.':'No saved version selected. This is a NEW independent Setup.');
    }
    setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
    setPendingTransition(null);
@@ -124,7 +114,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      const [fresh,perf]=await Promise.all([localApi.listSetupVersions(),localApi.setupPlaybookPerformance()]);
      if(!fresh.some(x=>x.version_id===result.version_id))throw new Error('Saved version could not be read back.');
      setVersions(fresh);setPerformance(perf);setSelectedVersion(result.version_id);
-     setInput(toDraft(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
+     setInput(setupDraftFromVersion(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
      setStatus('Version '+result.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
    }catch(e){setStatus('Version NOT verified: '+String(e));}
    finally{saveLock.current=false;setBusy(false);}
