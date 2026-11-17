@@ -2332,6 +2332,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
   if(!visibleFields.length&&!notice)return null;
   const missing=visibleFields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(!presentationReady&&visibleFields.some(f=>f.required))||(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+    {!presentationReady&&<p role="status" className="warningBox">Custom Field display preferences are unavailable. Only active Required fields are shown until preferences reload; optional fields are not exposed or changed.</p>}
     <p className="subtle">Save required choices before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {visibleFields.map(field=>{
@@ -2430,6 +2431,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
   if(!visibleFields.length&&!message)return null;
   const missing=visibleFields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(!presentationReady&&visibleFields.some(f=>f.required))||(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
+    {!presentationReady&&<p role="status" className="warningBox">Custom Field display preferences are unavailable. Only active Required fields are shown until preferences reload; optional fields are not exposed or changed.</p>}
     <p className="subtle">Save required values before completing this stage. Unsaved changes do not count as completed.</p>
     {missing.length>0&&<div role="status" className="subtle">Required, not saved: {missing.map(f=><button type="button" key={f.field_id} onClick={()=>focusRequiredCustomField(f.field_id,ownerStage,ownerId)}>{f.label}</button>)}</div>}
     {visibleFields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id))||localErrors.includes(f.field_id)?'validationFieldError':'')} key={f.field_id}>
