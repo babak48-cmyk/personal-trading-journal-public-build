@@ -11,14 +11,14 @@ describe('Package A Setup Playbook lifecycle and pending evidence safety',()=>{
   expect(hasPendingSetupEvidence('  ','SUPPORTING',' explanation ')).toBe(true);
   expect(hasPendingSetupEvidence('DOM','SUPPORTING','')).toBe(true);
  });
- it('inventories every versioned Setup input without falsely exposing unverified Field Manager actions',()=>{
+ it('inventories versioned Setup inputs without exposing protected approval fields as hideable controls',()=>{
   const playbook=FIELD_CONTROL_INVENTORY.filter(row=>row.stage==='setup-playbook');
   expect(playbook).toHaveLength(13);
   expect(new Set(playbook.map(row=>row.id)).size).toBe(playbook.length);
   const statuses=fieldConnectionReport();
   expect(statuses.find(row=>row.id==='setup.name')?.status).toBe('PROTECTED');
   expect(statuses.find(row=>row.id==='setup.evidenceRole')?.status).toBe('PROTECTED');
-  expect(statuses.find(row=>row.id==='setup.entryTriggers')?.status).toBe('PENDING');
+  expect(statuses.find(row=>row.id==='setup.entryTriggers')?.status).toBe('PROTECTED');
   expect(isFieldPresented('setup.entryTriggers',true,{'setup.entryTriggers':false},{'setup.entryTriggers':'DETAILED_ONLY'},{'setup.entryTriggers':true})).toBe(true);
  });
 });
