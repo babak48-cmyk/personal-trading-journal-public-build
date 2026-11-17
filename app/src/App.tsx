@@ -2967,7 +2967,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
             {optionalRequirement&&<button type="button" disabled={settingsSaving} aria-label={`Toggle required for ${item.label}`} onClick={()=>toggle(item.id)}>{required?'Required by you':'Optional'}</button>}
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle visibility for ${item.label}`} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button>}
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle Quick placement for ${item.label}`} onClick={()=>togglePlacement(item.id)}>{effectivePlacement(item.id)==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button>}
-            {connected&&RENDERED_FIELD_TEXT_IDS.some(fieldId=>fieldId===item.id)&&<button type="button" disabled={settingsSaving} onClick={()=>openFieldTextEditor(item.id)} aria-label={`Edit label and help for ${item.label}`}>Edit label/help</button>}
+            {RENDERED_FIELD_TEXT_IDS.some(fieldId=>fieldId===item.id)&&<button type="button" disabled={settingsSaving} onClick={()=>openFieldTextEditor(item.id)} aria-label={`Edit label and help for ${item.label}`}>Edit label/help</button>}
             {ordering&&<div className="rowActions" role="group" aria-label={`Order ${item.label} within ${ordering.label}`}>
               <small>Position {ordering.position+1}/{ordering.ids.length} · {ordering.label}</small>
               <button type="button" disabled={settingsSaving||ordering.position===0} aria-label={`Move ${item.label} up within ${ordering.label}`} onClick={()=>void moveFieldOrder(item.id,-1,ordering.ids,ordering.label+' order')}>Up</button>
