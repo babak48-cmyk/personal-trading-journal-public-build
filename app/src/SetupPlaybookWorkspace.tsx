@@ -226,12 +226,14 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      </label>
      <button type="button" disabled={busy||!linkVersionId||!linkTradeId} onClick={()=>void link()}>Record immutable retrospective attribution</button>
    </details>}
-   {pendingTransition&&<div role="alertdialog" aria-modal="true" aria-labelledby="setup-unsaved-title" aria-describedby="setup-unsaved-description" className="panel" style={{border:'2px solid currentColor',padding:'1rem'}}>
+   {pendingTransition&&<div role="presentation" style={{position:'fixed',inset:0,zIndex:4000,background:'rgba(0,0,0,.65)',display:'grid',placeItems:'center',padding:'1rem'}}>
+     <div role="alertdialog" aria-modal="true" aria-labelledby="setup-unsaved-title" aria-describedby="setup-unsaved-description" className="panel" style={{border:'2px solid currentColor',padding:'1rem',width:'min(100%,32rem)',maxHeight:'90vh',overflowY:'auto',background:'var(--panel-bg, #20242c)',color:'var(--text-color, #fff)'}}>
      <h3 id="setup-unsaved-title">Unsaved Setup changes</h3>
      <p id="setup-unsaved-description">This editor contains unsaved text or an unfinished evidence requirement. Discarding loses only these edits; saved versions remain immutable.</p>
      <div className="rowActions">
        <button type="button" onClick={()=>setPendingTransition(null)}>Keep editing</button>
        <button type="button" onClick={()=>applyTransition(pendingTransition)}>Discard edits and continue</button>
+     </div>
      </div>
    </div>}
    {status&&<p role="status" aria-live="polite">{status}</p>}
