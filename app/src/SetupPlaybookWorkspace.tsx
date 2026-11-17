@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {localApi,type JournalTradeRow,type SaveSetupVersionInput,type SetupVersion,type SetupPerformance,type SetupEvidencePriority} from './services/localApi';
 import {setupPlaybookCandidate} from './setupPlaybookCandidate';
 
@@ -26,6 +26,17 @@ const fieldDefs=[
  ['notes','Notes (optional)','Keep it short']
 ] as const;
 const roles=['REQUIRED','SUPPORTING','CONTRADICTORY','NOT_RELEVANT'] as const;
+type EditorTransition={kind:'close'|'switch'|'new';versionId?:string};
+function sameDefinition(input:SaveSetupVersionInput, saved:SetupVersion,approve:boolean){
+ const normal=(v:string|null|undefined)=>(v??'').trim();
+ return input.setup_id===saved.setup_id && normal(input.name)===normal(saved.name)
+  && input.source_trade_id===saved.source_trade_id && approve===saved.is_approved
+  && (['market_context','zone_location','prerequisites','entry_triggers','supporting_evidence','contrary_evidence','thesis_invalidation','notes'] as const)
+   .every(k=>normal(input[k])===normal(saved[k]))
+  && input.evidence_priorities.length===saved.evidence_priorities.length
+  && input.evidence_priorities.every((e,i)=>e.evidence_label.trim().toLowerCase()===saved.evidence_priorities[i].evidence_label.trim().toLowerCase()
+   && e.priority_role===saved.evidence_priorities[i].priority_role && normal(e.explanation)===normal(saved.evidence_priorities[i].explanation));
+}
 
 export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]}){
  const [versions,setVersions]=useState<SetupVersion[]>([]);
@@ -34,6 +45,8 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  const [seedTrade,setSeedTrade]=useState('');
  const [selectedVersion,setSelectedVersion]=useState('');
  const [busy,setBusy]=useState(false);
+ const saveLock=useRef(false);
+ const [pendingTransition,setPendingTransition]=useState<EditorTransition|null>(null);
  const [status,setStatus]=useState('');
  const [expanded,setExpanded]=useState(false);
  const [editorDirty,setEditorDirty]=useState(false);
@@ -52,8 +65,23 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  }
  useEffect(()=>{void reload().catch(e=>setStatus('Playbook read failed: '+String(e)));},[]);
  const hasUncommittedEditorChanges=editorDirty||!!newEvidence.trim()||!!evidenceHelp.trim();
- function confirmEditorChange(){
-   return !hasUncommittedEditorChanges||window.confirm('The current Setup editor contains unsaved changes. Discard them and switch?');
+ function applyTransition(action:EditorTransition){
+   if(action.kind==='close'){setExpanded(false);}
+   if(action.kind==='new'){
+     setInput(blank());setSelectedVersion('');setExpanded(true);
+     setStatus('New independent Setup (not a revision).');
+   }
+   if(action.kind==='switch'){
+     const ver=versions.find(v=>v.version_id===action.versionId);
+     setSelectedVersion(action.versionId??'');
+     if(ver){setInput(toDraft(ver));setExpanded(true);}
+   }
+   setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');
+   setPendingTransition(null);
+ }
+ function requestTransition(action:EditorTransition){
+   if(hasUncommittedEditorChanges){setPendingTransition(action);return;}
+   applyTransition(action);
  }
  const update=(field:keyof SaveSetupVersionInput,value:string|null)=>{
    setEditorDirty(true);
@@ -76,12 +104,16 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
    setNewEvidence('');setEvidenceHelp('');
  }
  async function save(approve:boolean){
-   if(busy)return;
+   if(saveLock.current||busy)return;
    if(newEvidence.trim()||evidenceHelp.trim()){
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
    }
-   setBusy(true);setStatus('');
+   if(selected && sameDefinition(input,selected,approve)){
+     setStatus('No changes from the selected saved version. Edit the Setup before saving a NEW immutable version.');
+     return;
+   }
+   saveLock.current=true;setBusy(true);setStatus('');
    try{
      const result=await localApi.saveSetupVersion({...input,approve});
      const [fresh,perf]=await Promise.all([localApi.listSetupVersions(),localApi.setupPlaybookPerformance()]);
@@ -90,7 +122,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      setInput(toDraft(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');
      setStatus('Version '+result.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
    }catch(e){setStatus('Version NOT verified: '+String(e));}
-   finally{setBusy(false);}
+   finally{saveLock.current=false;setBusy(false);}
  }
  async function deactivate(){
    if(!selected||busy)return;
@@ -120,15 +152,10 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
       <span><b>Attributed closed trades</b>{performance.reduce((a,v)=>a+v.trade_count,0)}</span>
    </div>
    <div className="rowActions">
-    <button type="button" onClick={()=>{if(expanded&&!confirmEditorChange())return;setExpanded(v=>!v);if(expanded)setEditorDirty(false);}}>{expanded?'Close editor':'Open Setup editor / new revision'}</button>
+    <button type="button" disabled={busy} onClick={()=>expanded?requestTransition({kind:'close'}):setExpanded(true)}>{expanded?'Close editor':'Open Setup editor / new revision'}</button>
    </div>
    {versions.length>0&&<label>Read a saved version or create its next immutable revision
-     <select value={selectedVersion} onChange={e=>{
-       if(!confirmEditorChange())return;
-       const ver=versions.find(v=>v.version_id===e.target.value);
-       setSelectedVersion(e.target.value);
-       if(ver){setInput(toDraft(ver));setExpanded(true);setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');}
-     }}>
+     <select value={selectedVersion} disabled={busy} onChange={e=>requestTransition({kind:'switch',versionId:e.target.value})}>
        <option value="">Select saved version…</option>
        {versions.map(v=><option key={v.version_id} value={v.version_id}>
          {v.name} · v{v.version_number} · {v.is_approved?'APPROVED':'DRAFT'} · {v.is_active?'ACTIVE':'INACTIVE'}
@@ -136,7 +163,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      </select>
    </label>}
    {selected&&<div className="rowActions">
-      <button type="button" onClick={()=>{if(!confirmEditorChange())return;setInput(blank());setSelectedVersion('');setExpanded(true);setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setStatus('New independent Setup (not a revision).');}}>New independent Setup</button>
+      <button type="button" disabled={busy} onClick={()=>requestTransition({kind:'new'})}>New independent Setup</button>
       {selected.is_active&&<button type="button" disabled={busy} onClick={()=>void deactivate()}>Deactivate Setup (preserve history)</button>}
    </div>}
    {selected&&<details className="guidedMore"><summary>Read immutable v{selected.version_number} evidence priorities</summary>
@@ -204,6 +231,14 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      </label>
      <button type="button" disabled={busy||!linkVersionId||!linkTradeId} onClick={()=>void link()}>Record immutable retrospective attribution</button>
    </details>}
+   {pendingTransition&&<div role="alertdialog" aria-modal="true" aria-labelledby="setup-unsaved-title" aria-describedby="setup-unsaved-description" className="panel" style={{border:'2px solid currentColor',padding:'1rem'}}>
+     <h3 id="setup-unsaved-title">Unsaved Setup changes</h3>
+     <p id="setup-unsaved-description">This editor contains unsaved text or an unfinished evidence requirement. Discarding loses only these edits; saved versions remain immutable.</p>
+     <div className="rowActions">
+       <button type="button" onClick={()=>setPendingTransition(null)}>Keep editing</button>
+       <button type="button" onClick={()=>applyTransition(pendingTransition)}>Discard edits and continue</button>
+     </div>
+   </div>}
    {status&&<p role="status" aria-live="polite">{status}</p>}
  </section>;
 }
