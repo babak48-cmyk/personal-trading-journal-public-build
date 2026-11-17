@@ -2,6 +2,7 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {localApi,type JournalTradeRow,type SaveSetupVersionInput,type SetupVersion,type SetupPerformance,type SetupEvidencePriority} from './services/localApi';
 import {setupPlaybookCandidate} from './setupPlaybookCandidate';
 import {sameSetupDefinition} from './setupDefinitionEquality';
+import {hasPendingSetupEvidence} from './pendingSetupEvidence';
 
 const blank=():SaveSetupVersionInput=>({
  setup_id:null,name:'',source_trade_id:null,market_context:null,zone_location:null,
@@ -55,7 +56,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
    setVersions(v);setPerformance(p);
  }
  useEffect(()=>{void reload().catch(e=>setStatus('Playbook read failed: '+String(e)));},[]);
- const hasUncommittedEditorChanges=editorDirty||!!newEvidence.trim()||!!evidenceHelp.trim()||evidenceRole!=='SUPPORTING';
+ const hasUncommittedEditorChanges=editorDirty||hasPendingSetupEvidence(newEvidence,evidenceRole,evidenceHelp);
  function applyTransition(action:EditorTransition){
    if(action.kind==='close'){
      setExpanded(false);
@@ -100,7 +101,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  }
  async function save(approve:boolean){
    if(saveLock.current||busy)return;
-   if(newEvidence.trim()||evidenceHelp.trim()||evidenceRole!=='SUPPORTING'){
+   if(hasPendingSetupEvidence(newEvidence,evidenceRole,evidenceHelp)){
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
    }
