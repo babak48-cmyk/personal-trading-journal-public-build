@@ -17,7 +17,7 @@ export function evidenceRequiredIssues(
 // Optional means it may be blank; an explicitly provided invalid price is not valid.
   if((isUserRequired('evidence.price',overrides)&&price===null)
     ||(price!==null&&!Number.isFinite(price)))
-    issues.push({id:'evidence.price',label:'Valid observed price'});
+    issues.push({id:'evidence.price',label:'Observed price'});
   if(isUserRequired('evidence.note',overrides)&&!note.trim())issues.push({id:'evidence.note',label:'Evidence note'});
   return issues;
 }
