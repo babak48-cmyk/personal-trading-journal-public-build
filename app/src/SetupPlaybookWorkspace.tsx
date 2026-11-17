@@ -79,6 +79,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    setPendingTransition(null);
  }
  function requestTransition(action:EditorTransition){
+   if(uncertainSave){setStatus('Resolve the unverified Setup save before changing the editor.');return;}
    if(hasUncommittedEditorChanges){setPendingTransition(action);return;}
    applyTransition(action);
  }
@@ -149,14 +150,14 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    finally{setBusy(false);}
  }
  async function deactivate(){
-   if(!selected||busy)return;
+   if(!selected||busy||uncertainSave)return;
    setBusy(true);
    try{await localApi.deactivateSetup(selected.setup_id);await reload();setStatus('Setup safely deactivated. Existing version and trade attribution history retained.');}
    catch(e){setStatus('Deactivation failed: '+String(e));}
    finally{setBusy(false);}
  }
  async function link(){
-   if(!linkTradeId||!linkVersionId||busy)return;
+   if(!linkTradeId||!linkVersionId||busy||uncertainSave)return;
    setBusy(true);
    try{
       await localApi.linkSetupTrade(linkTradeId,linkVersionId,linkNote.trim()||'Retrospective classification from closed trade; this was not known at entry.');
@@ -176,10 +177,10 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
       <span><b>Attributed closed trades</b>{performance.reduce((a,v)=>a+v.trade_count,0)}</span>
    </div>
    <div className="rowActions">
-    <button type="button" disabled={busy} onClick={()=>expanded?requestTransition({kind:'close'}):setExpanded(true)}>{expanded?'Close editor':'Open Setup editor / new revision'}</button>
+    <button type="button" disabled={busy||!!uncertainSave} onClick={()=>expanded?requestTransition({kind:'close'}):setExpanded(true)}>{expanded?'Close editor':'Open Setup editor / new revision'}</button>
    </div>
    {versions.length>0&&<label>Read a saved version or create its next immutable revision
-     <select value={selectedVersion} disabled={busy} onChange={e=>requestTransition({kind:'switch',versionId:e.target.value})}>
+     <select value={selectedVersion} disabled={busy||!!uncertainSave} onChange={e=>requestTransition({kind:'switch',versionId:e.target.value})}>
        <option value="">Select saved version…</option>
        {versions.map(v=><option key={v.version_id} value={v.version_id}>
          {v.name} · v{v.version_number} · {v.is_approved?'APPROVED':'DRAFT'} · {v.is_active?'ACTIVE':'INACTIVE'}
@@ -187,8 +188,8 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      </select>
    </label>}
    {selected&&<div className="rowActions">
-      <button type="button" disabled={busy} onClick={()=>requestTransition({kind:'new'})}>New independent Setup</button>
-      {selected.is_active&&<button type="button" disabled={busy} onClick={()=>void deactivate()}>Deactivate Setup (preserve history)</button>}
+      <button type="button" disabled={busy||!!uncertainSave} onClick={()=>requestTransition({kind:'new'})}>New independent Setup</button>
+      {selected.is_active&&<button type="button" disabled={busy||!!uncertainSave} onClick={()=>void deactivate()}>Deactivate Setup (preserve history)</button>}
    </div>}
    {selected&&<details className="guidedMore"><summary>Read immutable v{selected.version_number} evidence priorities</summary>
      <p><strong>{selected.name}</strong> · {selected.is_approved?'Approved':'Draft'} · {selected.created_at}</p>
