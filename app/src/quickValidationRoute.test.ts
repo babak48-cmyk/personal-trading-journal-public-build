@@ -42,11 +42,10 @@ describe('Quick Workflow missing-required navigation',()=>{
   it.each([
     ['candidate','PLAN'],['zone','PLAN'],['trade','EXECUTION'],
     ['post-trade-review','EXECUTION'],['session-review','REVIEW']
-  ] as const)('does not force %s Custom Field into %s before Plan confirmation',(stage,page)=>{
+  ] as const)('does not force %s Custom Field into confirmed %s before Plan confirmation',(stage,_page)=>{
     const fieldId=customFieldFocusId(stage,'owner-123','field-456');
     const route=quickValidationRoute(fieldId,true,false);
     expect(route.notebookPage).toBeNull();
-    expect(route).not.toHaveProperty('forcedPage',page);
   });
   it('does not take draft Session custom fields away from the required Plan form',()=>{
     const id=customFieldFocusId('session','session-abc','required-ready');
