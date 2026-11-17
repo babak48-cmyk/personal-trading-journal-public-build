@@ -37,6 +37,7 @@ import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
+import {managerOrderPosition} from './fieldManagerOrdering';
 import { matchesPersistedPreferences, type PreferenceMap } from './fieldPreferenceVerification';
 import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './customFieldWriteVerification';
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
@@ -2967,6 +2968,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
         const connected=isActiveVisibilityControl(item.id);
         const optionalRequirement=isEditableRequirementControl(item.id);
         const required=!!def&&isUserRequired(item.id,draft);
+        const ordering=managerOrderPosition(item.id,order);
         return <div className="requirementRow" key={item.id}>
           <div><b>{fieldText[item.id]?.label?.trim()||item.label}</b><span>{item.stage} · {item.id}</span><small>{status.replaceAll('_',' ')}{def?.defaultRequirement==='SYSTEM_REQUIRED'?' · System required':def?.defaultRequirement==='CONDITIONAL'?' · Conditional':''}</small></div>
           <div className="requirementControl">
@@ -2974,6 +2976,11 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle visibility for ${item.label}`} onClick={()=>toggleVisible(item.id)}>{isFieldShown(item.id,visibility,draft)?'Visible':'Hidden'}</button>}
             {connected&&<button type="button" disabled={settingsSaving||required} aria-label={`Toggle Quick placement for ${item.label}`} onClick={()=>togglePlacement(item.id)}>{effectivePlacement(item.id)==='DETAILED_ONLY'?'Detailed only':'Quick + Detailed'}</button>}
             {connected&&RENDERED_FIELD_TEXT_IDS.some(fieldId=>fieldId===item.id)&&<button type="button" disabled={settingsSaving} onClick={()=>openFieldTextEditor(item.id)} aria-label={`Edit label and help for ${item.label}`}>Edit label/help</button>}
+            {ordering&&<div className="rowActions" role="group" aria-label={`Order ${item.label} within ${ordering.label}`}>
+              <small>Position {ordering.position+1}/{ordering.ids.length} · {ordering.label}</small>
+              <button type="button" disabled={settingsSaving||ordering.position===0} aria-label={`Move ${item.label} up within ${ordering.label}`} onClick={()=>void moveFieldOrder(item.id,-1,ordering.ids,ordering.label+' order')}>Up</button>
+              <button type="button" disabled={settingsSaving||ordering.position===ordering.ids.length-1} aria-label={`Move ${item.label} down within ${ordering.label}`} onClick={()=>void moveFieldOrder(item.id,1,ordering.ids,ordering.label+' order')}>Down</button>
+            </div>}
             {optionalRequirement&&!connected&&<small>Visibility and Quick placement protected</small>}
             {!optionalRequirement&&!connected&&<small>{status==='PROTECTED'?'Protected':'Connection pending'}</small>}
             {rowSaveFeedback[item.id]&&<small role={rowSaveFeedback[item.id].ok?'status':'alert'} aria-live="polite" data-testid={'field-row-save-'+item.id.replaceAll('.','-')}>{rowSaveFeedback[item.id].message}</small>}
