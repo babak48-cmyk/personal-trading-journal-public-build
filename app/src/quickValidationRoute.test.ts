@@ -39,6 +39,32 @@ describe('Quick Workflow missing-required navigation',()=>{
     expect(quickValidationRoute('custom-required-trade-trade1-fieldC',false,true).notebookPage).toBe('EXECUTION');
     expect(quickValidationRoute('custom-required-post-trade-review-trade1-fieldD',false,true).notebookPage).toBe('EXECUTION');
   });
+  it.each([
+    ['candidate','PLAN'],['zone','PLAN'],['trade','EXECUTION'],
+    ['post-trade-review','EXECUTION'],['session-review','REVIEW']
+  ] as const)('does not force %s Custom Field into %s before Plan confirmation',(stage,page)=>{
+    const fieldId=customFieldFocusId(stage,'owner-123','field-456');
+    const route=quickValidationRoute(fieldId,true,false);
+    expect(route.notebookPage).toBeNull();
+    expect(route).not.toHaveProperty('forcedPage',page);
+  });
+  it('does not take draft Session custom fields away from the required Plan form',()=>{
+    const id=customFieldFocusId('session','session-abc','required-ready');
+    expect(quickValidationRoute(id,true,false)).toMatchObject({
+      notebookPage:null,draftStep:1,draftPlanPage:0
+    });
+    const premarketId=customFieldFocusId('premarket-plan','session-abc','required-scenario');
+    expect(quickValidationRoute(premarketId,true,false)).toMatchObject({
+      notebookPage:null,draftStep:1,draftPlanPage:0
+    });
+  });
+  it('only routes Custom Field after Plan confirmation when its actual owner stage is available',()=>{
+    const before=customFieldFocusId('post-trade-review','t-1','mood');
+    expect(quickValidationRoute(before,false,false).notebookPage).toBeNull();
+    expect(quickValidationRoute(before,false,true).notebookPage).toBe('EXECUTION');
+    const review=customFieldFocusId('session-review','session-1','summary');
+    expect(quickValidationRoute(review,false,true).notebookPage).toBe('REVIEW');
+  });
   it('never navigates into a nonexistent confirmed stage for draft custom fields',()=>{
     expect(quickValidationRoute('custom-required-trade-t1-f1',true,false).notebookPage).toBeNull();
   });
