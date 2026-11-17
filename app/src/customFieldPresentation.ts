@@ -23,6 +23,22 @@ export function nextCustomPresentation(field:CustomFieldDefinition,prefs:CustomF
     :{...previous,placement:previous.placement==='QUICK_AND_DETAILED'?'DETAILED_ONLY':'QUICK_AND_DETAILED'}};
 }
 
+/** Read failure must not deadlock a REQUIRED custom value on a save gate.
+ * Until display preferences have been loaded, show ONLY active required fields;
+ * optional fields may have an intentional saved privacy/placement preference.
+ * Never persist fallback preferences or change historical answers.
+ */
+export function safeVisibleCustomFields(
+  fields:readonly CustomFieldDefinition[],
+  quickMode:boolean,
+  prefs:CustomFieldPresentationMap,
+  presentationReady:boolean,
+):CustomFieldDefinition[]{
+  return fields.filter(field=>presentationReady
+    ?isCustomFieldPresented(field,quickMode,prefs)
+    :field.active&&field.required);
+}
+
 /** Remove preferences only for definitions already absent from the active database.
  * Must receive the complete definition list (including deactivated fields).
  * Never drops a deactivated/hidden field's preferences or touches its history.
