@@ -16,7 +16,7 @@ export type InventoryCategory =
 
 export type InventoryStage =
   | 'session-setup' | 'premarket-plan' | 'zone'
-  | 'plan-revision' | 'live-evidence' | 'decision'
+  | 'setup-playbook' | 'plan-revision' | 'live-evidence' | 'decision'
   | 'execution' | 'post-trade-review' | 'session-review'
   | 'analytics' | 'settings' | 'attachment';
 
@@ -54,6 +54,22 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('candidate.sources','Level sources','zone','journal-field',true,'candidate.sources'),
   entry('candidate.requiredConditions','Planned entry conditions','zone','journal-field',true,'candidate.requiredConditions'),
   entry('candidate.invalidationConditions','Thesis abandonment conditions','zone','journal-field',true,'candidate.invalidationConditions'),
+  // Group10 Setup Playbook is a distinct versioned definition editor, not a
+  // Plan/Zone observation. Inventory every input without pretending it already
+  // has persisted Field Manager overrides or cross-version safe customization.
+  entry('setup.name','Setup name','setup-playbook','journal-field',false,undefined,'Immutable version identity; required by Setup save validation'),
+  entry('setup.sourceTrade','Historical source trade','setup-playbook','journal-field',true),
+  entry('setup.marketContext','Applicable market context','setup-playbook','journal-field',true),
+  entry('setup.zoneLocation','Zone/location criteria','setup-playbook','journal-field',true),
+  entry('setup.prerequisites','Prerequisites','setup-playbook','journal-field',true),
+  entry('setup.entryTriggers','Entry triggers','setup-playbook','journal-field',true),
+  entry('setup.supportingEvidence','Supporting evidence definition','setup-playbook','journal-field',true),
+  entry('setup.contraryEvidence','Contrary evidence definition','setup-playbook','journal-field',true),
+  entry('setup.invalidation','Thesis invalidation','setup-playbook','journal-field',true),
+  entry('setup.notes','Setup notes','setup-playbook','journal-field',true),
+  entry('setup.evidenceName','Evidence priority label','setup-playbook','journal-field',false,undefined,'Required for each new immutable evidence priority row'),
+  entry('setup.evidenceRole','Evidence priority role','setup-playbook','journal-field',false,undefined,'Protected semantic REQUIRED/SUPPORTING/CONTRADICTORY/NOT_RELEVANT role'),
+  entry('setup.evidenceHelp','Evidence priority explanation','setup-playbook','journal-field',true),
   entry('planRevision.bias','Revised bias','plan-revision','journal-field',false,undefined,'Immutable timestamped plan revision'),
   entry('planRevision.reason','Reason for revision','plan-revision','journal-field',false,undefined,'Plan revision audit integrity'),
   entry('planRevision.evidence','Revision evidence summary','plan-revision','journal-field',true,'planRevision.evidence'),
