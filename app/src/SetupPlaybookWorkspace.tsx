@@ -4,6 +4,7 @@ import {setupPlaybookCandidate} from './setupPlaybookCandidate';
 import {sameSetupDefinition} from './setupDefinitionEquality';
 import {hasPendingSetupEvidence} from './pendingSetupEvidence';
 import {blankSetupDraft,setupDraftFromVersion,setupSwitchDraft} from './setupDraftLifecycle';
+import {verifiedSetupSaveVersion} from './setupSaveReadback';
 import {isFieldPresented,type FieldPlacement} from './fieldInventory';
 
 const fieldDefs=[
@@ -35,6 +36,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  const [selectedVersion,setSelectedVersion]=useState('');
  const [busy,setBusy]=useState(false);
  const saveLock=useRef(false);
+ const [uncertainSave,setUncertainSave]=useState<{versionId:string|null}|null>(null);
  const [pendingTransition,setPendingTransition]=useState<EditorTransition|null>(null);
  const [status,setStatus]=useState('');
  const [expanded,setExpanded]=useState(false);
@@ -55,6 +57,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  useEffect(()=>{void reload().catch(e=>setStatus('Playbook read failed: '+String(e)));},[]);
  const hasUncommittedEditorChanges=editorDirty||hasPendingSetupEvidence(newEvidence,evidenceRole,evidenceHelp);
  function applyTransition(action:EditorTransition){
+   if(uncertainSave){setStatus('Save outcome unresolved. Recheck saved versions before leaving the editor.');return;}
    if(action.kind==='close'){
      setExpanded(false);
      const current=versions.find(v=>v.version_id===selectedVersion);
@@ -100,7 +103,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
  }
  async function save(approve:boolean){
-   if(saveLock.current||busy)return;
+   if(saveLock.current||busy||uncertainSave)return;
    if(hasPendingSetupEvidence(newEvidence,evidenceRole,evidenceHelp)){
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
@@ -110,15 +113,40 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      return;
    }
    saveLock.current=true;setBusy(true);setStatus('');
+   let attempted=false;
+   let returned:SetupVersion|null=null;
    try{
-     const result=await localApi.saveSetupVersion({...input,approve});
+     attempted=true;
+     returned=await localApi.saveSetupVersion({...input,approve});
      const [fresh,perf]=await Promise.all([localApi.listSetupVersions(),localApi.setupPlaybookPerformance()]);
-     if(!fresh.some(x=>x.version_id===result.version_id))throw new Error('Saved version could not be read back.');
-     setVersions(fresh);setPerformance(perf);setSelectedVersion(result.version_id);
-     setInput(setupDraftFromVersion(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
-     setStatus('Version '+result.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
-   }catch(e){setStatus('Version NOT verified: '+String(e));}
+     const verified=verifiedSetupSaveVersion(fresh,returned.version_id);
+     if(!verified)throw new Error('Saved immutable version ID could not be read back.');
+     setVersions(fresh);setPerformance(perf);setSelectedVersion(verified.version_id);
+     setInput(setupDraftFromVersion(verified));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
+     setStatus('Version '+verified.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
+   }catch(e){
+     if(attempted)setUncertainSave({versionId:returned?.version_id??null});
+     setStatus('Setup save NOT verified. Further writes are blocked until the saved-version list is checked. Do not click Save again: '+String(e));
+   }
    finally{saveLock.current=false;setBusy(false);}
+ }
+ async function verifyUncertainSave(){
+   if(!uncertainSave||busy)return;
+   setBusy(true);
+   try{
+     const [fresh,perf]=await Promise.all([localApi.listSetupVersions(),localApi.setupPlaybookPerformance()]);
+     setVersions(fresh);setPerformance(perf);
+     const saved=verifiedSetupSaveVersion(fresh,uncertainSave.versionId);
+     if(saved){
+       setSelectedVersion(saved.version_id);
+       setInput(setupDraftFromVersion(saved));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
+       setUncertainSave(null);
+       setStatus('Verified: immutable Setup version '+saved.version_number+' exists. Duplicate save prevented.');
+     }else{
+       setStatus('Read-back completed, but this save is still UNVERIFIED. Inspect the saved versions. Do not retry automatically.');
+     }
+   }catch(e){setStatus('Saved versions could not be checked. Writes remain blocked: '+String(e));}
+   finally{setBusy(false);}
  }
  async function deactivate(){
    if(!selected||busy)return;
@@ -199,9 +227,16 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
        <button type="button" onClick={addEvidence} disabled={!newEvidence.trim()}>Add evidence requirement</button>
      </fieldset>
      {hasUncommittedEditorChanges&&<p role="status" className="subtle">Unsaved Setup editor changes. Save a NEW version before switching or closing this editor.</p>}
+     {uncertainSave&&<div className="warningBox" role="alert">
+       <strong>Setup version save is not verified.</strong> No second version will be submitted automatically.
+       <div className="rowActions"><button type="button" disabled={busy} onClick={()=>void verifyUncertainSave()}>Recheck saved versions</button>
+         <button type="button" disabled={busy} onClick={()=>{setUncertainSave(null);setStatus('Manual retry unlocked. Only proceed after verifying that the previous write did NOT create a version.');}}>I verified no new version was saved — unlock retry</button>
+       </div>
+       <small>Unlock requires a manual check. A completed call with a returned version ID is only accepted after that exact version is found.</small>
+     </div>}
      <div className="rowActions">
-       <button type="button" disabled={busy||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
-       <button className="primary" type="button" disabled={busy||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
+       <button type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
+       <button className="primary" type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
      </div>
      <p className="subtle">Every save creates a NEW immutable version. Saving a DRAFT does not later change that version into APPROVED: after completing the conditions, Approve creates the NEXT version. To make v1 approved directly, use Approve on a new Setup without first saving a draft. Approval requires context, Zone, prerequisites, triggers, contrary evidence and thesis invalidation.</p>
    </div>}
