@@ -332,7 +332,11 @@ mod tests {
       evidence_priorities:vec![],approve:true,
     };
     let a=save_version(&mut c,inp(None)).unwrap();
-    let b=save_version(&mut c,inp(Some(a.setup_id.clone()))).unwrap();
+    assert!(save_version(&mut c,inp(Some(a.setup_id.clone()))).is_err(),
+        "Identical repeated approval must not create another immutable version");
+    let mut next=inp(Some(a.setup_id.clone()));
+    next.notes=Some("Meaningful new plan conditions".into());
+    let b=save_version(&mut c,next).unwrap();
     let zone_revision=assign_setup_to_zone(&mut c,"z",&a.version_id,"Explicit plan selection").unwrap();
     let chosen:String=c.query_row("SELECT setup_version_id FROM candidate_revisions WHERE candidate_revision_id=?1",[&zone_revision],|r|r.get(0)).unwrap();
     assert_eq!(chosen,a.version_id);
@@ -347,6 +351,11 @@ mod tests {
     assert_ne!(newer,zone_revision);
     let persisted:String=c.query_row("SELECT setup_version_id FROM trades WHERE trade_id=?1",[&trade.metrics.trade_id],|r|r.get(0)).unwrap();
     assert_eq!(persisted,a.version_id,"Later revisions cannot rewrite the Setup actually captured at Decision time");
+    let reopened=repository::get_trade_detail(&c,&trade.metrics.trade_id).unwrap();
+    let snapshot=reopened.setup_at_decision.expect("decision-time Setup shown in Trade details");
+    assert_eq!(snapshot.version_id,a.version_id);
+    assert_eq!(snapshot.version_number,Some(1));
+    assert_eq!(snapshot.name.as_deref(),Some("Zone rejection"));
     assert_eq!(db::integrity_check(&c).unwrap(),"ok");
  }
  #[test]
@@ -370,7 +379,10 @@ mod tests {
        approve};
     let a=save_version(&mut c,form(None,true)).unwrap();
     assert_eq!(a.version_number,1);assert_eq!(a.evidence_priorities.len(),1);
-    let v2=save_version(&mut c,form(Some(a.setup_id.clone()),true)).unwrap();
+    assert!(save_version(&mut c,form(Some(a.setup_id.clone()),true)).is_err());
+    let mut changed=form(Some(a.setup_id.clone()),true);
+    changed.evidence_priorities[0].priority_role="REQUIRED".into();
+    let v2=save_version(&mut c,changed).unwrap();
     assert_eq!(v2.version_number,2);
     assert!(c.execute("UPDATE setup_versions SET entry_triggers='changed' WHERE version_id=?1",[&a.version_id]).is_err());
     assert!(c.execute("DELETE FROM setup_versions WHERE version_id=?1",[&a.version_id]).is_err());
