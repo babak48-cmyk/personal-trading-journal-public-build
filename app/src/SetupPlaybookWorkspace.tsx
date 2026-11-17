@@ -96,11 +96,11 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
    setEditorDirty(true);
    setInput(prev=>({...prev,evidence_priorities:[...prev.evidence_priorities,
      {evidence_label:newEvidence.trim(),priority_role:evidenceRole,explanation:evidenceHelp.trim()||null}]}));
-   setNewEvidence('');setEvidenceHelp('');
+   setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
  }
  async function save(approve:boolean){
    if(saveLock.current||busy)return;
-   if(newEvidence.trim()||evidenceHelp.trim()){
+   if(newEvidence.trim()||evidenceHelp.trim()||evidenceRole!=='SUPPORTING'){
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
    }
@@ -114,7 +114,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      const [fresh,perf]=await Promise.all([localApi.listSetupVersions(),localApi.setupPlaybookPerformance()]);
      if(!fresh.some(x=>x.version_id===result.version_id))throw new Error('Saved version could not be read back.');
      setVersions(fresh);setPerformance(perf);setSelectedVersion(result.version_id);
-     setInput(toDraft(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');
+     setInput(toDraft(result));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
      setStatus('Version '+result.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
    }catch(e){setStatus('Version NOT verified: '+String(e));}
    finally{saveLock.current=false;setBusy(false);}
