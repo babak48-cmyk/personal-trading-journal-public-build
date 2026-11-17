@@ -48,16 +48,15 @@ describe('Safe preference cleanup after controlled deletion of a NEVER-used fiel
 describe('Required Custom Fields remain available when display preferences fail to load',()=>{
  it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('keeps Required %s editable without disclosing optional saved-hidden fields',(stage)=>{
   const required=def(stage,true);
-  const optional=def(stage,false);
-  const inactive=def(stage,true,false);
+  const optional={...def(stage,false),field_id:stage+'-optional'};
+  const inactive={...def(stage,true,false),field_id:stage+'-inactive'};
   const fields=[required,optional,inactive];
   const stalePreferences={
    [required.field_id]:{visible:false,placement:'DETAILED_ONLY' as const},
    [optional.field_id]:{visible:false,placement:'DETAILED_ONLY' as const},
   };
-  // The definition helper produces duplicate IDs for required and optional
-  // in the same stage, but the fallback must rely on required/active flags,
-  // never stale saved preferences or bare ID guesses.
+  // Use distinct IDs: fallback depends on verified required/active semantics,
+  // not a guessed or cached visibility preference.
   for(const quick of [true,false]){
    expect(safeVisibleCustomFields(fields,quick,stalePreferences,false)).toEqual([required]);
   }
