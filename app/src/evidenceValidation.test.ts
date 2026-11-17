@@ -21,6 +21,17 @@ describe('atomic Evidence capture required-field checks', () => {
   it('treats zero as a present numeric price and preserves a valid note', () => {
     expect(evidenceRequiredIssues({'evidence.price':true,'evidence.note':true},0,'Absorption observed')).toEqual([]);
   });
+  it.each([Number.NaN,Number.POSITIVE_INFINITY,Number.NEGATIVE_INFINITY])(
+    'rejects a non-finite observation price %s, whether optional or Required',price=>{
+      const issue=[{id:'evidence.price',label:'Observed price'}];
+      expect(evidenceRequiredIssues({},price,'valid note')).toEqual(issue);
+      expect(evidenceRequiredIssues({'evidence.price':true},price,'valid note')).toEqual(issue);
+    });
+  it('allows a truly omitted optional observation price, but never invents one',()=>{
+    expect(evidenceRequiredIssues({},null,'note')).toEqual([]);
+    expect(evidenceRequiredIssues({'evidence.price':true},null,'note'))
+      .toEqual([{id:'evidence.price',label:'Observed price'}]);
+  });
   it('supports independent required settings without forcing the other input', () => {
     expect(evidenceRequiredIssues({'evidence.note':true},null,'Observed')).toEqual([]);
     expect(evidenceRequiredIssues({'evidence.price':true},null,'')).toEqual([{id:'evidence.price',label:'Observed price'}]);
