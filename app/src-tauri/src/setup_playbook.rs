@@ -90,6 +90,29 @@ fn check(conn:&Connection, i:&SaveSetupVersionInput)->Result<(),AppError>{
     }
     Ok(())
 }
+// Compare the persisted semantic definition, not IDs, timestamps or the draft UI state.
+// Approval state is intentionally included: approving a saved draft is a new audited version.
+fn same_text(a:&Option<String>,b:&Option<String>)->bool {
+    a.as_deref().unwrap_or("").trim()==b.as_deref().unwrap_or("").trim()
+}
+fn same_semantics(input:&SaveSetupVersionInput,last:&SetupVersion)->bool {
+    input.name.trim()==last.name.trim()
+    && input.approve==last.is_approved
+    && input.source_trade_id==last.source_trade_id
+    && same_text(&input.market_context,&last.market_context)
+    && same_text(&input.zone_location,&last.zone_location)
+    && same_text(&input.prerequisites,&last.prerequisites)
+    && same_text(&input.entry_triggers,&last.entry_triggers)
+    && same_text(&input.supporting_evidence,&last.supporting_evidence)
+    && same_text(&input.contrary_evidence,&last.contrary_evidence)
+    && same_text(&input.thesis_invalidation,&last.thesis_invalidation)
+    && same_text(&input.notes,&last.notes)
+    && input.evidence_priorities.len()==last.evidence_priorities.len()
+    && input.evidence_priorities.iter().zip(last.evidence_priorities.iter()).all(|(a,b)|
+        a.evidence_label.trim().eq_ignore_ascii_case(b.evidence_label.trim())
+        && a.priority_role==b.priority_role
+        && same_text(&a.explanation,&b.explanation))
+}
 pub fn save_version(conn:&mut Connection,input:SaveSetupVersionInput)->Result<SetupVersion,AppError>{
     check(conn,&input)?;
     let now=Utc::now().to_rfc3339();
@@ -99,6 +122,19 @@ pub fn save_version(conn:&mut Connection,input:SaveSetupVersionInput)->Result<Se
        if count!=1{return Err(AppError::Validation("Unknown or inactive Setup ID".into()));}
        existing.clone()
     }else{Uuid::new_v4().to_string()};
+    // The transactional check covers concurrent/delayed duplicate requests as well
+    // as UI double clicks; never create an identical immutable version accidentally.
+    if input.setup_id.is_some() {
+        let last_id:Option<String>=tx.query_row(
+            "SELECT d.version_id FROM setup_playbook_details d JOIN setup_versions v ON v.setup_version_id=d.version_id WHERE v.setup_id=?1 ORDER BY d.version_number DESC LIMIT 1",
+            [&setup_id],|row|row.get(0)).optional()?;
+        if let Some(last_id)=last_id {
+            let last=get_version(&tx,&last_id)?;
+            if same_semantics(&input,&last) {
+                return Err(AppError::Validation("No changes since the latest saved Setup version. Edit the definition before saving a NEW version; existing history is retained.".into()));
+            }
+        }
+    }
     let revision:i64=tx.query_row(
         "SELECT COUNT(*)+1 FROM setup_versions WHERE setup_id=?1",
         [&setup_id],|r|r.get(0))?;
