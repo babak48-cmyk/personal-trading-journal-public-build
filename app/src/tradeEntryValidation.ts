@@ -7,6 +7,10 @@ export function tradeEntryIssues(entryPrice:number|null,stopPrice:number|null,qu
   if(entryPrice===null||!Number.isFinite(entryPrice))issues.push({id:'trade.entryPrice',label:'Entry price'});
   if(stopPrice===null||!Number.isFinite(stopPrice))issues.push({id:'trade.stopPrice',label:'Stop price'});
   if(!Number.isFinite(quantity)||quantity<=0||!Number.isInteger(quantity))issues.push({id:'trade.quantity',label:'Positive whole-number quantity'});
-  if(targetRequired&&(plannedTarget===null||!Number.isFinite(plannedTarget)))issues.push({id:'trade.plannedTarget',label:'Planned target'});
+  // An optional target may be omitted; an explicitly entered non-finite
+  // price must never pass the same persisted trade-entry boundary.
+  if((targetRequired&&plannedTarget===null)
+    ||(plannedTarget!==null&&!Number.isFinite(plannedTarget)))
+    issues.push({id:'trade.plannedTarget',label:'Planned target'});
   return issues;
 }
