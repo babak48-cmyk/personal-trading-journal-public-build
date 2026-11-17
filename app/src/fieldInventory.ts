@@ -59,13 +59,13 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   // has persisted Field Manager overrides or cross-version safe customization.
   entry('setup.name','Setup name','setup-playbook','journal-field',false,undefined,'Immutable version identity; required by Setup save validation'),
   entry('setup.sourceTrade','Historical source trade','setup-playbook','journal-field',true,'setup.sourceTrade'),
-  entry('setup.marketContext','Applicable market context','setup-playbook','journal-field',true),
-  entry('setup.zoneLocation','Zone/location criteria','setup-playbook','journal-field',true),
-  entry('setup.prerequisites','Prerequisites','setup-playbook','journal-field',true),
-  entry('setup.entryTriggers','Entry triggers','setup-playbook','journal-field',true),
-  entry('setup.supportingEvidence','Supporting evidence definition','setup-playbook','journal-field',true),
-  entry('setup.contraryEvidence','Contrary evidence definition','setup-playbook','journal-field',true),
-  entry('setup.invalidation','Thesis invalidation','setup-playbook','journal-field',true),
+  entry('setup.marketContext','Applicable market context','setup-playbook','journal-field',true,'setup.marketContext','Protected Setup version definition; never hide approval-relevant editor input'),
+  entry('setup.zoneLocation','Zone/location criteria','setup-playbook','journal-field',true,'setup.zoneLocation','Protected Setup version definition; never hide approval-relevant editor input'),
+  entry('setup.prerequisites','Prerequisites','setup-playbook','journal-field',true,'setup.prerequisites','Protected Setup version definition; never hide approval-relevant editor input'),
+  entry('setup.entryTriggers','Entry triggers','setup-playbook','journal-field',true,'setup.entryTriggers','Protected Setup version definition; never hide approval-relevant editor input'),
+  entry('setup.supportingEvidence','Supporting evidence definition','setup-playbook','journal-field',true,'setup.supportingEvidence','Protected Setup version definition; never hide approval-relevant editor input'),
+  entry('setup.contraryEvidence','Contrary evidence definition','setup-playbook','journal-field',true,'setup.contraryEvidence','Protected Setup version definition; never hide approval-relevant editor input'),
+  entry('setup.invalidation','Thesis invalidation','setup-playbook','journal-field',true,'setup.invalidation','Protected Setup version definition; never hide approval-relevant editor input'),
   entry('setup.notes','Setup notes','setup-playbook','journal-field',true,'setup.notes'),
   entry('setup.evidenceName','Evidence priority label','setup-playbook','journal-field',false,undefined,'Required for each new immutable evidence priority row'),
   entry('setup.evidenceRole','Evidence priority role','setup-playbook','journal-field',false,undefined,'Protected semantic REQUIRED/SUPPORTING/CONTRADICTORY/NOT_RELEVANT role'),
@@ -257,6 +257,8 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
  * Restrict editable text settings to verifiably consumed UI controls.
  * Other inventoried controls remain visible for audit, without fake customization. */
 export const RENDERED_FIELD_TEXT_IDS = [
+  // Protected Setup definitions accept label/help customization, NOT visibility toggles.
+  'setup.marketContext', 'setup.zoneLocation', 'setup.prerequisites', 'setup.entryTriggers', 'setup.supportingEvidence', 'setup.contraryEvidence', 'setup.invalidation',
   'setup.sourceTrade', 'setup.notes', 'setup.evidenceHelp',
   'attachment.caption',
   'candidate.invalidationConditions',
