@@ -72,7 +72,8 @@ export type RiskSnapshot = {
   stop_price:number|null; quantity:number|null; risk_dollars:number|null;
   change_reason:string|null; was_rule_compliant:boolean|null; provenance:string|null;
 };
-export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[] };
+export type SetupAtDecision = {version_id:string;name:string|null;version_number:number|null};
+export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[]; setup_at_decision:SetupAtDecision|null };
 export type FillCorrectionField = 'price'|'quantity'|'commission'|'fees';
 export type FillCorrectionInput = {
   execution_id:string; field:FillCorrectionField; expected_effective:number|null;
