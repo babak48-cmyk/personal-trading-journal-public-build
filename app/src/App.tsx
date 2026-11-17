@@ -38,6 +38,7 @@ import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
 import {managerOrderPosition} from './fieldManagerOrdering';
+import {effectiveFieldPlacement} from './fieldInventory';
 import { matchesPersistedPreferences, type PreferenceMap } from './fieldPreferenceVerification';
 import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './customFieldWriteVerification';
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
@@ -2861,8 +2862,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     }
   }
   function effectivePlacement(id:string):FieldPlacement {
-    // Keep the pre-existing Decision quality Quick default (Detailed-only).
-    return placements[id]??(id==='decision.quality'?'DETAILED_ONLY':'QUICK_AND_DETAILED');
+    return effectiveFieldPlacement(id,placements);
   }
   async function togglePlacement(id:string){
     if(!isActiveVisibilityControl(id)||isUserRequired(id,draft)||settingsSaveRef.current)return;
