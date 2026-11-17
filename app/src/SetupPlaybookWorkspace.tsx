@@ -6,24 +6,16 @@ import {hasPendingSetupEvidence} from './pendingSetupEvidence';
 import {blankSetupDraft,setupDraftFromVersion,setupSwitchDraft} from './setupDraftLifecycle';
 import {verifiedSetupSaveVersion} from './setupSaveReadback';
 import {isFieldPresented,type FieldPlacement} from './fieldInventory';
+import {orderedSetupDefinitionFields,setupApprovalMissingFields} from './setupFieldManager';
 
-const fieldDefs=[
- ['market_context','Market regime/context','e.g. Range boundary rejection vs acceptance'],
- ['zone_location','Location / relevant Zone','e.g. prior value-area low with provenance'],
- ['prerequisites','Prerequisite conditions','Must exist before considering entry'],
- ['entry_triggers','Critical entry triggers','Timestamped observation required; not a signal'],
- ['supporting_evidence','Supporting confirmations','Optional observations that strengthen the thesis'],
- ['contrary_evidence','Contradictory / veto evidence','What conflicts with this thesis; include explicit veto'],
- ['thesis_invalidation','Thesis invalidation','Separate from an order stop price'],
- ['notes','Notes (optional)','Keep it short']
-] as const;
 const roles=['REQUIRED','SUPPORTING','CONTRADICTORY','NOT_RELEVANT'] as const;
 type EditorTransition={kind:'close'|'switch'|'new';versionId?:string};
 
-export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fieldText}:{
+export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fieldText,fieldOrder}:{
  rows:readonly JournalTradeRow[];quickMode:boolean;
  visibility:Readonly<Record<string,boolean>>;placements:Readonly<Record<string,FieldPlacement>>;
  fieldText:Readonly<Record<string,{label?:string;help?:string}>>;
+ fieldOrder:Readonly<Record<string,number>>;
 }){
  // Setup approval-critical definitions always render. Only connected optional
  // inputs honor presentation preferences, and their saved values are never erased.
@@ -206,11 +198,18 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
        </select>
      </label>}
      {seed&&<button type="button" onClick={fromTrade}>Copy historical source facts into editable draft</button>}
-     {fieldDefs.map(([key,label,hint])=>key==='notes'&&!shown('setup.notes')?null:<label key={key}>{key==='notes'?labelFor('setup.notes',label):label}
-       {key==='notes'&&fieldText['setup.notes']?.help&&<small title={fieldText['setup.notes'].help}>ⓘ</small>}
-       <textarea rows={key==='notes'?4:2} value={input[key]??''} maxLength={2000}
-        onChange={e=>update(key,e.target.value)} placeholder={hint}/>
+     {orderedSetupDefinitionFields(fieldOrder).map(field=><label key={field.id}>
+       {labelFor(field.id,field.label)}
+       <small> {field.approvalRequired?'Required to approve · optional in Draft':'Optional supporting definition'}</small>
+       {fieldText[field.id]?.help&&<small title={fieldText[field.id].help}>ⓘ</small>}
+       <textarea rows={2} value={input[field.key]??''} maxLength={2000}
+        onChange={e=>update(field.key,e.target.value)} placeholder={field.hint}/>
      </label>)}
+     {shown('setup.notes')&&<label>{labelFor('setup.notes','Notes (optional)')}
+       {fieldText['setup.notes']?.help&&<small title={fieldText['setup.notes'].help}>ⓘ</small>}
+       <textarea rows={4} value={input.notes??''} maxLength={2000}
+         onChange={e=>update('notes',e.target.value)} placeholder="Keep it short"/>
+     </label>}
      <fieldset><legend>Evidence priorities — configure by this setup/regime, not fixed indicator counts</legend>
        <p className="subtle">REQUIRED must be observed; SUPPORTING is optional; CONTRADICTORY conflicts with the thesis; NOT_RELEVANT need not be reviewed. No total-score shortcut or automatic trade permission.</p>
        {input.evidence_priorities.map((e,i)=><div className="rowActions" key={i}>
@@ -236,6 +235,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
        <small>Unlock requires a manual check. A completed call with a returned version ID is only accepted after that exact version is found.</small>
      </div>}
      <div className="rowActions">
+       {setupApprovalMissingFields(input).length>0&&<small role="status">To approve: complete {setupApprovalMissingFields(input).length} missing definition field(s). Draft save can remain partial.</small>}
        <button type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
        <button className="primary" type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
      </div>
