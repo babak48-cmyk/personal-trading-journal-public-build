@@ -1,5 +1,5 @@
 export type RequirementDefault = 'SYSTEM_REQUIRED'|'OPTIONAL'|'CONDITIONAL';
-export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview'|'Attachment';
+export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview'|'Attachment'|'Setup';
 
 export type FieldDefinition = {
   id:string;
@@ -17,6 +17,18 @@ export type FieldDefinition = {
 };
 
 export const FIELD_DEFINITIONS:FieldDefinition[] = [
+  // Setup Playbook remains a versioned definition. Only these OPTIONAL
+  // presentation controls are connected; approval-critical fields retain
+  // native Rust validation and cannot be hidden.
+  {id:'setup.sourceTrade',group:'Setup',label:'Historical source trade',defaultRequirement:'OPTIONAL',systemLocked:false,requirementManaged:false,
+    helpShort:'Optional historical CLOSED trade used as a source for an editable definition; it is not a decision-time attribution.',
+    helpExample:'Use a previously closed ES trade to prefill known Zone/context facts, then review them.'},
+  {id:'setup.notes',group:'Setup',label:'Setup notes',defaultRequirement:'OPTIONAL',systemLocked:false,requirementManaged:false,
+    helpShort:'Optional notes on this immutable Setup version. Hiding the editor input retains existing version text.',
+    helpExample:'Watch for changing behavior at the level; this is not a trading confirmation.'},
+  {id:'setup.evidenceHelp',group:'Setup',label:'New evidence explanation',defaultRequirement:'OPTIONAL',systemLocked:false,requirementManaged:false,
+    helpShort:'Optional explanation of a proposed evidence-priority row. The entered text is not saved until the row is added.',
+    helpExample:'DOM pressure is supporting context, not an automatic approval to enter.'},
   {id:'session.date',group:'Session',label:'Date',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
     helpShort:'The trading-session date used to group the plan, decisions and trades.',helpExample:'If you trade the Sydney evening session on 8 Oct, keep the session date as 2026-10-08.',helpLong:'Session date is separate from exact event timestamps. It is the journal bucket you review later.'},
   {id:'session.instrument',group:'Session',label:'Instrument',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
