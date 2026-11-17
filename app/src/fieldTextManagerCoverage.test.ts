@@ -5,7 +5,9 @@ import { FIELD_DEFINITION_BY_ID } from './fieldDefinitions';
 describe('Field Manager complete rendered text-editor coverage', () => {
   it('lists unique connected, formally defined and live-presented controls', () => {
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
-    expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(36);
+    // Connected controls grow with approved Stage coverage; a stale fixed count must not reject added verified fields.
+    expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(ACTIVE_VISIBILITY_FIELD_IDS.length);
+    for(const id of ['setup.sourceTrade','setup.notes','setup.evidenceHelp'])expect(RENDERED_FIELD_TEXT_IDS).toContain(id);
     expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set(ACTIVE_VISIBILITY_FIELD_IDS));
     for (const id of RENDERED_FIELD_TEXT_IDS) {
       expect(FIELD_CONTROL_INVENTORY.some(item => item.id===id)).toBe(true);
