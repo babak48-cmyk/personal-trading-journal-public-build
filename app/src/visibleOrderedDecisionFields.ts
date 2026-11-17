@@ -1,5 +1,5 @@
 import {orderFieldIdsWithinSection,isFieldPresented,type FieldPlacement} from './fieldInventory';
-import {isUserRequired,type RequirementOverrides} from './fieldDefinitions';
+import type {RequirementOverrides} from './fieldDefinitions';
 
 /** The existing optional Decision quality default is intentionally Detailed-only.
  * Field Manager can opt it into Quick; a user-required quality always appears.
@@ -14,7 +14,6 @@ export function visibleOrderedDecisionFields(
   overrides:RequirementOverrides,
 ):string[]{
   return orderFieldIdsWithinSection(DECISION_DETAILS_ORDER,ranks).filter(id=>
-    (id!=='decision.quality'||!quickMode||isUserRequired(id,overrides)||placements[id]==='QUICK_AND_DETAILED')
-    && isFieldPresented(id,quickMode,visibility,placements,overrides)
+    isFieldPresented(id,quickMode,visibility,placements,overrides)
   );
 }
