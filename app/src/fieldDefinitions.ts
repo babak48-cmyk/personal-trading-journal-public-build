@@ -17,6 +17,22 @@ export type FieldDefinition = {
 };
 
 export const FIELD_DEFINITIONS:FieldDefinition[] = [
+  // Approval-critical Setup semantics are enforced by Rust; Field Manager may
+  // rename/reorder these visible inputs, never weaken their validation or hide them.
+  {id:'setup.marketContext',group:'Setup',label:'Market regime/context',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Describe the market regime applicable to this setup. Required to approve, not required to save a Draft.',helpExample:'Range boundary rejection; compare against acceptance.'},
+  {id:'setup.zoneLocation',group:'Setup',label:'Location / relevant Zone',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Define the qualifying Zone or level with provenance. Required to approve a Setup.',helpExample:'Prior-day VAH with a marked provenance source.'},
+  {id:'setup.prerequisites',group:'Setup',label:'Prerequisite conditions',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Record conditions that must be true before this setup is considered. Required to approve.',helpExample:'Known level and matching market context.'},
+  {id:'setup.entryTriggers',group:'Setup',label:'Critical entry triggers',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Define future observed entry triggers; a definition is not evidence that the trigger occurred. Required to approve.',helpExample:'Wait for observed rejection after touch.'},
+  {id:'setup.supportingEvidence',group:'Setup',label:'Supporting confirmations',defaultRequirement:'OPTIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Optional descriptive supporting evidence. Do not turn it into an arbitrary score or an approval gate.',helpExample:'DOM pressure may strengthen, not independently validate, the thesis.'},
+  {id:'setup.contraryEvidence',group:'Setup',label:'Contradictory / veto evidence',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Identify conflicting evidence or veto conditions. Required to approve.',helpExample:'Sustained price acceptance beyond the zone.'},
+  {id:'setup.invalidation',group:'Setup',label:'Thesis invalidation',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
+    helpShort:'Define when the entire thesis becomes invalid; separate from an order stop. Required to approve.',helpExample:'Acceptance above boundary invalidates the short thesis.'},
   // Setup Playbook remains a versioned definition. Only these OPTIONAL
   // presentation controls are connected; approval-critical fields retain
   // native Rust validation and cannot be hidden.
