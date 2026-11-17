@@ -22,7 +22,13 @@ describe('Field Manager integration safety', () => {
     const statuses=new Map(fieldConnectionReport().map(item=>[item.id,item.status]));
     expect(new Set(ACTIVE_VISIBILITY_FIELD_IDS).size).toBe(ACTIVE_VISIBILITY_FIELD_IDS.length);
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
-    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set(ACTIVE_VISIBILITY_FIELD_IDS));
+    const protectedSetup=["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"];
+    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...protectedSetup]));
+    for(const id of protectedSetup){
+      expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(true);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+      expect(fieldConnectionReport().find(x=>x.id===id)?.status).toBe('PROTECTED');
+    }
     for(const id of ACTIVE_VISIBILITY_FIELD_IDS){
       const entry=inventory.get(id);
       expect(entry, id+' is absent from the All-Inputs inventory').toBeDefined();
