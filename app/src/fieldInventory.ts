@@ -58,7 +58,7 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   // Plan/Zone observation. Inventory every input without pretending it already
   // has persisted Field Manager overrides or cross-version safe customization.
   entry('setup.name','Setup name','setup-playbook','journal-field',false,undefined,'Immutable version identity; required by Setup save validation'),
-  entry('setup.sourceTrade','Historical source trade','setup-playbook','journal-field',true),
+  entry('setup.sourceTrade','Historical source trade','setup-playbook','journal-field',true,'setup.sourceTrade'),
   entry('setup.marketContext','Applicable market context','setup-playbook','journal-field',true),
   entry('setup.zoneLocation','Zone/location criteria','setup-playbook','journal-field',true),
   entry('setup.prerequisites','Prerequisites','setup-playbook','journal-field',true),
@@ -66,10 +66,10 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('setup.supportingEvidence','Supporting evidence definition','setup-playbook','journal-field',true),
   entry('setup.contraryEvidence','Contrary evidence definition','setup-playbook','journal-field',true),
   entry('setup.invalidation','Thesis invalidation','setup-playbook','journal-field',true),
-  entry('setup.notes','Setup notes','setup-playbook','journal-field',true),
+  entry('setup.notes','Setup notes','setup-playbook','journal-field',true,'setup.notes'),
   entry('setup.evidenceName','Evidence priority label','setup-playbook','journal-field',false,undefined,'Required for each new immutable evidence priority row'),
   entry('setup.evidenceRole','Evidence priority role','setup-playbook','journal-field',false,undefined,'Protected semantic REQUIRED/SUPPORTING/CONTRADICTORY/NOT_RELEVANT role'),
-  entry('setup.evidenceHelp','Evidence priority explanation','setup-playbook','journal-field',true),
+  entry('setup.evidenceHelp','Evidence priority explanation','setup-playbook','journal-field',true,'setup.evidenceHelp'),
   entry('planRevision.bias','Revised bias','plan-revision','journal-field',false,undefined,'Immutable timestamped plan revision'),
   entry('planRevision.reason','Reason for revision','plan-revision','journal-field',false,undefined,'Plan revision audit integrity'),
   entry('planRevision.evidence','Revision evidence summary','plan-revision','journal-field',true,'planRevision.evidence'),
