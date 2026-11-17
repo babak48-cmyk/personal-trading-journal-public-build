@@ -16,6 +16,12 @@ describe('Trade entry: missing fields appear on click rather than disabling the 
   it.each([0,-1,1.5,NaN,Infinity])('rejects non-positive, fractional or invalid quantity %s',(qty)=>{
     expect(tradeEntryIssues(6025.25,6022.25,qty,null,false).map(x=>x.id)).toContain('trade.quantity');
   });
+  it.each([NaN,Infinity,-Infinity])('does not persist an invalid optional target %s',target=>{
+    expect(tradeEntryIssues(6025.25,6022.25,2,target,false))
+      .toEqual([{id:'trade.plannedTarget',label:'Planned target'}]);
+    expect(tradeEntryIssues(6025.25,6022.25,2,target,true))
+      .toEqual([{id:'trade.plannedTarget',label:'Planned target'}]);
+  });
   it('does not accept non-finite price or target',()=>{
     expect(tradeEntryIssues(NaN,Infinity,1,NaN,true).map(x=>x.id)).toEqual([
       'trade.entryPrice','trade.stopPrice','trade.plannedTarget'
