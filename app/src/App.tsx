@@ -530,16 +530,10 @@ export function App(){
   function invalidClass(id:string){return validationErrors.includes(id)?'validationFieldError':'';}
   function jumpToRequiredField(id:string){
     const route=quickValidationRoute(id,active?.status==='DRAFT',!!plan);
-    let targetPage=route.notebookPage;
-    // Custom required inputs navigate to the actual owner. Preserve any
-    // previous Evidence capture before changing the notebook page.
-    if(id.startsWith('custom-required-')){
-      if(id.startsWith('custom-required-candidate-')||id.startsWith('custom-required-zone-'))targetPage='PLAN';
-      if(id.startsWith('custom-required-trade-')||id.startsWith('custom-required-post-trade-review-'))targetPage='EXECUTION';
-      if(id.startsWith('custom-required-premarket-plan-')&&active?.status!=='DRAFT')targetPage='PLAN';
-      if(id.startsWith('custom-required-session-review-'))targetPage='REVIEW';
-      if(id.startsWith('custom-required-session-')&&active?.status!=='DRAFT')targetPage='PLAN';
-    }
+    // The shared router respects the actual Session/Plan lifecycle. Do not
+    // override it for custom fields: a draft has no confirmed Execution/Review
+    // pages, and a second route could navigate away from unsaved Quick inputs.
+    const targetPage=route.notebookPage;
     if(targetPage!==null&&!navigateNotebookPage(targetPage))return;
     if(route.draftStep!==null)setDraftStep(route.draftStep);
     if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
