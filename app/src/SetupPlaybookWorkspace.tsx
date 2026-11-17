@@ -1,6 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {localApi,type JournalTradeRow,type SaveSetupVersionInput,type SetupVersion,type SetupPerformance,type SetupEvidencePriority} from './services/localApi';
 import {setupPlaybookCandidate} from './setupPlaybookCandidate';
+import {sameSetupDefinition} from './setupDefinitionEquality';
 
 const blank=():SaveSetupVersionInput=>({
  setup_id:null,name:'',source_trade_id:null,market_context:null,zone_location:null,
@@ -27,16 +28,6 @@ const fieldDefs=[
 ] as const;
 const roles=['REQUIRED','SUPPORTING','CONTRADICTORY','NOT_RELEVANT'] as const;
 type EditorTransition={kind:'close'|'switch'|'new';versionId?:string};
-function sameDefinition(input:SaveSetupVersionInput, saved:SetupVersion,approve:boolean){
- const normal=(v:string|null|undefined)=>(v??'').trim();
- return input.setup_id===saved.setup_id && normal(input.name)===normal(saved.name)
-  && input.source_trade_id===saved.source_trade_id && approve===saved.is_approved
-  && (['market_context','zone_location','prerequisites','entry_triggers','supporting_evidence','contrary_evidence','thesis_invalidation','notes'] as const)
-   .every(k=>normal(input[k])===normal(saved[k]))
-  && input.evidence_priorities.length===saved.evidence_priorities.length
-  && input.evidence_priorities.every((e,i)=>e.evidence_label.trim().toLowerCase()===saved.evidence_priorities[i].evidence_label.trim().toLowerCase()
-   && e.priority_role===saved.evidence_priorities[i].priority_role && normal(e.explanation)===normal(saved.evidence_priorities[i].explanation));
-}
 
 export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]}){
  const [versions,setVersions]=useState<SetupVersion[]>([]);
@@ -66,7 +57,11 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
  useEffect(()=>{void reload().catch(e=>setStatus('Playbook read failed: '+String(e)));},[]);
  const hasUncommittedEditorChanges=editorDirty||!!newEvidence.trim()||!!evidenceHelp.trim();
  function applyTransition(action:EditorTransition){
-   if(action.kind==='close'){setExpanded(false);}
+   if(action.kind==='close'){
+     setExpanded(false);
+     const current=versions.find(v=>v.version_id===selectedVersion);
+     setInput(current?toDraft(current):blank());
+   }
    if(action.kind==='new'){
      setInput(blank());setSelectedVersion('');setExpanded(true);
      setStatus('New independent Setup (not a revision).');
@@ -109,7 +104,7 @@ export function SetupPlaybookWorkspace({rows}:{rows:readonly JournalTradeRow[]})
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
    }
-   if(selected && sameDefinition(input,selected,approve)){
+   if(selected && sameSetupDefinition(input,selected,approve)){
      setStatus('No changes from the selected saved version. Edit the Setup before saving a NEW immutable version.');
      return;
    }
