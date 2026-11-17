@@ -335,6 +335,13 @@ export function isFieldShown(
  * A required or conditionally required field cannot be moved out of Quick.
  */
 export type FieldPlacement = 'QUICK_AND_DETAILED' | 'DETAILED_ONLY';
+
+/** The original optional Decision-quality prompt starts in Detailed.
+ * This one default is shared by the actual form, Settings and required-focus policy.
+ */
+export function effectiveFieldPlacement(id:string,placements:Readonly<Record<string,FieldPlacement>>):FieldPlacement {
+ return placements[id]??(id==='decision.quality'?'DETAILED_ONLY':'QUICK_AND_DETAILED');
+}
 export function isFieldInMode(
   id:string,
   quickMode:boolean,
@@ -348,7 +355,7 @@ export function isFieldInMode(
   const item=FIELD_CONTROL_INVENTORY.find(x=>x.id===id);
   const def=item?.formalFieldId?FIELD_DEFINITION_BY_ID[item.formalFieldId]:undefined;
   if(item?.protectedReason||def?.systemLocked||def?.defaultRequirement==='SYSTEM_REQUIRED')return true;
-  return placements[id]!=='DETAILED_ONLY';
+  return effectiveFieldPlacement(id,placements)!=='DETAILED_ONLY';
 }
 
 export function isFieldPresented(
