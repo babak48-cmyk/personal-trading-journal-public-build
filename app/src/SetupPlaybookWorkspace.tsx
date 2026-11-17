@@ -72,6 +72,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      setStatus(switched.selectedVersion?'Selected saved version for an immutable revision.':'No saved version selected. This is a NEW independent Setup.');
    }
    setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
+   setSeedTrade(''); // Selection is temporary; never carry a prior source across Setup changes.
    setPendingTransition(null);
  }
  function requestTransition(action:EditorTransition){
