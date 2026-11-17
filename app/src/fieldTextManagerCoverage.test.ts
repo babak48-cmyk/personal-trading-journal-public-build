@@ -6,13 +6,13 @@ describe('Field Manager complete rendered text-editor coverage', () => {
   it('lists unique connected, formally defined and live-presented controls', () => {
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
     // Connected controls grow with approved Stage coverage; a stale fixed count must not reject added verified fields.
-    expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(ACTIVE_VISIBILITY_FIELD_IDS.length);
+    expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(ACTIVE_VISIBILITY_FIELD_IDS.length+7);
     for(const id of ['setup.sourceTrade','setup.notes','setup.evidenceHelp'])expect(RENDERED_FIELD_TEXT_IDS).toContain(id);
-    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set(ACTIVE_VISIBILITY_FIELD_IDS));
+    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"]]));
     for (const id of RENDERED_FIELD_TEXT_IDS) {
       expect(FIELD_CONTROL_INVENTORY.some(item => item.id===id)).toBe(true);
       expect(FIELD_DEFINITION_BY_ID[id]).toBeDefined();
-      expect(isActiveVisibilityControl(id)).toBe(true);
+      expect(isActiveVisibilityControl(id)).toBe(!["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"].includes(id));
     }
   });
   it('includes the pre-session state label/help in the actual Draft Plan editor', () => {
