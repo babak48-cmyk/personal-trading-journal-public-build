@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FIELD_DEFINITION_BY_ID, isUserRequired } from './fieldDefinitions';
 import {
   FIELD_CONTROL_INVENTORY,
+  ACTIVE_VISIBILITY_FIELD_IDS,
+  RENDERED_FIELD_TEXT_IDS,
   fieldConnectionReport,
   fieldConnectionSummary,
   isFieldPresented,
@@ -13,6 +15,23 @@ import {
 describe('Field Manager integration safety', () => {
   it('has no stale or protected active visibility IDs', () => {
     expect(activeVisibilityInventoryIssues()).toEqual([]);
+  });
+
+  it('never advertises a configured field without its exact formal definition and verified inventory connection', () => {
+    const inventory=new Map(FIELD_CONTROL_INVENTORY.map(item=>[item.id,item]));
+    const statuses=new Map(fieldConnectionReport().map(item=>[item.id,item.status]));
+    expect(new Set(ACTIVE_VISIBILITY_FIELD_IDS).size).toBe(ACTIVE_VISIBILITY_FIELD_IDS.length);
+    expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
+    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set(ACTIVE_VISIBILITY_FIELD_IDS));
+    for(const id of ACTIVE_VISIBILITY_FIELD_IDS){
+      const entry=inventory.get(id);
+      expect(entry, id+' is absent from the All-Inputs inventory').toBeDefined();
+      expect(entry?.formalFieldId, id+' has no formal definition link').toBe(id);
+      expect(FIELD_DEFINITION_BY_ID[id], id+' is missing its live field definition').toBeDefined();
+      expect(statuses.get(id), id+' is not fully connected').toBe('CONNECTED');
+    }
+    expect(['setup.sourceTrade','setup.notes','setup.evidenceHelp'].every(id=>
+      inventory.get(id)?.formalFieldId===id&&statuses.get(id)==='CONNECTED')).toBe(true);
   });
 
   it('classifies all inventory fields exactly once', () => {
