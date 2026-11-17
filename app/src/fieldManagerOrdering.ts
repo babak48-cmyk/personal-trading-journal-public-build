@@ -1,6 +1,7 @@
 import {orderFieldIdsWithinSection} from './fieldInventory';
 import {DECISION_DETAILS_ORDER} from './visibleOrderedDecisionFields';
 import {EVIDENCE_DETAILS_ORDER} from './visibleOrderedEvidenceFields';
+import {SETUP_DEFINITION_FIELD_IDS} from './setupFieldManager';
 
 /**
  * Only sections already wired to a persisted Field Order preference are offered.
@@ -8,6 +9,7 @@ import {EVIDENCE_DETAILS_ORDER} from './visibleOrderedEvidenceFields';
  * Unsupported inputs remain present in the inventory, but cannot be given a fake order control.
  */
 export const FIELD_MANAGER_ORDER_SECTIONS = [
+ {label:'Setup definition criteria (protected)',ids:SETUP_DEFINITION_FIELD_IDS},
  {label:'Plan scenarios',ids:['plan.mainScenario','plan.alternativeScenario']},
  {label:'Pre-session readiness',ids:['plan.preSessionState','plan.preSessionStateIntensity']},
  {label:'Zone planned conditions',ids:['candidate.requiredConditions','candidate.invalidationConditions']},
