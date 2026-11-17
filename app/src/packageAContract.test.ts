@@ -31,12 +31,11 @@ describe('Package A cross-stage delivery gate',()=>{
     // Mistakes are exception-based; absence of a mistake is a valid review.
     expect(report.find(x=>x.id==='review.mistakes')?.status).toBe('CONNECTED');
     expect(isUserRequired('review.mistakes',{'review.mistakes':true})).toBe(false);
-    // These seven approval-critical Setup definitions are inventoried but not yet wired for preference editing.
-    // Do not hide unfinished requirements or misclassify them as ACCEPTED merely to pass the gate.
-    expect(report.filter(x=>x.status==='PENDING').map(x=>x.id)).toEqual([
-      'setup.marketContext','setup.zoneLocation','setup.prerequisites',
-      'setup.entryTriggers','setup.supportingEvidence','setup.contraryEvidence','setup.invalidation',
-    ]);
+    // Setup definition fields are always visible/protected even when their
+    // label, help and within-Setup order are user-adjustable. No hide/required toggles.
+    const setupProtected=["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"];
+    for(const id of setupProtected)expect(report.find(x=>x.id===id)?.status).toBe('PROTECTED');
+    expect(report.filter(x=>x.status==='PENDING')).toEqual([]);
   });
 
   it('keeps EVERY eligible user-required control visible in Quick and Detailed, even under hide and detailed-only preferences',()=>{
