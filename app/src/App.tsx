@@ -2510,7 +2510,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
     setBusy(true);
     try{
       const definitions=await localApi.listCustomFieldDefinitions();
-      const currentOptionGroups=Object.keys(options);
+      const currentOptionGroups=definitions.filter(f=>f.field_type==='SINGLE_SELECT'||f.field_type==='MULTI_SELECT').map(f=>f.field_id);
       const refreshed=await Promise.all(currentOptionGroups.map(async id=>
         [id,await localApi.listCustomFieldOptions(id)] as const));
       await onPresentationChanged();
@@ -2635,7 +2635,17 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
       <div className="rowActions"><label><input type="checkbox" checked={effectiveCustomPresentation(field,presentation).visible} disabled={busy||uncertainAdmin||!field.active||field.required} onChange={()=>void setPresentation(field,'visible')}/> Show custom field</label><label>Quick/Detailed <select value={effectiveCustomPresentation(field,presentation).placement} disabled={busy||uncertainAdmin||!field.active||field.required} onChange={()=>void setPresentation(field,'placement')}><option value="QUICK_AND_DETAILED">Quick + Detailed</option><option value="DETAILED_ONLY">Detailed only</option></select></label>{field.required&&<small>Required fields always appear in both modes.</small>}</div>
       <p className="subtle">ID: {field.field_id} · {field.help_text||'No help text'} · {field.required?'Required':'Optional'}{!canCaptureCustomFieldStage(field.stage)?' · No capture editor for this legacy stage; cannot newly require it':''}</p>
       <label><input type="checkbox" checked={field.required} disabled={busy||uncertainAdmin||!field.active||(!field.required&&!canCaptureCustomFieldStage(field.stage))} onChange={e=>{if(e.target.checked&&!canCaptureCustomFieldStage(field.stage)){setNotice('Cannot require an unsupported capture stage.');return;}const wanted=e.target.checked;void runChange(
-        ()=>localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,wanted,field.active,field.display_order),
+        async()=>{
+          // Native requires a live choice before a select definition can become Required.
+          // Verify the current persisted options, not a potentially stale UI cache.
+          if(wanted&&(field.field_type==='SINGLE_SELECT'||field.field_type==='MULTI_SELECT')){
+            const savedOptions=await localApi.listCustomFieldOptions(field.field_id);
+            setOptions(v=>({...v,[field.field_id]:savedOptions}));
+            if(!savedOptions.some(option=>option.active))
+              throw new CustomAdminValidationError('Add at least one active option before marking this select field Required. No change was sent.');
+          }
+          await localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,wanted,field.active,field.display_order);
+        },
         async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.required===wanted&&current.active===field.active;}
       );}}/> Required at this stage</label>
       <button type="button" disabled={busy||uncertainAdmin||(!field.active&&field.required&&!canCaptureCustomFieldStage(field.stage))} onClick={()=>{const wanted=!field.active;void runChange(
@@ -2725,6 +2735,8 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
         <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})}>Cancel</button>
       </div>}
       {['SINGLE_SELECT','MULTI_SELECT'].includes(field.field_type)&&<>
+        <p className="subtle">Step 1: Create this optional select field. Step 2: Add at least one active option below. Step 3: Mark Required if needed. Existing saved selections retain their historical option labels.</p>
+        {field.required&&!(options[field.field_id]||[]).some(option=>option.active)&&<p role="status" className="warningBox">This Required select field has no loaded active option. Refresh options and verify before completing this stage.</p>}
         <button type="button" disabled={busy||uncertainAdmin} onClick={async()=>{try{const fieldOptions=await localApi.listCustomFieldOptions(field.field_id);setOptions(v=>({...v,[field.field_id]:fieldOptions}));}catch(e){setNotice(String(e));}}}>View options</button>
         <label>New option<input value={newOption[field.field_id]||''} onChange={e=>setNewOption(v=>({...v,[field.field_id]:e.target.value}))}/></label>
         <button type="button" disabled={busy||uncertainAdmin||!field.active||!(newOption[field.field_id]||'').trim()} onClick={()=>{
