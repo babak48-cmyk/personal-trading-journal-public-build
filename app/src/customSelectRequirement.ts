@@ -19,3 +19,23 @@ export function optionBearingFieldIds(
 ):string[] {
   return fields.filter(field=>['SINGLE_SELECT','MULTI_SELECT'].includes(field.field_type)).map(field=>field.field_id);
 }
+
+
+/** Mirrors the native safeguard: a Required select must retain an active choice.
+ * savedOptions must be freshly read from SQLite before the change is sent.
+ */
+export function assertCanDeactivateSelectOption(
+  required:boolean,
+  optionId:string,
+  savedOptions:readonly Readonly<{option_id:string;active:boolean}>[]
+):void {
+  if(required&&!savedOptions.some(option=>option.active&&option.option_id!==optionId))
+    throw new CustomAdminValidationError('A Required select field must keep at least one active option. Add or activate another option first; no change was sent.');
+}
+
+/** Native stores a trimmed name; compare read-back against the same canonical
+ * persisted spelling rather than the original input with boundary whitespace.
+ */
+export function isSavedCustomFieldLabel(expectedInput:string,savedLabel:string):boolean {
+  return savedLabel===expectedInput.trim();
+}
