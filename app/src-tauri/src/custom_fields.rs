@@ -439,6 +439,23 @@ pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(
 mod tests {
     use super::*;
     #[test]
+    fn a_new_optional_single_select_can_be_created_before_any_choices() {
+        let mut c=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&c).unwrap();
+        create_custom_field(&mut c,&CustomFieldDefinitionInput {
+            field_id:"6d6febf2-47d0-49e7-93ae-d102b02b4995".into(),
+            stage:"session".into(),field_type:"SINGLE_SELECT".into(),
+            label:"Session Focus TEST".into(),
+            help_text:"Select the main focus for this session".into(),
+            required:false,display_order:0
+        }).unwrap();
+        let stored=list_custom_fields(&c).unwrap();
+        let created=stored.iter().find(|f|f.label=="Session Focus TEST").unwrap();
+        assert_eq!(created.field_type,"SINGLE_SELECT");
+        assert!(!created.required);
+        assert!(list_options(&c,&created.field_id).unwrap().is_empty());
+    }
+    #[test]
     fn required_select_cannot_be_left_without_active_choices() {
         let mut c=Connection::open_in_memory().unwrap();
         crate::db::migrate(&c).unwrap();
