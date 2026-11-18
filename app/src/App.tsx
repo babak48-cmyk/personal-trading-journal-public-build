@@ -44,6 +44,7 @@ import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './custom
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
 import { CustomAdminValidationError, isPreWriteCustomAdminValidation, validateNewCustomFieldDefinition } from './customAdminValidation';
+import { assertSelectCanBecomeRequired, optionBearingFieldIds } from './customSelectRequirement';
 import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
 import { validCustomSelectionDraft } from './customSelectionDraftSafety';
 import { isValidCustomTypedDraft } from './customTypedDraftSafety';
@@ -2510,7 +2511,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
     setBusy(true);
     try{
       const definitions=await localApi.listCustomFieldDefinitions();
-      const currentOptionGroups=definitions.filter(f=>f.field_type==='SINGLE_SELECT'||f.field_type==='MULTI_SELECT').map(f=>f.field_id);
+      const currentOptionGroups=optionBearingFieldIds(definitions);
       const refreshed=await Promise.all(currentOptionGroups.map(async id=>
         [id,await localApi.listCustomFieldOptions(id)] as const));
       await onPresentationChanged();
@@ -2641,8 +2642,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
           if(wanted&&(field.field_type==='SINGLE_SELECT'||field.field_type==='MULTI_SELECT')){
             const savedOptions=await localApi.listCustomFieldOptions(field.field_id);
             setOptions(v=>({...v,[field.field_id]:savedOptions}));
-            if(!savedOptions.some(option=>option.active))
-              throw new CustomAdminValidationError('Add at least one active option before marking this select field Required. No change was sent.');
+            assertSelectCanBecomeRequired(field.field_type,wanted,savedOptions);
           }
           await localApi.editCustomFieldDefinition(field.field_id,field.label,field.help_text,wanted,field.active,field.display_order);
         },
