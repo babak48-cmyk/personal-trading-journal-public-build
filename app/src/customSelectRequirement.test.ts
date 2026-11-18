@@ -32,7 +32,7 @@ describe('custom select lifecycle: definition -> options -> Required',()=>{
     expect(()=>validateNewCustomOptionInput(id,id,'  Focus  ',0)).not.toThrow();
     expect(()=>validateNewCustomOptionInput(id,id,' ',0)).toThrow(CustomAdminValidationError);
     expect(()=>validateNewCustomOptionInput(id,id,'م'.repeat(121),0)).toThrow(CustomAdminValidationError);
-    expect(()=>validateNewCustomOptionInput(id,id,'Line\\nBreak',0)).toThrow(CustomAdminValidationError);
+    expect(()=>validateNewCustomOptionInput(id,id,'Line\nBreak',0)).toThrow(CustomAdminValidationError);
     expect(()=>validateNewCustomOptionInput(id,id,'Focus',-1)).toThrow(CustomAdminValidationError);
   });
   it('verifies native-trimmed option labels, not the original whitespace',()=>{
