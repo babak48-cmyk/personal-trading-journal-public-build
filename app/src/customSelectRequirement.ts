@@ -39,3 +39,23 @@ export function assertCanDeactivateSelectOption(
 export function isSavedCustomFieldLabel(expectedInput:string,savedLabel:string):boolean {
   return savedLabel===expectedInput.trim();
 }
+
+
+/** Mirror create_option's shape checks before the mutating IPC. This is
+ * deliberately limited to deterministic input validation, never an assumption
+ * that a failed native/database write did or did not persist.
+ */
+export function validateNewCustomOptionInput(
+  optionId:string,
+  fieldId:string,
+  label:string,
+  order:number
+):void {
+  const keyValid=(s:string)=>s.length>0&&new TextEncoder().encode(s).length<=128&&!/[\u0000-\u001f\u007f-\u009f]/u.test(s);
+  if(!keyValid(optionId)||!keyValid(fieldId))
+    throw new CustomAdminValidationError('Invalid custom option identity.');
+  if(!label.trim()||new TextEncoder().encode(label).length>240||/[\u0000-\u001f\u007f-\u009f]/u.test(label))
+    throw new CustomAdminValidationError('Option label must be nonempty and at most 240 UTF-8 bytes, without control characters.');
+  if(!Number.isSafeInteger(order)||order<0)
+    throw new CustomAdminValidationError('Invalid custom option display order.');
+}
