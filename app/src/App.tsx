@@ -44,7 +44,7 @@ import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './custom
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
 import { CustomAdminValidationError, isPreWriteCustomAdminValidation, validateNewCustomFieldDefinition } from './customAdminValidation';
-import { assertSelectCanBecomeRequired, assertCanDeactivateSelectOption, isSavedCustomFieldLabel, optionBearingFieldIds } from './customSelectRequirement';
+import { assertSelectCanBecomeRequired, assertCanDeactivateSelectOption, isSavedCustomFieldLabel, optionBearingFieldIds, validateNewCustomOptionInput } from './customSelectRequirement';
 import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
 import { validCustomSelectionDraft } from './customSelectionDraftSafety';
 import { isValidCustomTypedDraft } from './customTypedDraftSafety';
@@ -2746,9 +2746,10 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
               const current=await localApi.listCustomFieldOptions(fieldId);
               if(!isUniqueActiveCustomLabel(label,current.map(o=>({id:o.option_id,label:o.label,active:o.active}))))
                 throw new CustomAdminValidationError('An active option with this name already exists for the field.');
+              validateNewCustomOptionInput(id,fieldId,label,current.length);
               await localApi.createCustomFieldOption({option_id:id,field_id:fieldId,label,display_order:current.length});
             },
-            async()=>{const all=await localApi.listCustomFieldOptions(fieldId);return all.some(o=>o.option_id===id&&o.label===label&&o.active);},
+            async()=>{const all=await localApi.listCustomFieldOptions(fieldId);return all.some(o=>o.option_id===id&&isSavedCustomFieldLabel(label,o.label)&&o.active);},
             fieldId,
             ()=>setNewOption(v=>({...v,[fieldId]:''}))
           );
