@@ -5,14 +5,8 @@ on:
       - feature/ptj-package-a-cohesive-validation-repair-2026-11-18
     paths:
       - '.github/workflows/ptj-package-a-targeted-gate.yml'
-  workflow_dispatch:
-
 permissions:
   contents: read
-
-concurrency:
-  group: ptj-package-a-targeted-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   custom-field-frontend:
