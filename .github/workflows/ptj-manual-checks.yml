@@ -33,12 +33,7 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
-      - name: Target only new Package A custom field regressions
-        if: github.event_name == 'pull_request' && github.head_ref == 'feature/ptj-package-a-cohesive-validation-repair-2026-11-18'
-        run: npx vitest run src/customSelectRequirement.test.ts src/customAdminValidation.test.ts src/customFieldWriteVerification.test.ts src/customSelectionDraftSafety.test.ts
-      - name: Preserve existing full test gate for all other branches
-        if: github.event_name != 'pull_request' || github.head_ref != 'feature/ptj-package-a-cohesive-validation-repair-2026-11-18'
-        run: npm test
+      - run: npm test
       - run: npm run build
       - run: node scripts/verify-demo-config.mjs
   rust:
@@ -69,12 +64,7 @@ jobs:
       - name: Verify Rust source with locked dependencies
         working-directory: app/src-tauri
         run: cargo check --locked
-      - name: Target only Custom Fields native regressions for Package A
-        if: github.event_name == 'pull_request' && github.head_ref == 'feature/ptj-package-a-cohesive-validation-repair-2026-11-18'
-        working-directory: app/src-tauri
-        run: cargo test --locked --lib custom_fields::tests::
-      - name: Preserve complete Rust regression for other branches
-        if: github.event_name != 'pull_request' || github.head_ref != 'feature/ptj-package-a-cohesive-validation-repair-2026-11-18'
+      - name: Test complete Rust library (review, custom fields and Evidence regression)
         working-directory: app/src-tauri
         run: cargo test --locked --lib
       - name: Save generated Cargo.lock for canonical review
