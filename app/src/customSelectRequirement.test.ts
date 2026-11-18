@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {CustomAdminValidationError} from './customAdminValidation';
-import {assertSelectCanBecomeRequired,optionBearingFieldIds} from './customSelectRequirement';
+import {assertSelectCanBecomeRequired,assertCanDeactivateSelectOption,isSavedCustomFieldLabel,optionBearingFieldIds} from './customSelectRequirement';
 
 describe('custom select lifecycle: definition -> options -> Required',()=>{
   it('permits an optional select definition with no choices',()=>{
@@ -16,6 +16,16 @@ describe('custom select lifecycle: definition -> options -> Required',()=>{
     expect(()=>assertSelectCanBecomeRequired('TEXT',true,[])).not.toThrow();
     expect(()=>assertSelectCanBecomeRequired('NUMBER',true,[])).not.toThrow();
     expect(()=>assertSelectCanBecomeRequired('SINGLE_SELECT',false,[])).not.toThrow();
+  });
+  it('protects the last active option in Required selects before write IPC',()=>{
+    const old=[{option_id:'first',active:true},{option_id:'old',active:false}];
+    expect(()=>assertCanDeactivateSelectOption(true,'first',old)).toThrow(CustomAdminValidationError);
+    expect(()=>assertCanDeactivateSelectOption(false,'first',old)).not.toThrow();
+    expect(()=>assertCanDeactivateSelectOption(true,'first',[...old,{option_id:'second',active:true}])).not.toThrow();
+  });
+  it('recognizes the saved native-trimmed field label without a false uncertain-write lock',()=>{
+    expect(isSavedCustomFieldLabel(' Session Focus TEST  ','Session Focus TEST')).toBe(true);
+    expect(isSavedCustomFieldLabel('Session Focus TEST','Different Field')).toBe(false);
   });
   it('refreshes option dictionaries for all select definitions, not only previously opened fields',()=>{
     expect(optionBearingFieldIds([
