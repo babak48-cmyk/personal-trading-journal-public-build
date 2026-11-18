@@ -454,6 +454,28 @@ pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(
 mod tests {
     use super::*;
     #[test]
+    fn invalid_custom_definition_reports_exact_prewrite_field_without_leaking_values() {
+        let mut c=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&c).unwrap();
+        let base=CustomFieldDefinitionInput {
+            field_id:"diagnostic-select".into(),stage:"session".into(),
+            field_type:"SINGLE_SELECT".into(),label:"Session Focus TEST".into(),
+            help_text:"Select the main focus for this session".into(),
+            required:false,display_order:0
+        };
+        let bad_type=CustomFieldDefinitionInput {field_type:"INVALID".into(),..base};
+        let error=create_custom_field(&mut c,&bad_type).unwrap_err().to_string();
+        assert!(error.contains("unsupported custom field type"));
+        assert!(!error.contains("Session Focus TEST"));
+        let bad_help=CustomFieldDefinitionInput {
+            help_text:"x".repeat(241),field_type:"SINGLE_SELECT".into(),..bad_type
+        };
+        let error=create_custom_field(&mut c,&bad_help).unwrap_err().to_string();
+        assert!(error.contains("help text"));
+        assert!(!error.contains("x".repeat(241).as_str()));
+        assert!(list_custom_fields(&c).unwrap().is_empty());
+    }
+    #[test]
     fn a_new_optional_single_select_can_be_created_before_any_choices() {
         let mut c=Connection::open_in_memory().unwrap();
         crate::db::migrate(&c).unwrap();
