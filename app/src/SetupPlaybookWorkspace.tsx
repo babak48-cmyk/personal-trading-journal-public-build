@@ -101,6 +101,16 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
    }
+   // Deterministic pre-write check: do not enter the uncertain-write recovery flow
+   // for an Approve request already known to violate the native six-field contract.
+   // The Rust approval check remains authoritative.
+   if(approve){
+     const missing=setupApprovalMissingFields(input);
+     if(missing.length){
+       setStatus('Approval not submitted: complete '+missing.length+' required Setup definition field(s): '+missing.map(id=>labelFor(id,id)).join(', ')+'. Draft save remains available.');
+       return;
+     }
+   }
    if(selected && sameSetupDefinition(input,selected,approve)){
      setStatus('No changes from the selected saved version. Edit the Setup before saving a NEW immutable version.');
      return;
