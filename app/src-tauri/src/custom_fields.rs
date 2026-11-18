@@ -217,10 +217,25 @@ fn supported_type(kind:&str)->bool {
     matches!(kind,"TEXT"|"NUMBER"|"DATE"|"BOOLEAN"|"SINGLE_SELECT"|"MULTI_SELECT")
 }
 pub fn create_custom_field(conn:&mut Connection,input:&CustomFieldDefinitionInput)->Result<(),AppError>{
-    if !valid_key(&input.field_id)||!supported_stage(&input.stage)||!supported_type(&input.field_type)
-        || !valid_label(&input.label)||input.help_text.len()>240
-        ||input.help_text.chars().any(char::is_control)||input.display_order<0 {
-        return Err(invalid("invalid custom-field definition"));
+    // Distinguish each deterministic, pre-transaction validation failure without
+    // echoing the user's label/help contents or changing the write contract.
+    if !valid_key(&input.field_id) {
+        return Err(invalid("custom field ID must be 1–128 UTF-8 bytes without control characters"));
+    }
+    if !supported_stage(&input.stage) {
+        return Err(invalid("unsupported custom field stage"));
+    }
+    if !supported_type(&input.field_type) {
+        return Err(invalid("unsupported custom field type"));
+    }
+    if !valid_label(&input.label) {
+        return Err(invalid("custom field label must be nonempty and at most 240 UTF-8 bytes, without control characters"));
+    }
+    if input.help_text.len()>240 || input.help_text.chars().any(char::is_control) {
+        return Err(invalid("custom field help text must be at most 240 UTF-8 bytes, without control characters"));
+    }
+    if input.display_order<0 {
+        return Err(invalid("custom field display order must not be negative"));
     }
     let tx=conn.transaction()?;
     tx.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label,help_text,is_required,display_order) VALUES(?1,?2,?3,?4,?5,?6,?7)",
