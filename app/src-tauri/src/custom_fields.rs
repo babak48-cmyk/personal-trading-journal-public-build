@@ -509,6 +509,45 @@ mod tests {
         assert!(list_options(&c,"required-context").unwrap()[0].active);
     }
     #[test]
+    fn select_field_new_package_a_lifecycle_on_in_memory_db() {
+        // End-to-end regression for the previously failed T06 creation shape.
+        // No user profile, migration of a real database, or installer is touched.
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        db.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('qa-w','QA','2026-11-19')",[]).unwrap();
+        db.execute("INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value) VALUES('qa-i','qa-w','ES',0.25,50)",[]).unwrap();
+        db.execute("INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at) VALUES('qa-s','qa-w','qa-i','2026-11-19','DEMO','2026-11-19','DRAFT','2026-11-19','2026-11-19')",[]).unwrap();
+        create_custom_field(&mut db,&CustomFieldDefinitionInput {
+            field_id:"qa-focus".into(),stage:"session".into(),field_type:"SINGLE_SELECT".into(),
+            label:"Session Focus TEST".into(),
+            help_text:"Select the main focus for this session".into(),
+            required:false,display_order:0
+        }).unwrap();
+        assert!(list_options(&db,"qa-focus").unwrap().is_empty());
+        assert!(edit_custom_field(&mut db,"qa-focus","Session Focus TEST","Select the main focus for this session",true,true,0).is_err());
+        create_option(&mut db,&OptionDefinitionInput {
+            option_id:"qa-option".into(),field_id:"qa-focus".into(),label:"  Trading Plan  ".into(),display_order:0
+        }).unwrap();
+        assert_eq!(list_options(&db,"qa-focus").unwrap()[0].label,"Trading Plan");
+        edit_custom_field(&mut db,"qa-focus","Session Focus TEST","Select the main focus for this session",true,true,0).unwrap();
+        assert!(list_custom_fields(&db).unwrap().iter().any(|f|f.field_id=="qa-focus" && f.required));
+        record_select(&mut db,&RecordSelectInput {
+            event_id:"qa-event".into(),field_id:"qa-focus".into(),owner_stage:"session".into(),
+            owner_id:"qa-s".into(),option_ids:vec!["qa-option".into()]
+        }).unwrap();
+        let before=read_current_selection(&db,"session","qa-s","qa-focus").unwrap().unwrap();
+        assert_eq!(before.event_id,"qa-event");
+        assert_eq!(before.options[0].label_at_selection,"Trading Plan");
+        assert!(edit_option(&mut db,"qa-focus","qa-option","Trading Plan",false,0).is_err());
+        create_option(&mut db,&OptionDefinitionInput {
+            option_id:"qa-next".into(),field_id:"qa-focus".into(),label:"Other Focus".into(),display_order:1
+        }).unwrap();
+        edit_option(&mut db,"qa-focus","qa-option","Updated Label",false,0).unwrap();
+        assert_eq!(read_current_selection(&db,"session","qa-s","qa-focus").unwrap().unwrap(),before);
+        assert_eq!(crate::db::integrity_check(&db).unwrap(),"ok");
+        assert_eq!(crate::db::foreign_key_violation_count(&db).unwrap(),0);
+    }
+    #[test]
     fn custom_field_end_to_end_runs_on_disposable_database_only() {
         let mut c=Connection::open_in_memory().unwrap();
         crate::db::migrate(&c).unwrap();
