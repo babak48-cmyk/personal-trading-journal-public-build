@@ -2612,7 +2612,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
           validateNewCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,display_order:fields.length});
           await localApi.createCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,required:false,display_order:fields.length});
         },async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===id);
-          return !!current&&current.active&&current.label===snapshot.label&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
+          return !!current&&current.active&&current.label===snapshot.label.trim()&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
         },undefined,()=>setNewField(v=>({...v,label:'',help_text:''})));
       }}>Create field</button>
     </div>
