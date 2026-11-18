@@ -17,7 +17,7 @@ describe('custom field create preflight parity with native Rust',()=>{
  });
  it('fails obvious invalid inputs before IPC, without uncertain-write lock',()=>{
   expect(()=>validateNewCustomFieldDefinition({...base,label:'  '})).toThrow(CustomAdminValidationError);
-  expect(()=>validateNewCustomFieldDefinition({...base,help_text:'bad\\nhelp'})).toThrow(CustomAdminValidationError);
+  expect(()=>validateNewCustomFieldDefinition({...base,help_text:'bad\nhelp'})).toThrow(CustomAdminValidationError);
   expect(()=>validateNewCustomFieldDefinition({...base,field_type:'UNKNOWN'})).toThrow(CustomAdminValidationError);
   expect(()=>validateNewCustomFieldDefinition({...base,display_order:-1})).toThrow(CustomAdminValidationError);
   expect(()=>validateNewCustomFieldDefinition({...base,label:'م'.repeat(121)})).toThrow(CustomAdminValidationError);
