@@ -43,7 +43,7 @@ import { matchesPersistedPreferences, type PreferenceMap } from './fieldPreferen
 import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './customFieldWriteVerification';
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
-import { CustomAdminValidationError, isPreWriteCustomAdminValidation } from './customAdminValidation';
+import { CustomAdminValidationError, isPreWriteCustomAdminValidation, validateNewCustomFieldDefinition } from './customAdminValidation';
 import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
 import { validCustomSelectionDraft } from './customSelectionDraftSafety';
 import { isValidCustomTypedDraft } from './customTypedDraftSafety';
@@ -2609,6 +2609,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
           const current=await localApi.listCustomFieldDefinitions();
           if(!isUniqueActiveCustomLabel(snapshot.label,current.filter(f=>f.stage===snapshot.stage).map(f=>({id:f.field_id,label:f.label,active:f.active}))))
             throw new CustomAdminValidationError('An active custom field with the same label already exists in this stage.');
+          validateNewCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,display_order:fields.length});
           await localApi.createCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,required:false,display_order:fields.length});
         },async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===id);
           return !!current&&current.active&&current.label===snapshot.label&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
