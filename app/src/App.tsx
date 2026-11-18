@@ -44,7 +44,7 @@ import { verifiedCustomSelectionEvent, verifiedCustomTypedEvent } from './custom
 import { verifiedAdjacentMove } from './customFieldOrderingCheck';
 import { isUniqueActiveCustomLabel } from './customFieldLabelSafety';
 import { CustomAdminValidationError, isPreWriteCustomAdminValidation, validateNewCustomFieldDefinition } from './customAdminValidation';
-import { assertSelectCanBecomeRequired, optionBearingFieldIds } from './customSelectRequirement';
+import { assertSelectCanBecomeRequired, assertCanDeactivateSelectOption, isSavedCustomFieldLabel, optionBearingFieldIds } from './customSelectRequirement';
 import { customAdminRefreshDisabled, customAdminEditDisabled } from './customAdminRecovery';
 import { validCustomSelectionDraft } from './customSelectionDraftSafety';
 import { isValidCustomTypedDraft } from './customTypedDraftSafety';
@@ -2613,7 +2613,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
           validateNewCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,display_order:fields.length});
           await localApi.createCustomFieldDefinition({field_id:id,stage:snapshot.stage,field_type:snapshot.field_type,label:snapshot.label,help_text:snapshot.help_text,required:false,display_order:fields.length});
         },async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===id);
-          return !!current&&current.active&&current.label===snapshot.label.trim()&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
+          return !!current&&current.active&&isSavedCustomFieldLabel(snapshot.label,current.label)&&current.stage===snapshot.stage&&current.field_type===snapshot.field_type;
         },undefined,()=>setNewField(v=>({...v,label:'',help_text:''})));
       }}>Create field</button>
     </div>
@@ -2759,10 +2759,12 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
           <button type="button" disabled={busy||uncertainAdmin||optionIndex===((options[field.field_id]?.length??0)-1)} onClick={()=>void moveOption(field.field_id,option.option_id,1)} aria-label={'Move option '+option.label+' later'}>↓ Later</button>
           <button type="button" disabled={busy||uncertainAdmin} onClick={()=>{const wanted=!option.active;void runChange(
             async()=>{
+              const savedOptions=await localApi.listCustomFieldOptions(field.field_id);
               if(wanted){
-                const opts=await localApi.listCustomFieldOptions(field.field_id);
-                if(!isUniqueActiveCustomLabel(option.label,opts.map(o=>({id:o.option_id,label:o.label,active:o.active})),option.option_id))
+                if(!isUniqueActiveCustomLabel(option.label,savedOptions.map(o=>({id:o.option_id,label:o.label,active:o.active})),option.option_id))
                   throw new CustomAdminValidationError('Another active option uses this name; rename before reactivating.');
+              }else{
+                assertCanDeactivateSelectOption(field.required,option.option_id,savedOptions);
               }
               await localApi.editCustomFieldOption(field.field_id,option.option_id,option.label,wanted,option.display_order);
             },
