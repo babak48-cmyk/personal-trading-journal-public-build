@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {quickValidationRoute} from './quickValidationRoute';
+import {quickValidationRoute,requiredQuickZoneOwner} from './quickValidationRoute';
 import {CAPTURABLE_CUSTOM_FIELD_STAGES,customFieldFocusId,customFieldFocusOwner} from './customFieldStage';
 
 describe('Quick Workflow missing-required navigation',()=>{
@@ -73,6 +73,14 @@ describe('Quick Workflow missing-required navigation',()=>{
     const multi=customFieldFocusId('candidate','zone:ES-1','چک-1');
     expect(customFieldFocusOwner(multi)).toEqual({stage:'candidate',ownerId:'zone:ES-1',fieldId:'چک-1'});
     expect(quickValidationRoute(multi,false,true).notebookPage).toBe('PLAN');
+  });
+  it('selects only the actual persisted Quick Zone owner among loaded candidates',()=>{
+    const id=customFieldFocusId('zone','zone-B','must-see');
+    expect(requiredQuickZoneOwner(id,['zone-A','zone-B'])).toBe('zone-B');
+    expect(requiredQuickZoneOwner(id,['zone-A'])).toBeNull();
+    expect(requiredQuickZoneOwner(customFieldFocusId('candidate','zone-A','source'),['zone-A','zone-B'])).toBe('zone-A');
+    expect(requiredQuickZoneOwner(customFieldFocusId('trade','zone-A','source'),['zone-A'])).toBeNull();
+    expect(requiredQuickZoneOwner('candidate-1.sources',['zone-A'])).toBeNull();
   });
   it('refuses malformed custom required IDs rather than selecting an unrelated Zone',()=>{
     for(const malformed of ['custom-required-zone-a-b','custom-required-zone-3:a-1:x',
