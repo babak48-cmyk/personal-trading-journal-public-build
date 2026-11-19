@@ -34,8 +34,8 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
-      - name: Targeted Package A custom-field regression tests
-        run: npx vitest run src/customSelectRequirement.test.ts src/customAdminValidation.test.ts src/customFieldWriteVerification.test.ts src/customSelectionDraftSafety.test.ts src/setupFieldManager.test.ts src/setupSaveReadback.test.ts
+      - name: Targeted Package A lifecycle and Quick required regression tests
+        run: npx vitest run src/customSelectRequirement.test.ts src/customAdminValidation.test.ts src/customFieldWriteVerification.test.ts src/customSelectionDraftSafety.test.ts src/setupFieldManager.test.ts src/setupSaveReadback.test.ts src/zoneRequired.test.ts src/reviewCompletion.test.ts src/quickValidationRoute.test.ts src/requiredQuickStageCohort.test.ts
       - run: npm run build
       - run: node scripts/verify-demo-config.mjs
   rust:
