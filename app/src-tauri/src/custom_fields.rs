@@ -486,6 +486,29 @@ pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(
 mod tests {
     use super::*;
     #[test]
+    fn selection_history_reads_immutable_snapshots_per_owner_and_field() {
+        let c=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&c).unwrap();
+        c.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label) VALUES('focus','session','SINGLE_SELECT','Focus')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_options(option_id,field_id,label) VALUES('range','focus','Range reversal')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type,recorded_at) VALUES('evt-old','focus','session','owner-a','SINGLE_SELECT','2026-11-19T00:00:00Z')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_selection_snapshots(event_id,option_id,label_at_selection,ordinal) VALUES('evt-old','range','Range reversal',0)",[]).unwrap();
+        c.execute("UPDATE custom_field_options SET label='Range reversal UPDATED TEST' WHERE option_id='range'",[]).unwrap();
+        c.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type,recorded_at) VALUES('evt-new','focus','session','owner-a','SINGLE_SELECT','2026-11-19T01:00:00Z')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_selection_snapshots(event_id,option_id,label_at_selection,ordinal) VALUES('evt-new','range','Range reversal UPDATED TEST',0)",[]).unwrap();
+        c.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type) VALUES('other','focus','session','owner-b','SINGLE_SELECT')",[]).unwrap();
+        c.execute("INSERT INTO custom_field_selection_snapshots(event_id,option_id,label_at_selection,ordinal) VALUES('other','range','Other owner',0)",[]).unwrap();
+        let history=read_selection_history(&c,"session","owner-a","focus").unwrap();
+        assert_eq!(history.len(),2);
+        assert_eq!(history[0].event_id,"evt-new");
+        assert_eq!(history[0].options[0].label_at_selection,"Range reversal UPDATED TEST");
+        assert_eq!(history[1].event_id,"evt-old");
+        assert_eq!(history[1].options[0].label_at_selection,"Range reversal");
+        assert!(read_selection_history(&c,"session","owner-b","focus").unwrap().iter().all(|e|e.event_id!="evt-old"));
+        assert!(read_selection_history(&c,"session","owner-a","another-field").unwrap().is_empty());
+        assert_eq!(crate::db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+    #[test]
     fn invalid_custom_definition_reports_exact_prewrite_field_without_leaking_values() {
         let mut c=Connection::open_in_memory().unwrap();
         crate::db::migrate(&c).unwrap();
