@@ -1,5 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import {reconcileActiveSession} from './sessionLifecycleSync';
+import {quickValidationRoute} from './quickValidationRoute';
+import {customFieldFocusId} from './customFieldStage';
 
 type Session={session_id:string;status:'DRAFT'|'ACTIVE'|'CLOSED';instrument_symbol:string};
 const draft:Session={session_id:'session-A',status:'DRAFT',instrument_symbol:'ES'};
@@ -23,6 +25,14 @@ describe('Canonical Session lifecycle after immutable Plan confirmation',()=>{
   it('accepts subsequent canonical CLOSED lifecycle without resurrecting DRAFT',()=>{
     const closed={...confirmed,status:'CLOSED' as const};
     expect(reconcileActiveSession(confirmed,[closed],'session-A')).toEqual(closed);
+  });
+  it('moves required-field focus from Draft steps into confirmed Quick Plan',()=>{
+    const draftRoute=quickValidationRoute('plan.mainScenario',draft.status==='DRAFT',false);
+    expect(draftRoute).toMatchObject({notebookPage:null,draftStep:1,draftPlanPage:1});
+    const nowConfirmed=reconcileActiveSession(draft,[confirmed],'session-A')!;
+    expect(quickValidationRoute('plan.mainScenario',nowConfirmed.status==='DRAFT',true).notebookPage).toBe('PLAN');
+    const custom=customFieldFocusId('session','session-A','readiness');
+    expect(quickValidationRoute(custom,nowConfirmed.status==='DRAFT',true).notebookPage).toBe('PLAN');
   });
   it('does not rewrite another instrument or identity by matching on row position',()=>{
     expect(reconcileActiveSession(draft,[other,confirmed],'session-A')?.instrument_symbol).toBe('ES');
