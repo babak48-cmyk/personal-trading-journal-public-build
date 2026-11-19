@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {blankSetupDraft} from './setupDraftLifecycle';
-import {SETUP_DEFINITION_FIELDS,SETUP_DEFINITION_FIELD_IDS,orderedSetupDefinitionFields,setupApprovalMissingFields} from './setupFieldManager';
+import {SETUP_DEFINITION_FIELDS,SETUP_DEFINITION_FIELD_IDS,orderedSetupDefinitionFields,setupApprovalMissingFields,setupApprovalActionFeedback} from './setupFieldManager';
 import {FIELD_CONTROL_INVENTORY,fieldConnectionReport,isFieldPresented,RENDERED_FIELD_TEXT_IDS,isActiveVisibilityControl} from './fieldInventory';
 import {FIELD_DEFINITION_BY_ID} from './fieldDefinitions';
 import {managerOrderPosition} from './fieldManagerOrdering';
@@ -19,6 +19,19 @@ describe('Package A protected versioned Setup field manager',()=>{
   expect(setupApprovalMissingFields(full)).toEqual([]);
   expect(setupApprovalMissingFields({...full,contrary_evidence:'   '})).toEqual(['setup.contraryEvidence']);
   expect(setupApprovalMissingFields({...full,supporting_evidence:null})).toEqual([]);
+ });
+ it('shows field-specific, configured-label validation for incomplete approval; draft remains permissible',()=>{
+  const blank=blankSetupDraft();
+  const message=setupApprovalActionFeedback(blank,(id,fallback)=>id==='setup.marketContext'?'Market Context TEST':fallback);
+  expect(message).toContain('6 required Setup definition field(s)');
+  expect(message).toContain('Market Context TEST');
+  expect(message).toContain('Draft save remains available');
+  const ready={...blank,market_context:'range',zone_location:'VAH',
+    prerequisites:'known level',entry_triggers:'observed rejection',
+    contrary_evidence:'acceptance',thesis_invalidation:'thesis invalidation'};
+  expect(setupApprovalActionFeedback(ready,(_,fallback)=>fallback)).toBeNull();
+  expect(setupApprovalActionFeedback({...ready,entry_triggers:'   '},(_,fallback)=>fallback))
+    .toContain('1 required Setup definition field(s): Critical entry triggers');
  });
  it.each(SETUP_DEFINITION_FIELD_IDS)('%s has editable label/help and order but NEVER a hide/placement/required toggle',(id)=>{
   expect(FIELD_CONTROL_INVENTORY.find(f=>f.id===id)?.formalFieldId).toBe(id);
