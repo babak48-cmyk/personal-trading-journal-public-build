@@ -8,7 +8,7 @@ import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
-import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, requiresDecisionLeaveGate, type ExplicitTradeDirection } from './quickDecisionSafety';
+import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, requiresDecisionLeaveGate, confirmedEvidenceZoneDestination, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEvidenceDraft, shouldPromptEvidencePageLeave } from './quickEvidenceDraftGuard';
 import { scopedQuickDraftKey } from './quickDraftIdentity';
 import { DecisionHistoryList, PendingTradeDecisionRow } from './QuickDecisionHistory';
@@ -263,6 +263,7 @@ export function App(){
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
   const [decisionClosePrompt,setDecisionClosePrompt]=useState(false);
   const [pendingDecisionPage,setPendingDecisionPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'|null>(null);
+  const [pendingDirectEvidenceZone,setPendingDirectEvidenceZone]=useState<CurrentCandidate|null>(null);
   const decisionDraftsRef=useRef<Record<string,{
     decisionType:'TRADE'|'NO_TRADE'|'MISSED';direction:ExplicitTradeDirection;reason:string;note:string;
     quality:'A'|'B'|'C'|'INVALID'|'UNCLEAR'|'';mismatchReason:string;
@@ -826,7 +827,7 @@ export function App(){
     setEvidenceNote('');
     setCandidateEvidence({});
 
-    setDecisionCandidate(null);
+    setDecisionCandidate(null);setPendingDirectEvidenceZone(null);
     setDecisionType('TRADE');
     setDecisionDirection('');
     setDecisionInitialType('TRADE');
@@ -1110,9 +1111,15 @@ export function App(){
   function continueWithDecisionDraftPreserved(){
     const next=pendingDecisionPage;
     if(!next)return;
-    setPendingDecisionPage(null);
-    // Keep editor state in memory; navigation never creates a saved Decision.
+    // The Zone-card shortcut's intended Evidence owner must survive the
+    // explicit user confirmation; otherwise the UI lands on an old/empty Zone.
+    const selected=confirmedEvidenceZoneDestination(next,pendingDirectEvidenceZone?.candidate_id??null);
+    const directTarget=selected?pendingDirectEvidenceZone:null;
+    setPendingDecisionPage(null);setPendingDirectEvidenceZone(null);
+    // Keep the unfinished Decision editor mounted and unchanged. No Decision
+    // or Evidence event is created by confirming this navigation.
     goToNotebookPage(next);
+    if(directTarget)void openEvidenceAfterDecisionGate(directTarget);
   }
   function continueWithEvidenceDraftPreserved(){
     const next=pendingEvidencePage;
@@ -1123,13 +1130,21 @@ export function App(){
     goToNotebookPage(next);
   }
   async function openEvidence(c:CurrentCandidate){
-    // A direct Zone-card +Evidence action must honour the same in-app Decision
-    // navigation guard as the notebook tabs. Otherwise an unfinished Decision
-    // (possibly for a different Zone) can be silently left behind while the
-    // Evidence owner and Quick Zone selection change.
-    // If a warning needs acknowledgement, do not change either owner. After
-    // the user resolves the visible warning they can select the target Zone.
-    if(requiresDecisionLeaveGate(notebookPage,!!decisionCandidate,'EVIDENCE')&&!navigateNotebookPage('EVIDENCE'))return;
+    // Direct Zone-card Evidence requests use the same app-visible Decision
+    // navigation gate as notebook tabs; never discard or replace that draft.
+    if(requiresDecisionLeaveGate(notebookPage,!!decisionCandidate,'EVIDENCE')){
+      if(!navigateNotebookPage('EVIDENCE')){
+        // Retain the requested destination only for an unsaved-Decision
+        // confirmation. Unknown writes and in-flight saves remain blocked.
+        if(decisionEditorHasUnsavedInput()&&!decisionSavingRef.current
+          &&!(decisionCandidate&&hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)))
+          setPendingDirectEvidenceZone(c);
+        return;
+      }
+    }
+    await openEvidenceAfterDecisionGate(c);
+  }
+  async function openEvidenceAfterDecisionGate(c:CurrentCandidate){
     if(evidenceCandidate?.candidate_id===c.candidate_id){
       setQuickZoneId(c.candidate_id);
       setNotebookPage('EVIDENCE');return; // Do not erase a draft on reopening its own Zone.
@@ -2004,7 +2019,7 @@ export function App(){
             <div className="formGrid" aria-label="Decision details">{visibleOrderedDecisionFields(quickMode,fieldOrder,fieldVisibility,fieldPlacements,requirementOverrides).map(id=><div className="orderedDecisionField" key={id}>{id==='decision.quality'?<label data-validation-id="decision.quality" className={invalidClass('decision.quality')}>{fieldText['decision.quality']?.label?.trim()||'Decision quality'} <small>{requirementLabel('decision.quality',requirementOverrides)}</small>{fieldText['decision.quality']?.help&&<small title={fieldText['decision.quality'].help}>ⓘ</small>} <FieldHelp id="decision.quality" value={decisionQuality}/><select value={decisionQuality} onChange={e=>{setDecisionQuality(e.target.value as any);clearValidation('decision.quality')}}><option value="">Complete later</option>{['A','B','C','INVALID','UNCLEAR'].map(x=><option key={x}>{x}</option>)}</select></label>:<label data-validation-id="decision.note" className={invalidClass('decision.note')}>{fieldText['decision.note']?.label?.trim()||'Decision note'}{isUserRequired('decision.note',requirementOverrides)?' (Required)':' (Optional)'}{fieldText['decision.note']?.help&&<small title={fieldText['decision.note'].help}>ⓘ</small>}<textarea value={decisionNote} onChange={e=>{setDecisionNote(e.target.value);clearValidation('decision.note')}} placeholder={isUserRequired('decision.note',requirementOverrides)?'Explain why this decision was made':'Optional: add useful decision context'}/></label>}</div>)}</div>
             <div className="decisionSnapshot"><span><b>Planned intent</b>{decisionCandidate.directional_intent}</span><span><b>Status</b>{decisionCandidate.current_status}</span><span><b>Sources</b>{decisionCandidate.sources.slice(0,3).join(' · ')||'—'}</span></div>
             {decisionClosePrompt&&<div className="warningBox" id="decision-unsaved-close-warning" role="alertdialog" aria-label="Unsaved Decision" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Closing without keeping this draft loses your current inputs. Existing saved Decisions will not be changed.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setDecisionClosePrompt(false)}>Keep editing</button><button type="button" onClick={()=>resolveDecisionClose(true)}>Close and keep draft</button><button type="button" onClick={()=>resolveDecisionClose(false)}>Discard draft and close</button></div></div>}
-            {pendingDecisionPage&&<div className="warningBox" id="decision-page-navigation-warning" role="alertdialog" aria-label="Unsaved Decision navigation" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Go to another page without recording a Decision? This draft stays in the editor; return to Decision to continue.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>setPendingDecisionPage(null)}>Keep editing</button><button type="button" onClick={continueWithDecisionDraftPreserved}>Continue and keep draft</button></div></div>}
+            {pendingDecisionPage&&<div className="warningBox" id="decision-page-navigation-warning" role="alertdialog" aria-label="Unsaved Decision navigation" aria-modal="false"><strong>UNSAVED Decision — not recorded</strong><p>Go to another page without recording a Decision? This draft stays in the editor; return to Decision to continue.</p><div className="rowActions"><button type="button" className="primary" onClick={()=>{setPendingDecisionPage(null);setPendingDirectEvidenceZone(null);}}>Keep editing</button><button type="button" onClick={continueWithDecisionDraftPreserved}>Continue and keep draft</button></div></div>}
             <div className="rowActions"><button type="button" disabled={decisionSaving} onClick={requestCloseDecisionEditor}>Cancel</button><button className="primary" disabled={decisionSaving||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)} onClick={saveDecision}>{decisionSaving?'Saving…':'Save decision'}</button></div>{decisionSaveFeedback&&<p role="alert" className="warningBox">{decisionSaveFeedback}</p>}{hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id)&&<div className="rowActions"><button type="button" disabled={decisionHistoryVerifying} onClick={verifyDecisionWriteOutcome}>{decisionHistoryVerifying?'Checking…':'Refresh saved decisions'}</button><button type="button" disabled={!canAcknowledgeVerifiedHistory(decisionSaveUncertainZoneId,decisionHistoryCheckedZoneId,decisionCandidate.candidate_id)} onClick={()=>{setDecisionSaveUncertainZoneId(null);setDecisionHistoryCheckedZoneId(null);setDecisionSaveFeedback('Retry enabled by manual acknowledgement. Ensure the attempted Decision is absent from history before saving again.');}}>I checked history — enable retry</button></div>}
             {(candidateDecisions[decisionCandidate.candidate_id]??[]).length>0&&<details><summary>Previous decisions at this zone</summary><DecisionHistoryList rows={candidateDecisions[decisionCandidate.candidate_id]??[]}/></details>}
           </div>}
