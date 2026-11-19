@@ -8,7 +8,7 @@ import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
-import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, type ExplicitTradeDirection } from './quickDecisionSafety';
+import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, requiresDecisionLeaveGate, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEvidenceDraft, shouldPromptEvidencePageLeave } from './quickEvidenceDraftGuard';
 import { scopedQuickDraftKey } from './quickDraftIdentity';
 import { DecisionHistoryList, PendingTradeDecisionRow } from './QuickDecisionHistory';
@@ -1129,7 +1129,7 @@ export function App(){
     // Evidence owner and Quick Zone selection change.
     // If a warning needs acknowledgement, do not change either owner. After
     // the user resolves the visible warning they can select the target Zone.
-    if(notebookPage==='DECISION'&&decisionCandidate&&!navigateNotebookPage('EVIDENCE'))return;
+    if(requiresDecisionLeaveGate(notebookPage,!!decisionCandidate,'EVIDENCE')&&!navigateNotebookPage('EVIDENCE'))return;
     if(evidenceCandidate?.candidate_id===c.candidate_id){
       setQuickZoneId(c.candidate_id);
       setNotebookPage('EVIDENCE');return; // Do not erase a draft on reopening its own Zone.
