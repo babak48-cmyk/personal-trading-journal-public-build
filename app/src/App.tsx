@@ -753,6 +753,15 @@ export function App(){
     const p=await localApi.getCurrentPlan(sessionId);
     if(activeSessionIdRef.current!==sessionId)return;
     setPlan(p);
+    // Confirmation changes the persisted Session status. Refresh the canonical
+    // row BEFORE secondary timeline/trade reads, so a later ancillary failure
+    // cannot leave Quick navigation incorrectly believing this is still DRAFT.
+    const sessionsFromStorage=await localApi.listSessions();
+    if(activeSessionIdRef.current!==sessionId)return;
+    setSessions(sessionsFromStorage);
+    setActive(current=>reconcileActiveSession(current,sessionsFromStorage,sessionId));
+    if(!sessionsFromStorage.some(session=>session.session_id===sessionId))
+      setMessage('Plan data refreshed, but the active Session could not be found in saved Sessions. Reopen the session to verify its status.');
     const timeline=await localApi.listPlanTimeline(sessionId);
     if(activeSessionIdRef.current!==sessionId)return;
     setTimeline(timeline);
@@ -762,15 +771,6 @@ export function App(){
     const trades=await localApi.listSessionTrades(sessionId);
     if(activeSessionIdRef.current!==sessionId)return;
     setSessionTrades(trades);
-    // Confirmation changes the persisted Session status. Refreshing only the
-    // sidebar list leaves active.status stuck at DRAFT in Quick routing.
-    // Read the exact canonical Session row; never infer ACTIVE from a Plan.
-    const sessionsFromStorage=await localApi.listSessions();
-    if(activeSessionIdRef.current!==sessionId)return;
-    setSessions(sessionsFromStorage);
-    setActive(current=>reconcileActiveSession(current,sessionsFromStorage,sessionId));
-    if(!sessionsFromStorage.some(session=>session.session_id===sessionId))
-      setMessage('Plan data refreshed, but the active Session could not be found in saved Sessions. Reopen the session to verify its status.');
   }
   async function start(){
     try{const s=await localApi.createDraftSession({session_date:date,instrument_symbol:instrument,environment}); setActive(s); rememberOpenedSession(s.session_id); setPlan(null); setDraftDirty(false); setDraftStep(1); setMessage('Draft session created. Build the initial plan, then confirm it.'); await refresh();}
