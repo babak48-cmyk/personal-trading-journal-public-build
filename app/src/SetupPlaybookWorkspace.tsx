@@ -6,7 +6,7 @@ import {hasPendingSetupEvidence} from './pendingSetupEvidence';
 import {blankSetupDraft,setupDraftFromVersion,setupSwitchDraft} from './setupDraftLifecycle';
 import {verifiedSetupSaveVersion} from './setupSaveReadback';
 import {isFieldPresented,type FieldPlacement} from './fieldInventory';
-import {orderedSetupDefinitionFields,setupApprovalMissingFields} from './setupFieldManager';
+import {orderedSetupDefinitionFields,setupApprovalMissingFields,setupApprovalActionFeedback} from './setupFieldManager';
 
 const roles=['REQUIRED','SUPPORTING','CONTRADICTORY','NOT_RELEVANT'] as const;
 type EditorTransition={kind:'close'|'switch'|'new';versionId?:string};
@@ -31,6 +31,8 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  const [uncertainSave,setUncertainSave]=useState<{versionId:string|null}|null>(null);
  const [pendingTransition,setPendingTransition]=useState<EditorTransition|null>(null);
  const [status,setStatus]=useState('');
+ // Keep an invalid approval response beside the action the trader clicked.
+ const [approvalFeedback,setApprovalFeedback]=useState<string|null>(null);
  const [expanded,setExpanded]=useState(false);
  const [editorDirty,setEditorDirty]=useState(false);
  const [linkTradeId,setLinkTradeId]=useState('');
@@ -66,7 +68,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      setExpanded(true);
      setStatus(switched.selectedVersion?'Selected saved version for an immutable revision.':'No saved version selected. This is a NEW independent Setup.');
    }
-   setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
+   setEditorDirty(false);setApprovalFeedback(null);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
    setSeedTrade(''); // Selection is temporary; never carry a prior source across Setup changes.
    setPendingTransition(null);
  }
@@ -77,6 +79,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  }
  const update=(field:keyof SaveSetupVersionInput,value:string|null)=>{
    setEditorDirty(true);
+   setApprovalFeedback(null);
    setInput(prev=>({...prev,[field]:value}));
  };
  function fromTrade(){
@@ -97,6 +100,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  }
  async function save(approve:boolean){
    if(saveLock.current||busy||uncertainSave)return;
+   setApprovalFeedback(null);
    if(hasPendingSetupEvidence(newEvidence,evidenceRole,evidenceHelp)){
      setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
      return;
@@ -105,9 +109,10 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    // for an Approve request already known to violate the native six-field contract.
    // The Rust approval check remains authoritative.
    if(approve){
-     const missing=setupApprovalMissingFields(input);
-     if(missing.length){
-       setStatus('Approval not submitted: complete '+missing.length+' required Setup definition field(s): '+missing.map(id=>labelFor(id,id)).join(', ')+'. Draft save remains available.');
+     const message=setupApprovalActionFeedback(input,labelFor);
+     if(message){
+       setApprovalFeedback(message);
+       setStatus(message);
        return;
      }
    }
@@ -248,6 +253,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
        {setupApprovalMissingFields(input).length>0&&<small role="status">To approve: complete {setupApprovalMissingFields(input).length} missing definition field(s). Draft save can remain partial.</small>}
        <button type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
        <button className="primary" type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
+       {approvalFeedback&&<p role="alert" aria-live="assertive" className="warningBox" style={{flexBasis:'100%',width:'100%',marginTop:'.5rem'}}>{approvalFeedback}</p>}
      </div>
      <p className="subtle">Every save creates a NEW immutable version. Saving a DRAFT does not later change that version into APPROVED: after completing the conditions, Approve creates the NEXT version. To make v1 approved directly, use Approve on a new Setup without first saving a draft. Approval requires context, Zone, prerequisites, triggers, contrary evidence and thesis invalidation.</p>
    </div>}
