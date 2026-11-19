@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,requiresDecisionLeaveGate,type ExplicitTradeDirection} from './quickDecisionSafety';
+import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,requiresDecisionLeaveGate,confirmedEvidenceZoneDestination,type ExplicitTradeDirection} from './quickDecisionSafety';
 
 describe('Quick Decision explicit direction and edit preservation',()=>{
   it('prefills ONLY a clearly directional Zone and never copies a previous direction',()=>{
@@ -57,5 +57,26 @@ describe('Direct multi-Zone Evidence actions honour unsaved Decision navigation'
       expect(hasUnsavedDecisionCapture(draft)).toBe(true);
       expect(requiresDecisionLeaveGate('DECISION',true,'EVIDENCE')).toBe(true);
     }
+  });
+});
+
+describe('Resume the exact clicked Zone after retaining an unsaved Decision',()=>{
+  it('continues directly to the requested Evidence owner, not the earlier Zone',()=>{
+    expect(confirmedEvidenceZoneDestination('EVIDENCE','zone-B')).toBe('zone-B');
+    expect(confirmedEvidenceZoneDestination('EVIDENCE','zone-A')).toBe('zone-A');
+    expect(confirmedEvidenceZoneDestination('EVIDENCE','zone:ES-12:range')).toBe('zone:ES-12:range');
+  });
+  it('ignores stale destinations when continuing to Plan or Review',()=>{
+    for(const page of ['PLAN','DECISION','EXECUTION','REVIEW'])
+      expect(confirmedEvidenceZoneDestination(page,'zone-B')).toBeNull();
+  });
+  it('never invents a destination from missing or blank identity',()=>{
+    expect(confirmedEvidenceZoneDestination('EVIDENCE',null)).toBeNull();
+    expect(confirmedEvidenceZoneDestination('EVIDENCE','')).toBeNull();
+    expect(confirmedEvidenceZoneDestination('EVIDENCE',' ')).toBeNull();
+  });
+  it('does not change whether a Decision must ask to keep its unsaved draft',()=>{
+    expect(requiresDecisionLeaveGate('DECISION',true,'EVIDENCE')).toBe(true);
+    expect(requiresDecisionLeaveGate('EVIDENCE',true,'EVIDENCE')).toBe(false);
   });
 });
