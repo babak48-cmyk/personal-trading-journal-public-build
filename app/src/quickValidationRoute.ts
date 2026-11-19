@@ -1,3 +1,4 @@
+import {customFieldFocusOwner} from './customFieldStage';
 export type QuickNotebookPage='PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW';
 export type QuickValidationRoute=Readonly<{
   notebookPage:QuickNotebookPage|null;
@@ -51,4 +52,18 @@ export function quickValidationRoute(
   if(['plan.','planRevision.','liveZone.','liveCandidate.','zoneRevision.','candidate-','candidate.'].some(prefix=>validationId.startsWith(prefix)))
     return {...empty,notebookPage:'PLAN'};
   return empty;
+}
+
+
+/** Choose a Quick Zone only when the missing custom field belongs to a
+ * currently loaded canonical candidate. Unknown/stale owners change nothing.
+ * Pure navigation decision: no writes or implicit Zone creation.
+ */
+export function requiredQuickZoneOwner(
+  validationId:string,
+  loadedZoneIds:readonly string[],
+):string|null {
+  const parsed=customFieldFocusOwner(validationId);
+  if(!parsed||!['candidate','zone'].includes(parsed.stage))return null;
+  return loadedZoneIds.includes(parsed.ownerId)?parsed.ownerId:null;
 }
