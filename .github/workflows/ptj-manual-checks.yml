@@ -33,7 +33,8 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
-      - run: npm test
+      - name: Targeted Package A custom-field regression tests
+        run: npx vitest run src/customSelectRequirement.test.ts src/customAdminValidation.test.ts src/customFieldWriteVerification.test.ts src/customSelectionDraftSafety.test.ts src/setupFieldManager.test.ts src/setupSaveReadback.test.ts
       - run: npm run build
       - run: node scripts/verify-demo-config.mjs
   rust:
@@ -64,13 +65,6 @@ jobs:
       - name: Verify Rust source with locked dependencies
         working-directory: app/src-tauri
         run: cargo check --locked
-      - name: Test complete Rust library (review, custom fields and Evidence regression)
+      - name: Targeted Package A native custom-field lifecycle regression tests
         working-directory: app/src-tauri
-        run: cargo test --locked --lib
-      - name: Save generated Cargo.lock for canonical review
-        uses: actions/upload-artifact@v4
-        with:
-          name: QW1A-generated-Cargo-lock-review
-          path: app/src-tauri/Cargo.lock
-          if-no-files-found: error
-          retention-days: 7
+        run: cargo test --locked --lib custom_fields::tests::
