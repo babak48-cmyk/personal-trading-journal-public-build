@@ -30,7 +30,7 @@ import { SetupPlaybookWorkspace } from './SetupPlaybookWorkspace';
 import { ZoneSetupGuide } from './ZoneSetupGuide';
 // NinjaTrader import/readiness UI held until user approves group 11 after group 10 acceptance.
 import { summarizeSessionTradeExecution } from './tradeSessionPulse';
-import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId,customFieldFocusOwner, type CustomFieldOwnerStage } from './customFieldStage';
 import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
@@ -537,6 +537,14 @@ export function App(){
     // pages, and a second route could navigate away from unsaved Quick inputs.
     const targetPage=route.notebookPage;
     if(targetPage!==null&&!navigateNotebookPage(targetPage))return;
+    // Quick renders one Zone at a time. A required field belonging to another
+    // Zone cannot be focused until its canonical owner is selected.
+    // Never guess an owner from an ambiguous concatenated ID or mutate data.
+    const customOwner=customFieldFocusOwner(id);
+    if(targetPage==='PLAN'&&customOwner&&['candidate','zone'].includes(customOwner.stage)
+      &&plan?.candidates.some(candidate=>candidate.candidate_id===customOwner.ownerId)){
+      setQuickZoneId(customOwner.ownerId);
+    }
     if(route.draftStep!==null)setDraftStep(route.draftStep);
     if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
     if(route.draftZonePage!==null)setDraftZonePage(route.draftZonePage);
