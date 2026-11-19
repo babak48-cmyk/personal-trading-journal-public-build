@@ -32,7 +32,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  const [pendingTransition,setPendingTransition]=useState<EditorTransition|null>(null);
  const [status,setStatus]=useState('');
  // Keep an invalid approval response beside the action the trader clicked.
- const [approvalFeedback,setApprovalFeedback]=useState<string|null>(null);
+ const [actionFeedback,setActionFeedback]=useState<string|null>(null);
  const [expanded,setExpanded]=useState(false);
  const [editorDirty,setEditorDirty]=useState(false);
  const [linkTradeId,setLinkTradeId]=useState('');
@@ -68,7 +68,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      setExpanded(true);
      setStatus(switched.selectedVersion?'Selected saved version for an immutable revision.':'No saved version selected. This is a NEW independent Setup.');
    }
-   setEditorDirty(false);setApprovalFeedback(null);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
+   setEditorDirty(false);setActionFeedback(null);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
    setSeedTrade(''); // Selection is temporary; never carry a prior source across Setup changes.
    setPendingTransition(null);
  }
@@ -79,7 +79,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  }
  const update=(field:keyof SaveSetupVersionInput,value:string|null)=>{
    setEditorDirty(true);
-   setApprovalFeedback(null);
+   setActionFeedback(null);
    setInput(prev=>({...prev,[field]:value}));
  };
  function fromTrade(){
@@ -100,9 +100,10 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
  }
  async function save(approve:boolean){
    if(saveLock.current||busy||uncertainSave)return;
-   setApprovalFeedback(null);
+   setActionFeedback(null);
    if(hasPendingSetupEvidence(newEvidence,evidenceRole,evidenceHelp)){
-     setStatus('An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.');
+     const feedback='An evidence-priority row has not been added yet. Select Add evidence requirement or clear the pending row before saving a version.';
+     setActionFeedback(feedback);setStatus(feedback);
      return;
    }
    // Deterministic pre-write check: do not enter the uncertain-write recovery flow
@@ -111,13 +112,14 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    if(approve){
      const message=setupApprovalActionFeedback(input,labelFor);
      if(message){
-       setApprovalFeedback(message);
+       setActionFeedback(message);
        setStatus(message);
        return;
      }
    }
    if(selected && sameSetupDefinition(input,selected,approve)){
-     setStatus('No changes from the selected saved version. Edit the Setup before saving a NEW immutable version.');
+     const feedback='No changes from the selected saved version. Edit the Setup before saving a NEW immutable version.';
+     setActionFeedback(feedback);setStatus(feedback);
      return;
    }
    saveLock.current=true;setBusy(true);setStatus('');
@@ -131,10 +133,12 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      if(!verified)throw new Error('Saved immutable version ID could not be read back.');
      setVersions(fresh);setPerformance(perf);setSelectedVersion(verified.version_id);
      setInput(setupDraftFromVersion(verified));setEditorDirty(false);setNewEvidence('');setEvidenceHelp('');setEvidenceRole('SUPPORTING');
-     setStatus('Version '+verified.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.');
+     const feedback='Version '+verified.version_number+(approve?' approved':' saved as DRAFT')+'. Original versions remain immutable. You can create a new revision from this draft.';
+     setActionFeedback(feedback);setStatus(feedback);
    }catch(e){
      if(attempted)setUncertainSave({versionId:returned?.version_id??null});
-     setStatus('Setup save NOT verified. Further writes are blocked until the saved-version list is checked. Do not click Save again: '+String(e));
+     const feedback='Setup save NOT verified. Further writes are blocked until the saved-version list is checked. Do not click Save again: '+String(e);
+     setActionFeedback(feedback);setStatus(feedback);
    }
    finally{saveLock.current=false;setBusy(false);}
  }
@@ -253,7 +257,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
        {setupApprovalMissingFields(input).length>0&&<small role="status">To approve: complete {setupApprovalMissingFields(input).length} missing definition field(s). Draft save can remain partial.</small>}
        <button type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
        <button className="primary" type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
-       {approvalFeedback&&<p role="alert" aria-live="assertive" className="warningBox" style={{flexBasis:'100%',width:'100%',marginTop:'.5rem'}}>{approvalFeedback}</p>}
+       {actionFeedback&&<p role={actionFeedback.startsWith('Approval not submitted')||actionFeedback.startsWith('Setup save NOT verified')?'alert':'status'} aria-live="polite" className={actionFeedback.startsWith('Approval not submitted')||actionFeedback.startsWith('Setup save NOT verified')?'warningBox':'subtle'} style={{flexBasis:'100%',width:'100%',marginTop:'.5rem'}}>{actionFeedback}</p>}
      </div>
      <p className="subtle">Every save creates a NEW immutable version. Saving a DRAFT does not later change that version into APPROVED: after completing the conditions, Approve creates the NEXT version. To make v1 approved directly, use Approve on a new Setup without first saving a draft. Approval requires context, Zone, prerequisites, triggers, contrary evidence and thesis invalidation.</p>
    </div>}
