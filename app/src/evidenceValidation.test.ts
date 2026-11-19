@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evidenceRequiredIssues, evidenceSelectionIssues } from './evidenceValidation';
+import { evidenceRequiredIssues, evidenceSelectionIssues, showAdvancedEvidenceRole } from './evidenceValidation';
 
 describe('atomic Evidence capture required-field checks', () => {
   it('keeps both observation details optional by default', () => {
@@ -63,5 +63,22 @@ describe('Evidence type registry integrity before an atomic Quick save',()=>{
     expect(evidenceSelectionIssues(selected,registry)).toEqual([]);
     expect(selected).toEqual(['absorption','delta']);
     expect(registry).toEqual(['absorption','delta','big-trade']);
+  });
+});
+
+describe('Evidence classification survives Quick and Detailed view switches',()=>{
+  it('keeps all classification options available in Detailed',()=>{
+    expect(showAdvancedEvidenceRole(false,'GENERAL_OBSERVATION','ENTRY_CONFIRMATION')).toBe(true);
+    expect(showAdvancedEvidenceRole(false,'GENERAL_OBSERVATION','INVALIDATION')).toBe(true);
+  });
+  it('keeps Quick compact for ordinary observations',()=>{
+    expect(showAdvancedEvidenceRole(true,'GENERAL_OBSERVATION','ENTRY_CONFIRMATION')).toBe(false);
+    expect(showAdvancedEvidenceRole(true,'SETUP_SUPPORT','INVALIDATION')).toBe(false);
+  });
+  it('displays the actual previously selected advanced role in Quick',()=>{
+    expect(showAdvancedEvidenceRole(true,'ENTRY_CONFIRMATION','ENTRY_CONFIRMATION')).toBe(true);
+    expect(showAdvancedEvidenceRole(true,'ENTRY_CONFIRMATION','INVALIDATION')).toBe(false);
+    expect(showAdvancedEvidenceRole(true,'INVALIDATION','INVALIDATION')).toBe(true);
+    expect(showAdvancedEvidenceRole(true,'INVALIDATION','ENTRY_CONFIRMATION')).toBe(false);
   });
 });
