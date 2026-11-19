@@ -33,3 +33,14 @@ export function requiresDecisionLeaveGate(
 ):boolean {
   return currentPage==='DECISION' && decisionEditorOpen && targetPage!=='DECISION';
 }
+
+/** A direct Zone-card Evidence request may be held behind the visible
+ * unsaved-Decision leave gate. Resume only that exact target on an explicit
+ * "Continue and keep draft" to EVIDENCE; never fall back to the previous Zone.
+ * This is a navigation identity, not a record or a saved trading decision. */
+export function confirmedEvidenceZoneDestination(
+  confirmedPage:string,
+  requestedZoneId:string|null,
+):string|null {
+  return confirmedPage==='EVIDENCE'&&!!requestedZoneId?.trim()?requestedZoneId:null;
+}
