@@ -1124,9 +1124,13 @@ export function App(){
   }
   async function openEvidence(c:CurrentCandidate){
     if(evidenceCandidate?.candidate_id===c.candidate_id){
+      setQuickZoneId(c.candidate_id);
       setNotebookPage('EVIDENCE');return; // Do not erase a draft on reopening its own Zone.
     }
     if(evidenceCandidate&&!confirmCloseEvidenceEditor())return;
+    // Quick Plan and Evidence must point to the same canonical owner Zone.
+    // Only switch after the current unfinished Evidence draft allows navigation.
+    setQuickZoneId(c.candidate_id);
     const ownerSessionId=active?.session_id;
     setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);
     // Do not discard the attempted batch while its durable outcome is UNKNOWN:
