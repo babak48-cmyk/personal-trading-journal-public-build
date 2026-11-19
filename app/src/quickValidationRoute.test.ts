@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 import {quickValidationRoute} from './quickValidationRoute';
-import {CAPTURABLE_CUSTOM_FIELD_STAGES,customFieldFocusId} from './customFieldStage';
+import {CAPTURABLE_CUSTOM_FIELD_STAGES,customFieldFocusId,customFieldFocusOwner} from './customFieldStage';
 
 describe('Quick Workflow missing-required navigation',()=>{
   it('routes to the correct existing draft Zone without discarding another Zone',()=>{
@@ -62,6 +62,27 @@ describe('Quick Workflow missing-required navigation',()=>{
     expect(quickValidationRoute(before,false,true).notebookPage).toBe('EXECUTION');
     const review=customFieldFocusId('session-review','session-1','summary');
     expect(quickValidationRoute(review,false,true).notebookPage).toBe('REVIEW');
+  });
+  it('resolves the exact owning Zone for a Quick required jump without hyphen collision',()=>{
+    const first=customFieldFocusId('zone','a-b','c');
+    const second=customFieldFocusId('zone','a','b-c');
+    expect(first).not.toBe(second);
+    expect(customFieldFocusOwner(first)).toEqual({stage:'zone',ownerId:'a-b',fieldId:'c'});
+    expect(customFieldFocusOwner(second)).toEqual({stage:'zone',ownerId:'a',fieldId:'b-c'});
+    expect(quickValidationRoute(first,false,true).notebookPage).toBe('PLAN');
+    const multi=customFieldFocusId('candidate','zone:ES-1','چک-1');
+    expect(customFieldFocusOwner(multi)).toEqual({stage:'candidate',ownerId:'zone:ES-1',fieldId:'چک-1'});
+    expect(quickValidationRoute(multi,false,true).notebookPage).toBe('PLAN');
+  });
+  it('refuses malformed custom required IDs rather than selecting an unrelated Zone',()=>{
+    for(const malformed of ['custom-required-zone-a-b','custom-required-zone-3:a-1:x',
+      'custom-required-zone-0:-1:x','custom-required-zone-9999:x-1:a',
+      'custom-required-zone-1:a-2:too-long','custom-required-zone-01:a-1:b',
+      'custom-required-zone-1:a-1:b-extra']){
+      expect(customFieldFocusOwner(malformed)).toBeNull();
+    }
+    expect(customFieldFocusOwner('candidate-2.sources')).toBeNull();
+    expect(customFieldFocusOwner(customFieldFocusId('session','s-1','f-1'))?.stage).toBe('session');
   });
   it('never navigates into a nonexistent confirmed stage for draft custom fields',()=>{
     expect(quickValidationRoute('custom-required-trade-t1-f1',true,false).notebookPage).toBeNull();
