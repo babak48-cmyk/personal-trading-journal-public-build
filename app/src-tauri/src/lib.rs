@@ -117,6 +117,7 @@ pub fn run() {
             commands::edit_custom_field_option,
             commands::record_custom_field_selection,
             commands::current_custom_field_selection,
+            commands::list_custom_field_selection_history,
             commands::record_custom_field_typed_value,
             commands::current_custom_field_typed_value,
             commands::runtime_readiness,
