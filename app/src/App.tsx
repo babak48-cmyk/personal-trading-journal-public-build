@@ -1,6 +1,6 @@
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { evidenceRequiredIssues } from './evidenceValidation';
+import { evidenceRequiredIssues, evidenceSelectionIssues } from './evidenceValidation';
 import { quickValidationRoute,requiredQuickZoneOwner } from './quickValidationRoute';
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
@@ -1150,7 +1150,7 @@ export function App(){
   }
   async function saveEvidence(){
     if(!active||!evidenceCandidate||evidenceSavingRef.current||evidenceSaved||hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id))return;
-    if(blockMissing([...(selectedEvidenceIds.length?[]:[{id:'evidence.selection',label:'Observed evidence type'}]),...evidenceRequiredIssues(requirementOverrides,evidencePrice,evidenceNote,evidenceDirection)])){setEvidenceFeedback('Complete the highlighted evidence fields before capture.');return;}
+    if(blockMissing([...evidenceSelectionIssues(selectedEvidenceIds,evidenceTypes.map(type=>type.evidence_type_id)),...evidenceRequiredIssues(requirementOverrides,evidencePrice,evidenceNote,evidenceDirection)])){setEvidenceFeedback('Complete the highlighted evidence fields before capture.');return;}
     evidenceSavingRef.current=true;setEvidenceSaving(true);setEvidenceFeedback('');
     try {
       const inputs=selectedEvidenceIds.map(id=>({
