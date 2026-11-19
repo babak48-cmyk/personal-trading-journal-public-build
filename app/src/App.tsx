@@ -2275,6 +2275,10 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
   const [original,setOriginal]=useState<Record<string,string[]>>({});
   const [persistedValid,setPersistedValid]=useState<Record<string,boolean>>({});
   const [historicalLabels,setHistoricalLabels]=useState<Record<string,string>>({});
+  const [selectionHistory,setSelectionHistory]=useState<Record<string,import('./services/localApi').HistoricalCustomSelection[]>>({});
+  const [historyError,setHistoryError]=useState<Record<string,string>>({});
+  const [historyBusy,setHistoryBusy]=useState<string[]>([]);
+
   const [busy,setBusy]=useState(false);
   const busyRef=useRef(false);
   const [fieldFeedback,setFieldFeedback]=useState<Record<string,string>>({});
@@ -2282,7 +2286,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
   const [uncertainWrites,setUncertainWrites]=useState<string[]>([]);
   useEffect(()=>{
     let live=true;
-    setFields([]);setOptions({});setSelected({});setOriginal({});setPersistedValid({});setHistoricalLabels({});setNotice('');setFieldFeedback({});setLocalErrors([]);setUncertainWrites([]);
+    setFields([]);setOptions({});setSelected({});setOriginal({});setPersistedValid({});setHistoricalLabels({});setSelectionHistory({});setHistoryError({});setHistoryBusy([]);setNotice('');setFieldFeedback({});setLocalErrors([]);setUncertainWrites([]);
     localApi.listCustomFieldDefinitions().then(async defs=>{
       const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
@@ -2295,6 +2299,19 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
     }).catch(e=>{if(live)setNotice('Custom fields unavailable: '+String(e));});
     return ()=>{live=false;};
   },[ownerId,ownerStage]);
+  async function loadSelectionHistory(fieldId:string){
+    if(historyBusy.includes(fieldId))return;
+    setHistoryBusy(v=>[...v,fieldId]);
+    setHistoryError(v=>({...v,[fieldId]:''}));
+    try{
+      const history=await localApi.listCustomFieldSelectionHistory(ownerStage,ownerId,fieldId);
+      setSelectionHistory(v=>({...v,[fieldId]:history}));
+    }catch(error){
+      setHistoryError(v=>({...v,[fieldId]:'Historical selections unavailable: '+String(error)}));
+    }finally{
+      setHistoryBusy(v=>v.filter(id=>id!==fieldId));
+    }
+  }
   async function save(fieldId:string){
     if(busyRef.current||uncertainWrites.includes(fieldId))return;
     const values=selected[fieldId]||[];
@@ -2344,6 +2361,14 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
       return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))||localErrors.includes(field.field_id)?'validationFieldError':'')}>
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
         {historicalLabels[field.field_id]&&<p className="subtle" data-testid={'custom-selection-historical-'+field.field_id}>Saved historical selection labels: {historicalLabels[field.field_id]}. The current options shown below may have been renamed or deactivated since that event.</p>}
+        {historicalLabels[field.field_id]&&<details className="guidedMore">
+          <summary onClick={()=>{if(!selectionHistory[field.field_id]&&!historyBusy.includes(field.field_id))void loadSelectionHistory(field.field_id);}}>Read-only selection history (up to 100 recent events)</summary>
+          <button type="button" disabled={historyBusy.includes(field.field_id)} onClick={()=>void loadSelectionHistory(field.field_id)}>{historyBusy.includes(field.field_id)?'Loading history…':'Refresh selection history'}</button>
+          {historyError[field.field_id]&&<p role="alert">{historyError[field.field_id]}</p>}
+          {(selectionHistory[field.field_id]||[]).map(event=><p key={event.event_id} className="subtle">
+            {event.recorded_at} · {event.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(option=>option.label_at_selection).join(', ')}
+          </p>)}
+        </details>}
         {field.field_type==='SINGLE_SELECT'
           ? <select aria-label={field.label} value={values[0]||''} onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}>
             <option value="">Select an option</option>
