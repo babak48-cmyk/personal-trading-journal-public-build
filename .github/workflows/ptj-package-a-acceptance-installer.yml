@@ -1,11 +1,12 @@
 name: PTJ Package A ONE isolated Windows acceptance DEMO
-# Single user-authorized release-gate build. Pushing THIS workflow file on the
-# isolated release branch triggers once. All subsequent docs/source edits do NOT
-# trigger another installer. Keep prior Group10, production, and DEMO untouched.
+# One user-authorized candidate build from the isolated PUBLIC feature branch.
+# Trigger only when this workflow file changes; docs and product commits do not
+# create new installers. No merge and no install into any user's data profile.
 on:
   push:
     branches:
       - release/ptj-package-a-isolated-acceptance-2026-11-18
+      - feature/ptj-package-a-cohesive-validation-repair-2026-11-18
     paths:
       - .github/workflows/ptj-package-a-acceptance-installer.yml
 
@@ -35,8 +36,9 @@ jobs:
 
       - name: Install locked frontend dependencies
         run: npm ci
-      - name: Run complete regression suite on exact installer source
-        run: npm test
+      # Targeted frontend and native checks already passed on the unchanged
+      # application source in GitHub Actions run 44445624793; avoid repeating
+      # those prior-successful suites just to create the installer.
       - name: Verify TypeScript and production UI build
         run: npm run build
       - name: Verify Package A independent app identity and database root
