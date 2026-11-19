@@ -41,6 +41,18 @@ describe('Review Pending and finalization boundaries',()=>{
     expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...opts,psychologyIntensity:3})).toEqual([]);
     expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...opts,emotionAffected:false})).toEqual([]);
   });
+  it('blocks malformed provided intensity before native completion but allows incomplete Review Pending',()=>{
+    const valid={...blank,psychologyState:'FEAR',psychologyStage:'ENTRY'};
+    for(const intensity of [0,6,2.5,Number.NaN,Number.POSITIVE_INFINITY]){
+      expect(reviewCompletionIssues(true,{}, {...valid,psychologyIntensity:intensity}).map(x=>x.id))
+        .toEqual(['psychology.intensity']);
+      expect(reviewCompletionIssues(false,{}, {...valid,psychologyIntensity:intensity})).toEqual([]);
+    }
+    expect(reviewCompletionIssues(true,{}, {...valid,psychologyIntensity:5})).toEqual([]);
+    expect(reviewCompletionIssues(true,{}, {...valid,psychologyIntensity:null})).toEqual([]);
+    expect(reviewCompletionIssues(true,{'psychology.intensity':true},{...valid,psychologyIntensity:null})
+      .map(x=>x.id)).toEqual(['psychology.intensity']);
+  });
   it('Rule note is Required only on finalization when a rule violation is reported',()=>{
     const overrides={'rule.note':true};
     const values={...blank,emotionAffected:false,ruleViolationReported:true,violatedRuleIds:['rule-version-1']};
