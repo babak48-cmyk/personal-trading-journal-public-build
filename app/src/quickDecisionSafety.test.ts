@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,type ExplicitTradeDirection} from './quickDecisionSafety';
+import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,requiresDecisionLeaveGate,type ExplicitTradeDirection} from './quickDecisionSafety';
 
 describe('Quick Decision explicit direction and edit preservation',()=>{
   it('prefills ONLY a clearly directional Zone and never copies a previous direction',()=>{
@@ -33,5 +33,29 @@ describe('Quick Decision explicit direction and edit preservation',()=>{
     expect(hasUnsavedDecisionCapture({...draft,direction:'SHORT'})).toBe(true);
     expect(hasUnsavedDecisionCapture({...draft,direction:'LONG',defaultDirection:'LONG'})).toBe(false);
     expect(hasUnsavedDecisionCapture({...draft,direction:'SHORT',defaultDirection:'LONG'})).toBe(true);
+  });
+});
+
+describe('Direct multi-Zone Evidence actions honour unsaved Decision navigation',()=>{
+  it('gates direct Evidence from an open Decision editor regardless of Zone identity',()=>{
+    expect(requiresDecisionLeaveGate('DECISION',true,'EVIDENCE')).toBe(true);
+    expect(requiresDecisionLeaveGate('DECISION',true,'PLAN')).toBe(true);
+  });
+  it('does not gate clean navigation without an open Decision editor',()=>{
+    expect(requiresDecisionLeaveGate('DECISION',false,'EVIDENCE')).toBe(false);
+    expect(requiresDecisionLeaveGate('PLAN',true,'EVIDENCE')).toBe(false);
+    expect(requiresDecisionLeaveGate('EVIDENCE',true,'EVIDENCE')).toBe(false);
+    expect(requiresDecisionLeaveGate('DECISION',true,'DECISION')).toBe(false);
+  });
+  it('does not treat a NO_TRADE or MISSED draft as safe to discard',()=>{
+    for(const type of ['NO_TRADE','MISSED'] as const){
+      const draft={
+        note:'',reason:'HESITATION',quality:'',mismatchReason:'',
+        direction:'' as ExplicitTradeDirection,defaultDirection:'' as ExplicitTradeDirection,
+        decisionType:type,initialType:type,
+      };
+      expect(hasUnsavedDecisionCapture(draft)).toBe(true);
+      expect(requiresDecisionLeaveGate('DECISION',true,'EVIDENCE')).toBe(true);
+    }
   });
 });
