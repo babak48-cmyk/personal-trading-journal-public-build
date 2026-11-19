@@ -1123,6 +1123,13 @@ export function App(){
     goToNotebookPage(next);
   }
   async function openEvidence(c:CurrentCandidate){
+    // A direct Zone-card +Evidence action must honour the same in-app Decision
+    // navigation guard as the notebook tabs. Otherwise an unfinished Decision
+    // (possibly for a different Zone) can be silently left behind while the
+    // Evidence owner and Quick Zone selection change.
+    // If a warning needs acknowledgement, do not change either owner. After
+    // the user resolves the visible warning they can select the target Zone.
+    if(notebookPage==='DECISION'&&decisionCandidate&&!navigateNotebookPage('EVIDENCE'))return;
     if(evidenceCandidate?.candidate_id===c.candidate_id){
       setQuickZoneId(c.candidate_id);
       setNotebookPage('EVIDENCE');return; // Do not erase a draft on reopening its own Zone.
