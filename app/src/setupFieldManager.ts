@@ -30,3 +30,22 @@ export function orderedSetupDefinitionFields(ranks:Readonly<Record<string,number
 export function setupApprovalMissingFields(input:SaveSetupVersionInput):string[] {
   return SETUP_DEFINITION_FIELDS.filter(f=>f.approvalRequired&&!input[f.key]?.trim()).map(f=>f.id);
 }
+
+
+/** Action-adjacent, pre-IPC feedback for an incomplete Approve. Draft remains
+ * permissive; the native Rust approval gate remains authoritative.
+ */
+export function setupApprovalActionFeedback(
+  input:SaveSetupVersionInput,
+  labelFor:(id:string,fallback:string)=>string,
+):string|null {
+  const missing=setupApprovalMissingFields(input);
+  if(!missing.length)return null;
+  const names=missing.map(id=>{
+    const definition=SETUP_DEFINITION_FIELDS.find(field=>field.id===id)!;
+    return labelFor(id,definition.label);
+  });
+  return 'Approval not submitted: complete '+missing.length+
+    ' required Setup definition field(s): '+names.join(', ')+
+    '. Draft save remains available.';
+}
