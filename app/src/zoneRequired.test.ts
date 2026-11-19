@@ -38,6 +38,16 @@ describe('Shared initial/live Zone required-field gate',()=>{
       .toEqual(['liveCandidate.price']);
     expect(zoneRequiredIssues({...draft(),price_mode:'UNSPECIFIED'},'liveCandidate',{})).toEqual([]);
   });
+  it('does not mistake a malformed source row for a valid selected provenance',()=>{
+    const base=draft();
+    const required={'candidate.sources':true};
+    expect(zoneRequiredIssues({...base,sources:[{source_type_id:'   '}]},'candidate-2',required)
+      .map(issue=>issue.id)).toEqual(['candidate-2.sources']);
+    expect(zoneRequiredIssues({...base,sources:[{source_type_id:''}]},'liveCandidate',{})
+      .map(issue=>issue.id)).toEqual(['liveCandidate.sources']);
+    expect(zoneRequiredIssues({...base,sources:[{source_type_id:'source-42'}]},'candidate-2',required)).toEqual([]);
+    expect(zoneRequiredIssues({...base,sources:[]},'candidate-2',{})).toEqual([]);
+  });
   it('allows valid zero-valued prices as numeric data',()=>{
     expect(zoneRequiredIssues({...draft(),price_from:0,price_to:1},'liveCandidate',{})).toEqual([]);
   });
