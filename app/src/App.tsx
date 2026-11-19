@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { evidenceRequiredIssues, evidenceSelectionIssues, showAdvancedEvidenceRole } from './evidenceValidation';
 import { quickValidationRoute,requiredQuickZoneOwner } from './quickValidationRoute';
+import { reconcileActiveSession } from './sessionLifecycleSync';
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
@@ -748,11 +749,28 @@ export function App(){
 
   async function refreshPlan(){
     if(!active)return;
-    const p=await localApi.getCurrentPlan(active.session_id); setPlan(p);
-    setTimeline(await localApi.listPlanTimeline(active.session_id));
-    setConsistency(await localApi.checkPlanConsistency(active.session_id));
-    setSessionTrades(await localApi.listSessionTrades(active.session_id));
-    await refresh();
+    const sessionId=active.session_id;
+    const p=await localApi.getCurrentPlan(sessionId);
+    if(activeSessionIdRef.current!==sessionId)return;
+    setPlan(p);
+    const timeline=await localApi.listPlanTimeline(sessionId);
+    if(activeSessionIdRef.current!==sessionId)return;
+    setTimeline(timeline);
+    const currentConsistency=await localApi.checkPlanConsistency(sessionId);
+    if(activeSessionIdRef.current!==sessionId)return;
+    setConsistency(currentConsistency);
+    const trades=await localApi.listSessionTrades(sessionId);
+    if(activeSessionIdRef.current!==sessionId)return;
+    setSessionTrades(trades);
+    // Confirmation changes the persisted Session status. Refreshing only the
+    // sidebar list leaves active.status stuck at DRAFT in Quick routing.
+    // Read the exact canonical Session row; never infer ACTIVE from a Plan.
+    const sessionsFromStorage=await localApi.listSessions();
+    if(activeSessionIdRef.current!==sessionId)return;
+    setSessions(sessionsFromStorage);
+    setActive(current=>reconcileActiveSession(current,sessionsFromStorage,sessionId));
+    if(!sessionsFromStorage.some(session=>session.session_id===sessionId))
+      setMessage('Plan data refreshed, but the active Session could not be found in saved Sessions. Reopen the session to verify its status.');
   }
   async function start(){
     try{const s=await localApi.createDraftSession({session_date:date,instrument_symbol:instrument,environment}); setActive(s); rememberOpenedSession(s.session_id); setPlan(null); setDraftDirty(false); setDraftStep(1); setMessage('Draft session created. Build the initial plan, then confirm it.'); await refresh();}
