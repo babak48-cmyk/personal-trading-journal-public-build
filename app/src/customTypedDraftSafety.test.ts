@@ -19,8 +19,10 @@ describe('Custom TEXT draft matches native append contract',()=>{
 
 describe('Custom typed draft pre-write parity for every native kind',()=>{
  it('allows numeric zero, negatives and exponent notation but no non-finite or blank values',()=>{
-   for(const value of ['0','-2.5','1e2','0.0001'])expect(isValidCustomTypedDraft('NUMBER',value)).toBe(true);
-   for(const value of ['', '   ','Infinity','NaN','1e999','abc'])expect(isValidCustomTypedDraft('NUMBER',value)).toBe(false);
+   for(const value of ['0','-0','+2','-2.5','1e2','-1.25E-3','0.0001','.5','1.','  12.5  '])
+     expect(isValidCustomTypedDraft('NUMBER',value)).toBe(true);
+   for(const value of ['', '   ','Infinity','NaN','1e999','abc','0x10','0b101','0o17','1_000','1e','1.2.3','+','--5'])
+     expect(isValidCustomTypedDraft('NUMBER',value)).toBe(false);
  });
  it('checks Gregorian DATE before sending an append attempt to SQLite',()=>{
    for(const value of ['2024-02-29','2026-11-14'])expect(isValidCustomTypedDraft('DATE',value)).toBe(true);
