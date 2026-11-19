@@ -21,3 +21,21 @@ export function evidenceRequiredIssues(
   if(isUserRequired('evidence.note',overrides)&&!note.trim())issues.push({id:'evidence.note',label:'Evidence note'});
   return issues;
 }
+
+/** Prewrite owner-stage selection guard. An empty, duplicated or stale evidence
+ * type must not create an ambiguous observation or enter a partial atomic batch.
+ * The available IDs are the actual loaded evidence registry, not Plan sources. */
+export function evidenceSelectionIssues(
+  selectedIds:readonly string[],
+  availableIds:readonly string[],
+):EvidenceRequiredIssue[] {
+  if(selectedIds.length===0)return [{id:'evidence.selection',label:'Observed evidence type'}];
+  const known=new Set(availableIds);
+  const seen=new Set<string>();
+  for(const id of selectedIds){
+    if(!id.trim()||!known.has(id)||seen.has(id))
+      return [{id:'evidence.selection',label:'Select valid, distinct observed evidence types'}];
+    seen.add(id);
+  }
+  return [];
+}
