@@ -22,3 +22,14 @@ export function hasUnsavedDecisionCapture(input:Readonly<{
     ||!!input.mismatchReason.trim()||input.direction!==input.defaultDirection
     ||input.decisionType!==input.initialType;
 }
+
+/** A Zone-card action is navigation too. Use the normal visible Decision
+ * leave gate before opening any Evidence owner, even when the clicked Zone
+ * differs from the Decision's owner. No draft or event is mutated here. */
+export function requiresDecisionLeaveGate(
+  currentPage:string,
+  decisionEditorOpen:boolean,
+  targetPage:string,
+):boolean {
+  return currentPage==='DECISION' && decisionEditorOpen && targetPage!=='DECISION';
+}
