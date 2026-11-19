@@ -99,6 +99,11 @@ pub fn current_custom_field_selection(app:AppHandle,owner_stage:String,owner_id:
     crate::custom_fields::read_current_selection(&conn,&owner_stage,&owner_id,&field_id)
 }
 #[tauri::command]
+pub fn list_custom_field_selection_history(app:AppHandle,owner_stage:String,owner_id:String,field_id:String)->Result<Vec<crate::custom_fields::HistoricalSelection>,AppError>{
+    let conn=open_custom_fields_readonly(&app)?;
+    crate::custom_fields::read_selection_history(&conn,&owner_stage,&owner_id,&field_id)
+}
+#[tauri::command]
 pub fn record_custom_field_typed_value(app:AppHandle,input:crate::custom_fields::TypedValueInput)->Result<(),AppError>{
     let mut conn=open_custom_fields_write(&app)?;
     crate::custom_fields::record_typed_value(&mut conn,&input)
