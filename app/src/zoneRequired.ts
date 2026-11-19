@@ -16,7 +16,10 @@ export function zoneRequiredIssues(
   const missing:ZoneRequiredIssue[]=[];
   const add=(field:string,label:string)=>missing.push({id:`${prefix}.${field}`,label:`${label}${suffix}`});
   if(isUserRequired('candidate.label',overrides)&&!candidate.label?.trim())add('label','Zone name');
-  if(isUserRequired('candidate.sources',overrides)&&candidate.sources.length===0)add('sources','Level source');
+  // A picked source must have a canonical registry identity, not just an array slot.
+  // Even optional malformed entries are invalid; a genuinely empty optional picker stays valid.
+  if((isUserRequired('candidate.sources',overrides)&&candidate.sources.length===0)
+      ||candidate.sources.some(source=>!source.source_type_id?.trim()))add('sources','Valid level source');
   if(isUserRequired('candidate.requiredConditions',overrides)&&!candidate.required_conditions.some(x=>x.trim()))
     add('requiredConditions','Need to see');
   if(isUserRequired('candidate.invalidationConditions',overrides)&&!candidate.invalidation_conditions.some(x=>x.trim()))
