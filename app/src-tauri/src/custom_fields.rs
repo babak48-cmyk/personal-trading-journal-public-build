@@ -119,6 +119,38 @@ pub fn read_current_selection(conn:&Connection,owner_stage:&str,owner_id:&str,fi
 }
 
 
+/// Read-only, owner-scoped recent selection events. The event's immutable
+/// label snapshots are returned, not today's mutable option labels.
+#[derive(Serialize, PartialEq, Debug)]
+pub struct HistoricalSelection {
+    pub event_id: String,
+    pub recorded_at: String,
+    pub options: Vec<SelectionSnapshot>,
+}
+pub fn read_selection_history(
+    conn:&Connection,owner_stage:&str,owner_id:&str,field_id:&str,
+)->Result<Vec<HistoricalSelection>,AppError>{
+    if ![owner_stage,owner_id,field_id].iter().all(|v|valid_key(v)) {
+        return Err(invalid("invalid selection history lookup key"));
+    }
+    // Bounded read avoids slowing down Quick during a long-running journal.
+    let mut stmt=conn.prepare(
+        "SELECT event_id,recorded_at FROM custom_field_value_events
+         WHERE owner_stage=?1 AND owner_id=?2 AND field_id=?3
+           AND value_type IN ('SINGLE_SELECT','MULTI_SELECT')
+         ORDER BY recorded_at DESC,rowid DESC LIMIT 100"
+    )?;
+    let matches=stmt.query_map(params![owner_stage,owner_id,field_id],
+        |r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?
+        .collect::<Result<Vec<_>,_>>()?;
+    matches.into_iter().map(|(event_id,recorded_at)|{
+        Ok(HistoricalSelection{
+            options:read_snapshots(conn,&event_id)?,event_id,recorded_at
+        })
+    }).collect()
+}
+
+
 #[derive(Deserialize)]
 pub struct OptionDefinitionInput {
     pub option_id: String,
