@@ -1,5 +1,8 @@
 import {describe,expect,it} from 'vitest';
-import {quickValidationRoute} from './quickValidationRoute';
+import {quickValidationRoute,requiredQuickZoneOwner} from './quickValidationRoute';
+import {customFieldFocusId} from './customFieldStage';
+import {missingRequiredCustomValues,type CustomValueReader} from './customFieldRequired';
+import type {CustomFieldDefinition,CustomTypedValue,CustomSelection} from './services/localApi';
 import {reviewCompletionIssues,type ReviewCompletionInput} from './reviewCompletion';
 import {zoneRequiredIssues} from './zoneRequired';
 import {evidenceRequiredIssues} from './evidenceValidation';
@@ -48,5 +51,62 @@ describe('Cross-stage Quick required/conditional navigation contract',()=>{
     expect(quickValidationRoute('decision.note',false,true).notebookPage).toBe('DECISION');
     expect(quickValidationRoute('sessionReview.nextImprovement',false,true).notebookPage).toBe('REVIEW');
     expect(isFieldPresented('decision.note',true,{'decision.note':false},{'decision.note':'DETAILED_ONLY'}, {'decision.note':true})).toBe(true);
+  });
+});
+
+describe('Package A multi-Zone required ownership and Quick focus',()=>{
+  const zones=['zone-A','zone-B'];
+  const definitions:CustomFieldDefinition[]=[
+    {field_id:'candidate-context',stage:'candidate',field_type:'TEXT',label:'Candidate context',
+     required:true,active:true,help_text:'',display_order:0},
+    {field_id:'zone-provenance',stage:'zone',field_type:'SINGLE_SELECT',label:'Level provenance',
+     required:true,active:true,help_text:'',display_order:1},
+  ];
+  const typed:CustomTypedValue={event_id:'context-A',value_type:'TEXT',text_value:'Earlier planned rejection',
+    number_value:null,boolean_value:null,date_value:null};
+  const provenance:CustomSelection={event_id:'source-A',
+    options:[{option_id:'prior-high',label_at_selection:'Prior day high (historical label)',ordinal:0}]};
+  const reads:string[]=[];
+  const reader:CustomValueReader={
+    listCustomFieldDefinitions:async()=>definitions,
+    currentCustomFieldTypedValue:async(stage,owner,field)=>{
+      reads.push([stage,owner,field].join(':'));
+      return stage==='candidate'&&owner==='zone-A'?typed:null;
+    },
+    currentCustomFieldSelection:async(stage,owner,field)=>{
+      reads.push([stage,owner,field].join(':'));
+      return stage==='zone'&&owner==='zone-A'?provenance:null;
+    },
+  };
+  it('does not let complete Zone A satisfy required Candidate/Zone answers for Zone B',async()=>{
+    expect(await missingRequiredCustomValues(reader,'candidate','zone-A')).toEqual([]);
+    expect(await missingRequiredCustomValues(reader,'zone','zone-A')).toEqual([]);
+    const missingCandidate=await missingRequiredCustomValues(reader,'candidate','zone-B');
+    const missingZone=await missingRequiredCustomValues(reader,'zone','zone-B');
+    expect(missingCandidate.map(x=>x.fieldId)).toEqual(['candidate-context']);
+    expect(missingZone.map(x=>x.fieldId)).toEqual(['zone-provenance']);
+    const ids=[
+      ...missingCandidate.map(x=>customFieldFocusId('candidate','zone-B',x.fieldId)),
+      ...missingZone.map(x=>customFieldFocusId('zone','zone-B',x.fieldId)),
+    ];
+    expect(ids).toHaveLength(2);
+    for(const id of ids){
+      expect(quickValidationRoute(id,false,true).notebookPage).toBe('PLAN');
+      expect(requiredQuickZoneOwner(id,zones)).toBe('zone-B');
+    }
+    expect(requiredQuickZoneOwner(ids[0],['zone-A'])).toBeNull();
+    expect(reads).toEqual(expect.arrayContaining([
+      'candidate:zone-A:candidate-context','zone:zone-A:zone-provenance',
+      'candidate:zone-B:candidate-context','zone:zone-B:zone-provenance',
+    ]));
+    expect(provenance.options[0].label_at_selection).toBe('Prior day high (historical label)');
+  });
+  it('keeps custom field owner routing away from unconfirmed draft/Execution stages',()=>{
+    const id=customFieldFocusId('zone','zone-B','zone-provenance');
+    expect(quickValidationRoute(id,true,false).notebookPage).toBeNull();
+    expect(requiredQuickZoneOwner(id,[])).toBeNull();
+    expect(quickValidationRoute(id,false,true).notebookPage).toBe('PLAN');
+    expect(quickValidationRoute('decision.reason',false,true).notebookPage).toBe('DECISION');
+    expect(quickValidationRoute('evidence.direction',false,true).notebookPage).toBe('EVIDENCE');
   });
 });
