@@ -39,3 +39,16 @@ export function evidenceSelectionIssues(
   }
   return [];
 }
+
+/** Keep an advanced classification legible after switching Detailed → Quick.
+ * Ordinary Quick capture stays compact; a previously chosen ENTRY_CONFIRMATION
+ * or INVALIDATION is not silently replaced or visually disguised as Unclassified.
+ * This is presentation only; evidence role and persisted events are unchanged.
+ */
+export function showAdvancedEvidenceRole(
+  quickMode:boolean,
+  selectedRole:string,
+  advancedRole:'ENTRY_CONFIRMATION'|'INVALIDATION',
+):boolean {
+  return !quickMode || selectedRole===advancedRole;
+}
