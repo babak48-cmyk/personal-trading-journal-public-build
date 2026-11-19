@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evidenceRequiredIssues } from './evidenceValidation';
+import { evidenceRequiredIssues, evidenceSelectionIssues } from './evidenceValidation';
 
 describe('atomic Evidence capture required-field checks', () => {
   it('keeps both observation details optional by default', () => {
@@ -35,5 +35,33 @@ describe('atomic Evidence capture required-field checks', () => {
   it('supports independent required settings without forcing the other input', () => {
     expect(evidenceRequiredIssues({'evidence.note':true},null,'Observed')).toEqual([]);
     expect(evidenceRequiredIssues({'evidence.price':true},null,'')).toEqual([{id:'evidence.price',label:'Observed price'}]);
+  });
+});
+
+describe('Evidence type registry integrity before an atomic Quick save',()=>{
+  const registry=['absorption','delta','big-trade'];
+  it('requires at least one actually observed type',()=>{
+    expect(evidenceSelectionIssues([],registry)).toEqual([{id:'evidence.selection',label:'Observed evidence type'}]);
+  });
+  it('allows distinct known selected types and no arbitrary count threshold',()=>{
+    expect(evidenceSelectionIssues(['delta'],registry)).toEqual([]);
+    expect(evidenceSelectionIssues(['delta','absorption','big-trade'],registry)).toEqual([]);
+  });
+  it('blocks stale, missing and repeated types rather than recording invented evidence',()=>{
+    const issue=[{id:'evidence.selection',label:'Select valid, distinct observed evidence types'}];
+    expect(evidenceSelectionIssues(['deleted-type'],registry)).toEqual(issue);
+    expect(evidenceSelectionIssues(['delta','deleted-type'],registry)).toEqual(issue);
+    expect(evidenceSelectionIssues(['delta','delta'],registry)).toEqual(issue);
+    expect(evidenceSelectionIssues([''],registry)).toEqual(issue);
+    expect(evidenceSelectionIssues([' '],registry)).toEqual(issue);
+  });
+  it('cannot capture against an empty registry, even if an old selection is in memory',()=>{
+    expect(evidenceSelectionIssues(['delta'],[])).toHaveLength(1);
+  });
+  it('does not modify selected IDs or the loaded registry',()=>{
+    const selected=['absorption','delta'];
+    expect(evidenceSelectionIssues(selected,registry)).toEqual([]);
+    expect(selected).toEqual(['absorption','delta']);
+    expect(registry).toEqual(['absorption','delta','big-trade']);
   });
 });
