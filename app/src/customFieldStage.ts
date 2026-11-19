@@ -29,3 +29,32 @@ export function customFieldFocusId(stage:CustomFieldOwnerStage,ownerId:string,fi
   // each component without changing persisted SQLite owner/field IDs.
   return 'custom-required-'+stage+'-'+ownerId.length+':'+ownerId+'-'+fieldId.length+':'+fieldId;
 }
+
+
+/** Decode only our length-prefixed DOM focus identity, never stored SQLite IDs.
+ * Hyphens, colons and non-ASCII characters may appear in either component.
+ * Malformed/legacy IDs deliberately return null rather than switch Zone.
+ */
+export function customFieldFocusOwner(focusId:string):{stage:CustomFieldOwnerStage;ownerId:string;fieldId:string}|null {
+  for(const stage of CAPTURABLE_CUSTOM_FIELD_STAGES){
+    const prefix='custom-required-'+stage+'-';
+    if(!focusId.startsWith(prefix))continue;
+    const tail=focusId.slice(prefix.length);
+    const ownerLength=tail.match(/^(0|[1-9][0-9]*):/);
+    if(!ownerLength)return null;
+    const ownerSize=Number(ownerLength[1]);
+    if(!Number.isSafeInteger(ownerSize)||ownerSize<1)return null;
+    const remainder=tail.slice(ownerLength[0].length);
+    const ownerId=remainder.slice(0,ownerSize);
+    if(ownerId.length!==ownerSize||remainder[ownerSize]!=='-')return null;
+    const fieldPart=remainder.slice(ownerSize+1);
+    const fieldLength=fieldPart.match(/^(0|[1-9][0-9]*):/);
+    if(!fieldLength)return null;
+    const fieldSize=Number(fieldLength[1]);
+    if(!Number.isSafeInteger(fieldSize)||fieldSize<1)return null;
+    const fieldId=fieldPart.slice(fieldLength[0].length);
+    if(fieldId.length!==fieldSize)return null;
+    return {stage,ownerId,fieldId};
+  }
+  return null;
+}
