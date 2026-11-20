@@ -25,10 +25,15 @@ export function fillCostCoverage(fills:readonly ExecutionFill[]):FillCostCoverag
   for(const fill of fills){
     const commission=fill.commission;
     const fees=fill.fees;
-    if(commission==null)unknownFields++;else knownCostTotal+=commission;
-    if(fees==null)unknownFields++;else knownCostTotal+=fees;
-    if(commission!=null&&fees!=null)completeFillCount++;
+    const validCommission=commission!=null&&Number.isFinite(commission)&&commission>=0;
+    const validFees=fees!=null&&Number.isFinite(fees)&&fees>=0;
+    if(!validCommission)unknownFields++;else knownCostTotal+=commission;
+    if(!validFees)unknownFields++;else knownCostTotal+=fees;
+    if(validCommission&&validFees)completeFillCount++;
   }
+  // A sum that overflows is not a known/verified cost total.
+  if(!Number.isFinite(knownCostTotal))
+    return {fillCount:fills.length,completeFillCount:0,unknownFields:unknownFields+1,knownCostTotal:0,allKnown:false};
   return {fillCount:fills.length,completeFillCount,unknownFields,knownCostTotal,allKnown:unknownFields===0};
 }
 
@@ -67,6 +72,7 @@ export function verifiedRealizedMetrics(
   if(!Number.isFinite(totalExitQuantity)||totalExitQuantity<=0
      ||fills.length===0||verifiedFillCostSummary(fills).verifiedTotal===null)
     return {net:null,r:null};
-  return {net:nativeNet!==null&&Number.isFinite(nativeNet)?nativeNet:null,
-    r:nativeR!==null&&Number.isFinite(nativeR)?nativeR:null};
+  const verifiedNet=nativeNet!==null&&Number.isFinite(nativeNet)?nativeNet:null;
+  return {net:verifiedNet,
+    r:verifiedNet!==null&&nativeR!==null&&Number.isFinite(nativeR)?nativeR:null};
 }
