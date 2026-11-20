@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {customEditorKey,hasUnsubmittedCustomTypedDraft,hasUnsubmittedCustomSelectionDraft,hasUnsavedCustomEditors} from './customUnsavedEditorGuard';
+import {customEditorKey,hasUnsubmittedCustomTypedDraft,hasUnsubmittedCustomSelectionDraft,hasUnsavedCustomEditors,hasUnsavedCustomZoneInputs} from './customUnsavedEditorGuard';
 
 describe('Package A unsaved Custom Fields owner and Session leave gate',()=>{
  it('keeps stage and owner identities injective despite separators',()=>{
@@ -30,5 +30,22 @@ describe('Package A unsaved Custom Fields owner and Session leave gate',()=>{
    expect(hasUnsavedCustomEditors(dirty)).toBe(true);
    dirty.clear();
    expect(hasUnsavedCustomEditors(dirty)).toBe(false);
+ });
+});
+
+describe('Quick multi-Zone edits stay mounted without rendering all inactive Zones',()=>{
+ it('retains only the exact canonical Zone with an unsubmitted Candidate or Zone editor',()=>{
+   const dirty=new Set<string>([customEditorKey('typed','candidate','zone-A')]);
+   expect(hasUnsavedCustomZoneInputs(dirty,'zone-A')).toBe(true);
+   expect(hasUnsavedCustomZoneInputs(dirty,'zone-B')).toBe(false);
+   dirty.add(customEditorKey('select','zone','zone-B'));
+   expect(hasUnsavedCustomZoneInputs(dirty,'zone-B')).toBe(true);
+   dirty.clear();
+   expect(hasUnsavedCustomZoneInputs(dirty,'zone-A')).toBe(false);
+   expect(hasUnsavedCustomZoneInputs(dirty,'zone-B')).toBe(false);
+ });
+ it('does not treat a Session-level custom change as a Zone edit',()=>{
+   const dirty=new Set([customEditorKey('typed','session','zone-A')]);
+   expect(hasUnsavedCustomZoneInputs(dirty,'zone-A')).toBe(false);
  });
 });
