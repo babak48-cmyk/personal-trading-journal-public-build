@@ -285,16 +285,22 @@ pub fn save_field_text_preferences(app: AppHandle, json: String) -> Result<(), A
     Ok(())
 }
 
-#[tauri::command]
-pub fn save_field_requirement_overrides(app: AppHandle, json: String) -> Result<(), AppError> {
-    validate_field_requirement_overrides_json(&json)?;
-    let paths = AppPaths::from_app(&app)?;
-    let conn = db::open_database(&paths.database())?;
+fn store_field_requirement_overrides(conn: &rusqlite::Connection, json: &str) -> Result<(), AppError> {
+    // Validate before the SQLite upsert; an invalid update must preserve the
+    // last good Required/Optional preferences exactly as they were.
+    validate_field_requirement_overrides_json(json)?;
     conn.execute(
         "INSERT INTO app_settings(key,value) VALUES('field_requirement_overrides_v1',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         [json],
     )?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn save_field_requirement_overrides(app: AppHandle, json: String) -> Result<(), AppError> {
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    store_field_requirement_overrides(&conn, &json)
 }
 
 #[tauri::command]
@@ -952,6 +958,26 @@ mod field_requirement_override_guard_tests {
         assert!(valid("{}").is_ok());
         assert!(valid(r#"{"plan.mainScenario":true,"decision.note":false}"#).is_ok());
         assert!(valid(r#"{"candidate.sources":true,"review.note":true}"#).is_ok());
+    }
+
+    #[test]
+    fn sqlite_roundtrip_and_invalid_update_leave_original_requirements_untouched() {
+        let conn=rusqlite::Connection::open_in_memory().expect("disposable SQLite");
+        conn.execute_batch("CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+            .expect("minimal settings schema");
+        let initial=r#"{"plan.mainScenario":true,"decision.note":false}"#;
+        super::store_field_requirement_overrides(&conn,initial).unwrap();
+        let persisted=|| -> String {
+            conn.query_row("SELECT value FROM app_settings WHERE key='field_requirement_overrides_v1'",
+                [],|row|row.get(0)).unwrap()
+        };
+        assert_eq!(persisted(),initial);
+        assert!(super::store_field_requirement_overrides(&conn,r#"{"plan.mainScenario":"yes"}"#).is_err());
+        assert!(super::store_field_requirement_overrides(&conn,r#"{"decision.note":null}"#).is_err());
+        assert_eq!(persisted(),initial,"invalid IPC must not overwrite good settings");
+        let updated=r#"{"plan.mainScenario":false,"decision.note":true}"#;
+        super::store_field_requirement_overrides(&conn,updated).unwrap();
+        assert_eq!(persisted(),updated);
     }
 
     #[test]
