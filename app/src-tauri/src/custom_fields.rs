@@ -470,7 +470,7 @@ pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(
     let date_value=if kind=="DATE" {input.date_value.as_deref()} else {None};
     let count=[input.text_value.is_some(),input.number_value.is_some(),input.boolean_value.is_some(),input.date_value.is_some()]
         .iter().filter(|v|**v).count();
-    if count!=1 || (kind=="TEXT" && text_value.map_or(true,|v|v.len()>4000 || v.chars().any(char::is_control)))
+    if count!=1 || (kind=="TEXT" && text_value.map_or(true,|v|v.trim().is_empty() || v.len()>4000 || v.chars().any(char::is_control)))
         || (kind=="NUMBER" && number_value.map_or(true,|v|!v.is_finite()))
         || (kind=="BOOLEAN" && boolean_value.is_none())
         || (kind=="DATE" && date_value.map_or(true,|v|!valid_calendar_date(v))) {
