@@ -26,6 +26,11 @@ describe('deferred review queue derives from actual persisted review status',()=
   it('does not classify a completed review as pending after reopening its trade',()=>{
     expect(pendingReviewTrades('session-A',[{trade:trade('finished'),review:review('finished','COMPLETED')}])).toEqual([]);
   });
+  it('never treats another trade\'s completed review as proof that this trade was reviewed',()=>{
+    const stale=review('different','COMPLETED');
+    const rows=[{trade:trade('current'),review:stale},{trade:trade('finished'),review:review('finished','COMPLETED')}];
+    expect(pendingReviewTrades('session-A',rows).map(x=>x.trade_id)).toEqual(['current']);
+  });
   it('preserves the source list order rather than inventing timestamps',()=>{
     const rows=['z','a','y'].map(id=>({trade:trade(id),review:null}));
     expect(pendingReviewTrades('session-A',rows).map(x=>x.trade_id)).toEqual(['z','a','y']);
