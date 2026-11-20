@@ -27,3 +27,17 @@ export function manualFillIssues(input:Readonly<{
     issues.push({id:'fill.quantity',label:'Enter a positive whole-number quantity; EXIT cannot exceed the remaining open contracts'});
   return issues;
 }
+
+/** A stop revision is a distinct, timestamped risk event, not a change to
+ * the original stop. Require a valid quote tick before submitting that event.
+ */
+export function manualStopRevisionIssues(stop:number|null,tickSize:number):TradeEntryIssue[]{
+  if(stop===null||!Number.isFinite(stop))
+    return [{id:'management.stop',label:'Enter a finite new stop price'}];
+  if(!Number.isFinite(tickSize)||tickSize<=0)
+    return [{id:'management.stop',label:'Saved instrument tick size must be valid before changing a stop'}];
+  const ticks=stop/tickSize;
+  if(!Number.isFinite(ticks)||Math.abs(ticks-Math.round(ticks))>1e-8)
+    return [{id:'management.stop',label:'New stop price must align with the Session instrument tick size'}];
+  return [];
+}
