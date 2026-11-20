@@ -82,3 +82,41 @@ describe('Late async Session selection reads never overwrite another owner',()=>
     expect(shown).toBe('new draft');
   });
 });
+
+describe('Late Draft save acknowledgements cannot alter the next Session',()=>{
+  it('does not advance a different Session when the previous Draft save succeeds late',async()=>{
+    let generation=11;
+    let resolveSave!:()=>void;
+    const write=new Promise<void>(done=>{resolveSave=done;});
+    let draftStep=1;
+    let draftDirty=true;
+    const pending=async()=>{
+      const ownerGeneration=generation;
+      await write;
+      if(!isCurrentSessionLoad(ownerGeneration,generation))return;
+      draftStep=2;
+      draftDirty=false;
+    };
+    const inFlight=pending();
+    generation++;
+    resolveSave();
+    await inFlight;
+    expect({draftStep,draftDirty}).toEqual({draftStep:1,draftDirty:true});
+  });
+  it('does not switch the active owner when old Session setup save resolves after a change',async()=>{
+    let generation=21;
+    let resolveSave!:(id:string)=>void;
+    const write=new Promise<string>(done=>{resolveSave=done;});
+    let selectedOwner='session-B';
+    const saveSetup=async()=>{
+      const ownerGeneration=generation;
+      const savedOwner=await write;
+      if(isCurrentSessionLoad(ownerGeneration,generation))selectedOwner=savedOwner;
+    };
+    const inFlight=saveSetup();
+    generation++;
+    resolveSave('session-A');
+    await inFlight;
+    expect(selectedOwner).toBe('session-B');
+  });
+});
