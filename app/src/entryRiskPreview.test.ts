@@ -30,6 +30,25 @@ describe('session-snapshot entry risk preview',()=>{
     expect(previewEntryRisk({...baseline,quantity:1.2}).riskDollars).toBeNull();
     expect(previewEntryRisk({...baseline,direction:null}).riskDollars).toBeNull();
   });
+  it('blocks a zero-risk trade instead of inventing an R denominator',()=>{
+    const p=previewEntryRisk({...baseline,entry:6025.25,stop:6025.25});
+    expect(p.riskDollars).toBeNull();
+    expect(p.targetGrossR).toBeNull();
+    expect(p.problems.map(x=>x.id)).toContain('trade.stopPrice');
+  });
+  it('blocks finite input numbers whose initial risk multiplication overflows',()=>{
+    const p=previewEntryRisk({entry:1,stop:0,quantity:2,tickSize:1,pointValue:1e308,direction:'LONG'});
+    expect(p.riskDollars).toBeNull();
+    expect(p.riskTicks).toBeNull();
+    expect(p.problems.map(x=>x.id)).toContain('trade.stopPrice');
+  });
+  it('blocks an overflowing optional target reward without rejecting finite initial risk',()=>{
+    const p=previewEntryRisk({entry:1,stop:0,quantity:1,tickSize:1,pointValue:1e308,direction:'LONG',target:3});
+    expect(p.riskDollars).toBe(1e308);
+    expect(p.targetRewardDollars).toBeNull();
+    expect(p.targetGrossR).toBeNull();
+    expect(p.problems.map(x=>x.id)).toContain('trade.plannedTarget');
+  });
   it('labels a target on the loss side as negative gross planned R, not a guaranteed outcome',()=>{
     expect(previewEntryRisk({...baseline,target:6024.25}).targetGrossR).toBeCloseTo(-1/3);
   });
