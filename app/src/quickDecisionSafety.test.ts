@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,requiresDecisionLeaveGate,confirmedEvidenceZoneDestination,type ExplicitTradeDirection} from './quickDecisionSafety';
+import {directionFromZoneIntent,missingTradeDirection,hasUnsavedDecisionCapture,requiresDecisionLeaveGate,confirmedEvidenceZoneDestination,quickDecisionSwitchDisposition,type ExplicitTradeDirection} from './quickDecisionSafety';
 
 describe('Quick Decision explicit direction and edit preservation',()=>{
   it('prefills ONLY a clearly directional Zone and never copies a previous direction',()=>{
@@ -78,5 +78,22 @@ describe('Resume the exact clicked Zone after retaining an unsaved Decision',()=
   it('does not change whether a Decision must ask to keep its unsaved draft',()=>{
     expect(requiresDecisionLeaveGate('DECISION',true,'EVIDENCE')).toBe(true);
     expect(requiresDecisionLeaveGate('EVIDENCE',true,'EVIDENCE')).toBe(false);
+  });
+});
+
+describe('Quick Capture Zone and Decision type switches cannot silently erase an editor',()=>{
+  it('does not reopen the same Zone or same Decision type',()=>{
+    expect(quickDecisionSwitchDisposition('zone-A','TRADE','zone-A',null,true)).toBe('SAME');
+    expect(quickDecisionSwitchDisposition('zone-A','NO_TRADE','zone-A','NO_TRADE',true)).toBe('SAME');
+  });
+  it('requires visible leave flow for dirty Zone and type changes including MISSED',()=>{
+    expect(quickDecisionSwitchDisposition('zone-A','TRADE','zone-B',null,true)).toBe('PROMPT');
+    expect(quickDecisionSwitchDisposition('zone-A','NO_TRADE','zone-B','NO_TRADE',true)).toBe('PROMPT');
+    expect(quickDecisionSwitchDisposition('zone-A','MISSED','zone-A','TRADE',true)).toBe('PROMPT');
+  });
+  it('allows only clean or absent editors to switch without a destructive prompt',()=>{
+    expect(quickDecisionSwitchDisposition('zone-A','TRADE','zone-B',null,false)).toBe('SWITCH');
+    expect(quickDecisionSwitchDisposition('zone-A','TRADE','zone-A','MISSED',false)).toBe('SWITCH');
+    expect(quickDecisionSwitchDisposition(null,null,'zone-B','NO_TRADE',false)).toBe('SWITCH');
   });
 });
