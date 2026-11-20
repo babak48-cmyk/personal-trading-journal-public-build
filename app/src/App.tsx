@@ -10,7 +10,7 @@ import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
 import { previewEntryRisk } from './entryRiskPreview';
-import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, requiresDecisionLeaveGate, confirmedEvidenceZoneDestination, type ExplicitTradeDirection } from './quickDecisionSafety';
+import { directionFromZoneIntent, missingTradeDirection, hasUnsavedDecisionCapture, requiresDecisionLeaveGate, confirmedEvidenceZoneDestination, quickDecisionSwitchDisposition, type ExplicitTradeDirection } from './quickDecisionSafety';
 import { hasUnsavedEvidenceDraft, shouldPromptEvidencePageLeave } from './quickEvidenceDraftGuard';
 import { scopedQuickDraftKey } from './quickDraftIdentity';
 import { DecisionHistoryList, PendingTradeDecisionRow } from './QuickDecisionHistory';
@@ -1964,9 +1964,10 @@ export function App(){
               <label htmlFor="quick-zone-choice">Zone</label>
               <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>{
                 // Never silently discard a Decision editor, including direction/type-only drafts.
-                if(e.target.value===quickZoneId)return;
+                const disposition=quickDecisionSwitchDisposition(decisionCandidate?.candidate_id??null,decisionCandidate?decisionType:null,e.target.value,null,decisionEditorHasUnsavedInput());
+                if(disposition==='SAME')return;
+                if(disposition==='PROMPT'){requestCloseDecisionEditor();return;}
                 if(decisionCandidate){
-                  if(decisionEditorHasUnsavedInput()){requestCloseDecisionEditor();return;}
                   if(!confirmCloseDecisionEditor())return;
                   setDecisionCandidate(null);
                 }
@@ -1980,13 +1981,9 @@ export function App(){
               }}>Record evidence</button>
               {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId} onClick={()=>{
                 const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
-                if(decisionCandidate?.candidate_id===zone.candidate_id&&decisionType===type){
-                  // Reopening the same exact editor is not navigation.
-                }else if(decisionCandidate&&decisionEditorHasUnsavedInput()){
-                  // A different Zone or Decision type is a distinct draft owner.
-                  // Offer the visible keep/discard control instead of resetting it.
-                  requestCloseDecisionEditor();return;
-                }else{void openDecision(zone,type);}
+                const disposition=quickDecisionSwitchDisposition(decisionCandidate?.candidate_id??null,decisionCandidate?decisionType:null,zone.candidate_id,type,decisionEditorHasUnsavedInput());
+                if(disposition==='PROMPT'){requestCloseDecisionEditor();return;}
+                if(disposition==='SWITCH')void openDecision(zone,type);
                 window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
               }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
             </>}
