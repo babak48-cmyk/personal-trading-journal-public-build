@@ -58,3 +58,14 @@ export function customFieldFocusOwner(focusId:string):{stage:CustomFieldOwnerSta
   }
   return null;
 }
+
+/** Session-owned custom inputs are planning-stage inputs. Keep the Quick
+ * Evidence/Decision/Execution/Review pages focused on their own lifecycle
+ * without hiding these inputs in Detailed or during the original Draft. */
+export function showSessionCustomFieldsOnPage(
+  quickMode:boolean,
+  hasConfirmedPlan:boolean,
+  notebookPage:string,
+):boolean {
+  return !quickMode || !hasConfirmedPlan || notebookPage==='PLAN';
+}
