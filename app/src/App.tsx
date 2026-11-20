@@ -2,7 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { evidenceRequiredIssues, evidenceSelectionIssues, showAdvancedEvidenceRole } from './evidenceValidation';
 import { quickValidationRoute,requiredQuickZoneOwner } from './quickValidationRoute';
-import { reconcileActiveSession } from './sessionLifecycleSync';
+import { reconcileActiveSession, isCurrentSessionLoad } from './sessionLifecycleSync';
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
@@ -693,7 +693,7 @@ export function App(){
       setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
     const loadRequest=++sessionLoadRequestRef.current;
-    const stillCurrent=()=>loadRequest===sessionLoadRequestRef.current;
+    const stillCurrent=()=>isCurrentSessionLoad(loadRequest,sessionLoadRequestRef.current);
     setShowDraftSetup(false);setValidationErrors([]);
     setReviewQueue(null);setActive(s);rememberOpenedSession(s.session_id);
     if(s.status==='DRAFT'){
