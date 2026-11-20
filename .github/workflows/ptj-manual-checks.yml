@@ -79,3 +79,6 @@ jobs:
         run: |
           cargo test --locked --lib field_requirement_override_guard_tests::
           cargo test --locked --lib custom_presentation::tests::
+      - name: Complete native Rust library regression suite — Package A integrated gate
+        working-directory: app/src-tauri
+        run: cargo test --locked --lib
