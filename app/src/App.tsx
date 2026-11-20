@@ -1963,19 +1963,26 @@ export function App(){
             {active.status!=='DRAFT'&&plan&&<>
               <label htmlFor="quick-zone-choice">Zone</label>
               <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>{
-                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Unsaved decision details will be lost. Change Zone?'))return;
-                setQuickZoneId(e.target.value);setDecisionCandidate(null);
+                // Never silently discard a Decision editor, including direction/type-only drafts.
+                if(e.target.value===quickZoneId)return;
+                if(decisionCandidate){requestCloseDecisionEditor();return;}
+                setQuickZoneId(e.target.value);
               }}><option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}</select>
               <button type="button" disabled={!quickZoneId||evidenceSaving||decisionSaving} onClick={()=>{
                 const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
-                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&!window.confirm('Discard unsaved decision details and record fresh observed evidence?'))return;
-                setDecisionCandidate(null);
+                // openEvidence owns the visible Decision leave gate and any pending target.
+                // Clearing Decision here would bypass that gate and lose its draft.
                 void openEvidence(zone);
               }}>Record evidence</button>
               {(['TRADE','NO_TRADE','MISSED'] as const).map(type=><button key={type} type="button" disabled={!quickZoneId} onClick={()=>{
                 const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
-                if(decisionCandidate&&(decisionReason.trim()||decisionNote.trim()||decisionQuality||mismatchReason.trim())&&decisionCandidate.candidate_id!==zone.candidate_id&&!window.confirm('Discard unsaved decision details?'))return;
-                if(decisionCandidate?.candidate_id===zone.candidate_id){setDecisionType(type);}else{void openDecision(zone,type);}
+                if(decisionCandidate?.candidate_id===zone.candidate_id&&decisionType===type){
+                  // Reopening the same exact editor is not navigation.
+                }else if(decisionCandidate){
+                  // A different Zone or Decision type is a distinct draft owner.
+                  // Require the existing visible keep/discard path before reopening.
+                  requestCloseDecisionEditor();return;
+                }else{void openDecision(zone,type);}
                 window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
               }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
             </>}
