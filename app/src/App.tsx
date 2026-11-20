@@ -951,14 +951,18 @@ export function App(){
   async function confirm(){
     if(!active||active.status!=='DRAFT'){setMessage('Initial plan can only be confirmed for a draft session.');return;}
     if(confirmingPlanRef.current)return;
+    const confirmGeneration=sessionLoadRequestRef.current;
+    const confirmSessionId=active.session_id;
+    const stillCurrent=()=>isCurrentSessionLoad(confirmGeneration,sessionLoadRequestRef.current);
     confirmingPlanRef.current=true;setConfirmingPlan(true);
     try {
     // Drafts remain freely editable. Only confirmed plans require persisted custom Session values.
     try{
       const [sessionMissing,planMissing]=await Promise.all([
-        missingRequiredCustomValues(localApi,'session',active.session_id),
-        missingRequiredCustomValues(localApi,'premarket-plan',active.session_id),
+        missingRequiredCustomValues(localApi,'session',confirmSessionId),
+        missingRequiredCustomValues(localApi,'premarket-plan',confirmSessionId),
       ]);
+      if(!stillCurrent())return; // Never focus the prior Session's required fields.
       if(sessionMissing.length||planMissing.length){
         setValidationErrors([...sessionMissing.map(x=>customFieldFocusId('session',active.session_id,x.fieldId)),...planMissing.map(x=>customFieldFocusId('premarket-plan',active.session_id,x.fieldId))]);
         setValidationIssueLabels(v=>({...v,...Object.fromEntries([...sessionMissing.map(x=>[customFieldFocusId('session',active.session_id,x.fieldId),x.label]),...planMissing.map(x=>[customFieldFocusId('premarket-plan',active.session_id,x.fieldId),x.label])])}));
@@ -971,7 +975,7 @@ export function App(){
         window.setTimeout(()=>focusRequiredCustomField(first.fieldId,stage,active.session_id),120);
         return;
       }
-    }catch(e){setMessage('Plan not confirmed: could not verify required Session custom fields. '+String(e));return;}
+    }catch(e){if(stillCurrent())setMessage('Plan not confirmed: could not verify required Session custom fields. '+String(e));return;}
     const configuredLabel=(id:string,fallback:string)=>fieldText[id]?.label?.trim()||fallback;
     const missing=missingRequired([
       ['plan.mainScenario',!!mainScenario.trim()],
@@ -1000,11 +1004,13 @@ export function App(){
     }
     const badZone=candidates.findIndex(c=>zoneRangeOrderIssue(c)!==null);
     if(badZone>=0){const c=candidates[badZone];setDraftStep(2);setDraftZonePage(badZone);setValidationErrors([`candidate-${badZone}.priceFrom`,`candidate-${badZone}.priceTo`]);setMessage(`Zone ${badZone+1} (${c.label||'Unnamed'}): ${zoneRangeOrderIssue(c)} Correct the highlighted range before confirming.`);window.setTimeout(()=>{const node=document.querySelector<HTMLElement>(`[data-validation-id="candidate-${badZone}.priceFrom"]`);node?.scrollIntoView({behavior:'smooth',block:'center'});node?.querySelector<HTMLElement>('input')?.focus({preventScroll:true});},120);return;}
+    if(!stillCurrent())return; // Selection changed during validation; do not confirm another Session.
     setValidationErrors([]);
     try{
-      await localApi.confirmInitialPlan({session_id:active.session_id,initial_bias:bias,main_scenario:mainScenario||null,alternative_scenario:altScenario||null,expected_context:[],things_not_to_do:[],pre_session_state:preSessionState||null,pre_session_state_intensity:preSessionStateIntensity,candidates:candidates.map(cleanCandidate)});
+      await localApi.confirmInitialPlan({session_id:confirmSessionId,initial_bias:bias,main_scenario:mainScenario||null,alternative_scenario:altScenario||null,expected_context:[],things_not_to_do:[],pre_session_state:preSessionState||null,pre_session_state_intensity:preSessionStateIntensity,candidates:candidates.map(cleanCandidate)});
+      if(!stillCurrent())return; // Confirmed old Session; do not touch new Session UI.
       setMessage('Initial plan confirmed and locked into immutable history.'); await refreshPlan();
-    }catch(e){setMessage(String(e));}
+    }catch(e){if(stillCurrent())setMessage(String(e));}
     } finally {
       confirmingPlanRef.current=false;setConfirmingPlan(false);
     }
