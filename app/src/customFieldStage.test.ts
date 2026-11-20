@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAPTURABLE_CUSTOM_FIELD_STAGES,canCaptureCustomFieldStage,customFieldFocusId,eligibleCustomFields } from './customFieldStage';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES,canCaptureCustomFieldStage,customFieldFocusId,eligibleCustomFields,showSessionCustomFieldsOnPage } from './customFieldStage';
 import type { CustomFieldDefinition } from './services/localApi';
 
 const entry=(field_id:string,stage:string,field_type:string,display_order:number,active=true):CustomFieldDefinition=>({
@@ -59,5 +59,22 @@ describe('canonical owner-stage custom-field capture',()=>{
     expect(customFieldFocusId('post-trade-review','trade-A','field-X')).not.toBe(customFieldFocusId('post-trade-review','trade-B','field-X'));
     expect(customFieldFocusId('post-trade-review','same-owner','field-X')).not.toBe(customFieldFocusId('zone','same-owner','field-X'));
     expect(customFieldFocusId('session-review','review-A','field-X')).not.toBe(customFieldFocusId('session','review-A','field-X'));
+  });
+});
+
+describe('stage-specific Quick display with shared persistent Session custom values',()=>{
+  it('shows Session custom inputs in Draft and confirmed Plan only while Quick',()=>{
+    for(const page of ['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW']){
+      expect(showSessionCustomFieldsOnPage(true,false,page)).toBe(true);
+      expect(showSessionCustomFieldsOnPage(true,true,page)).toBe(page==='PLAN');
+      expect(showSessionCustomFieldsOnPage(false,true,page)).toBe(true);
+    }
+  });
+  it('never changes owner identity or stored values when only presentation changes',()=>{
+    const stage='session',ownerId='s-ES-2026-11-20',fieldId='readiness';
+    const target=customFieldFocusId(stage,ownerId,fieldId);
+    expect(target).toBe(customFieldFocusId(stage,ownerId,fieldId));
+    expect(showSessionCustomFieldsOnPage(true,true,'EXECUTION')).toBe(false);
+    expect(showSessionCustomFieldsOnPage(true,true,'PLAN')).toBe(true);
   });
 });
