@@ -266,12 +266,28 @@ pub fn save_field_text_preferences(app: AppHandle, json: String) -> Result<(), A
 }
 
 #[tauri::command]
-pub fn save_field_requirement_overrides(app: AppHandle, json: String) -> Result<(), AppError> {
-    let parsed: serde_json::Value = serde_json::from_str(&json)
+/// All-Inputs Field Manager requirement overrides are booleans only.
+ /// Validate at the native persistence boundary as well as the React editor:
+ /// malformed IPC/old integrations must not store unrenderable requirement rules.
+ fn validate_field_requirement_overrides_json(json: &str) -> Result<(), AppError> {
+    let parsed: serde_json::Value = serde_json::from_str(json)
         .map_err(|_| AppError::Validation("invalid field requirement settings".into()))?;
-    if !parsed.is_object() {
-        return Err(AppError::Validation("field requirement settings must be a JSON object".into()));
+    let map = parsed.as_object().ok_or_else(|| AppError::Validation(
+        "field requirement settings must be a JSON object".into()
+    ))?;
+    if map.len() > 200 || map.iter().any(|(id, value)|
+        id.trim().is_empty() || id.len() > 128 || !value.is_boolean()
+    ) {
+        return Err(AppError::Validation(
+            "field requirement settings must contain at most 200 non-empty field IDs with boolean values".into()
+        ));
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn save_field_requirement_overrides(app: AppHandle, json: String) -> Result<(), AppError> {
+    validate_field_requirement_overrides_json(&json)?;
     let paths = AppPaths::from_app(&app)?;
     let conn = db::open_database(&paths.database())?;
     conn.execute(
