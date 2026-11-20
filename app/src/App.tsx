@@ -31,7 +31,7 @@ import { SetupPlaybookWorkspace } from './SetupPlaybookWorkspace';
 import { ZoneSetupGuide } from './ZoneSetupGuide';
 // NinjaTrader import/readiness UI held until user approves group 11 after group 10 acceptance.
 import { summarizeSessionTradeExecution } from './tradeSessionPulse';
-import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, type CustomFieldOwnerStage } from './customFieldStage';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, showSessionCustomFieldsOnPage, type CustomFieldOwnerStage } from './customFieldStage';
 import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
@@ -1925,8 +1925,8 @@ export function App(){
         {backupResult&&<p role="status" aria-live="polite" style={{overflowWrap:'anywhere'}}>{backupResult}</p>}
         <p className="subtle">Folder selection is saved for future backups. No existing backup file will be overwritten. If a selected drive becomes unavailable, the app reports the failure and keeps its verified internal copy.</p>
       </div>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections key={"session-select-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields key={"session-typed-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)&&<OwnerCustomSelections key={"session-select-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)&&<OwnerTypedCustomFields key={"session-typed-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
         {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections key={"premarket-plan-select-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
         {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields key={"premarket-plan-typed-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
         
