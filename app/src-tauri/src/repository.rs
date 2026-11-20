@@ -2376,6 +2376,96 @@ mod decision_mismatch_persistence_tests {
         assert_eq!(history.len(),2);
         assert!(history.iter().all(|row| row.plan_mismatch_reason.is_none()));
     }
+
+    #[test]
+    fn package_a_two_zones_evidence_and_repeated_decisions_preserve_sqlite_owner_history() {
+        // Real in-memory SQLite and native repository methods, never user data.
+        // A decision to TRADE does not itself create a trade or an execution fill.
+        let mut db=memory_db();
+        db.execute_batch("
+            CREATE TABLE evidence_types(
+                evidence_type_id TEXT PRIMARY KEY,label TEXT NOT NULL,active INTEGER NOT NULL
+            );
+            CREATE TABLE evidence_observations(
+                evidence_id TEXT PRIMARY KEY,session_id TEXT NOT NULL,candidate_id TEXT,
+                evidence_type_id TEXT NOT NULL,role TEXT NOT NULL,occurred_at TEXT NOT NULL,
+                direction TEXT,price REAL,numeric_value REAL,strength REAL,
+                present INTEGER NOT NULL,note TEXT,provenance TEXT NOT NULL
+            );
+            CREATE TABLE trades(trade_id TEXT PRIMARY KEY,decision_id TEXT);
+            CREATE TABLE execution_fills(fill_id TEXT PRIMARY KEY,trade_id TEXT);
+            INSERT INTO evidence_types VALUES('delta','Delta',1),('absorption','Absorption',1);
+            INSERT INTO candidates VALUES('zone2','s1');
+            INSERT INTO candidate_revisions VALUES('zone2','rev2',1,'SHORT','WITH_TREND');
+            INSERT INTO sessions VALUES('s2','ACTIVE');
+            INSERT INTO candidates VALUES('other-session-zone','s2');
+            INSERT INTO candidate_revisions VALUES('other-session-zone','otherrev',1,'LONG','WITH_TREND');
+        ").expect("two-Zone isolated fixture");
+
+        let observation=|zone:&str,kind:&str,role:&str| EvidenceObservationInput {
+            session_id:"s1".into(),candidate_id:Some(zone.into()),
+            evidence_type_id:kind.into(),role:role.into(),
+            direction:None,price:None,numeric_value:None,strength:None,note:None,
+        };
+
+        let ids=add_evidence_observations_atomic(&mut db,vec![
+            observation("zone1","delta","SETUP_SUPPORT"),
+            observation("zone1","absorption","CONTRADICTING_EVIDENCE"),
+        ]).expect("atomic Zone 1 observations");
+        assert_eq!(ids.len(),2);
+        assert_ne!(ids[0],ids[1]);
+        let second=add_evidence_observations_atomic(&mut db,vec![
+            observation("zone2","delta","GENERAL_OBSERVATION"),
+        ]).expect("independent Zone 2 evidence");
+        assert_eq!(second.len(),1);
+
+        // A mixed-Zone batch must be rejected before the first append; a
+        // candidate belonging to another Session cannot be used as evidence.
+        assert!(add_evidence_observations_atomic(&mut db,vec![
+            observation("zone1","delta","GENERAL_OBSERVATION"),
+            observation("zone2","absorption","GENERAL_OBSERVATION"),
+        ]).is_err());
+        assert!(add_evidence_observations_atomic(&mut db,vec![
+            observation("other-session-zone","delta","GENERAL_OBSERVATION"),
+        ]).is_err());
+
+        let zone1=list_candidate_evidence(&db,"zone1").expect("persisted evidence A");
+        let zone2=list_candidate_evidence(&db,"zone2").expect("persisted evidence B");
+        assert_eq!(zone1.len(),2);
+        assert_eq!(zone2.len(),1);
+        assert!(zone1.iter().any(|e|e.role=="SETUP_SUPPORT"));
+        assert!(zone1.iter().any(|e|e.role=="CONTRADICTING_EVIDENCE"));
+        assert!(zone2.iter().all(|e|e.candidate_id.as_deref()==Some("zone2")));
+
+        let no_trade=create_candidate_decision(&db,input("NO_TRADE",None,None))
+            .expect("reasoned NO_TRADE");
+        let mut missed_input=input("MISSED",None,None);
+        missed_input.candidate_id=Some("zone2".into());
+        let missed=create_candidate_decision(&db,missed_input).expect("reasoned MISSED");
+        let trade_first=create_candidate_decision(&db,input("TRADE",Some("LONG"),None))
+            .expect("first TRADE intent");
+        let trade_second=create_candidate_decision(&db,input("TRADE",Some("LONG"),None))
+            .expect("independent same-Zone re-entry intent");
+        assert_ne!(trade_first.decision_id,trade_second.decision_id);
+
+        let decisions_a=list_candidate_decisions(&db,"zone1").expect("Zone 1 decisions");
+        let decisions_b=list_candidate_decisions(&db,"zone2").expect("Zone 2 decisions");
+        assert_eq!(decisions_a.len(),3);
+        assert_eq!(decisions_b.len(),1);
+        assert_eq!(no_trade.decision_type,"NO_TRADE");
+        assert_eq!(missed.decision_type,"MISSED");
+        assert!(decisions_a.iter().any(|d|d.decision_id==no_trade.decision_id));
+        assert!(decisions_a.iter().any(|d|d.decision_id==trade_first.decision_id));
+        assert!(decisions_a.iter().any(|d|d.decision_id==trade_second.decision_id));
+        assert_eq!(decisions_b[0].decision_id,missed.decision_id);
+        assert!(decisions_a.iter().all(|d|!d.occurred_at.is_empty()));
+
+        let trade_count:i64=db.query_row("SELECT COUNT(*) FROM trades",[],|row|row.get(0)).unwrap();
+        let fill_count:i64=db.query_row("SELECT COUNT(*) FROM execution_fills",[],|row|row.get(0)).unwrap();
+        assert_eq!(trade_count,0,"Trade intent alone must never create an executed trade");
+        assert_eq!(fill_count,0,"No actual fill was captured");
+    }
+
 }
 
 #[cfg(test)]
