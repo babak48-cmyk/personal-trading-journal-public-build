@@ -1925,15 +1925,20 @@ export function App(){
         {backupResult&&<p role="status" aria-live="polite" style={{overflowWrap:'anywhere'}}>{backupResult}</p>}
         <p className="subtle">Folder selection is saved for future backups. No existing backup file will be overwritten. If a selected drive becomes unavailable, the app reports the failure and keeps its verified internal copy.</p>
       </div>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&
-          <div style={{display:showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)?'block':'none'}}>
-            {/* Keep editors mounted across Quick page changes; hiding must never
-                destroy unsaved optional or required Custom Field input drafts. */}
+        {active&&<>
+          {/* The owner is the Session ID, not the currently open overlay/page.
+              Keep both saved and unsaved in-memory Custom Field drafts mounted
+              through Settings/Analysis/Safety/Roadmap and Quick page switches. */}
+          <div style={{display:!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)?'block':'none'}}>
             <OwnerCustomSelections key={"session-select-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>
             <OwnerTypedCustomFields key={"session-typed-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>
-          </div>}
-        {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections key={"premarket-plan-select-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
-        {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields key={"premarket-plan-typed-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
+          </div>
+          {active.status==='DRAFT'&&!plan&&
+            <div style={{display:!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety?'block':'none'}}>
+              <OwnerCustomSelections key={"premarket-plan-select-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>
+              <OwnerTypedCustomFields key={"premarket-plan-typed-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>
+            </div>}
+        </>}
         
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&plan&&(!quickMode||notebookPage==='DECISION')&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
           <div className="panelTitle"><div><h2>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p>{quickShortcutReport&&<p className="subtle" role="status">Windows shortcut: {quickShortcutReport.registered?'Ctrl+Alt+J registered':'Ctrl+Alt+J unavailable (another app may own it)'}</p>}</div></div>
