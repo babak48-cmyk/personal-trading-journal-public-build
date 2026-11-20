@@ -1925,8 +1925,13 @@ export function App(){
         {backupResult&&<p role="status" aria-live="polite" style={{overflowWrap:'anywhere'}}>{backupResult}</p>}
         <p className="subtle">Folder selection is saved for future backups. No existing backup file will be overwritten. If a selected drive becomes unavailable, the app reports the failure and keeps its verified internal copy.</p>
       </div>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)&&<OwnerCustomSelections key={"session-select-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
-        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)&&<OwnerTypedCustomFields key={"session-typed-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
+        {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&
+          <div style={{display:showSessionCustomFieldsOnPage(quickMode,!!plan,notebookPage)?'block':'none'}}>
+            {/* Keep editors mounted across Quick page changes; hiding must never
+                destroy unsaved optional or required Custom Field input drafts. */}
+            <OwnerCustomSelections key={"session-select-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>
+            <OwnerTypedCustomFields key={"session-typed-"+active.session_id} ownerId={active.session_id} ownerStage="session" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>
+          </div>}
         {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerCustomSelections key={"premarket-plan-select-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
         {active&&active.status==='DRAFT'&&!plan&&!showRoadmap&&!showSettings&&!showAnalysis&&<OwnerTypedCustomFields key={"premarket-plan-typed-"+active.session_id} ownerId={active.session_id} ownerStage="premarket-plan" quickMode={quickMode} presentation={customPresentation} presentationReady={customPresentationReady} validationErrors={validationErrors} onSaved={clearValidation}/>}
         
