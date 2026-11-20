@@ -2,7 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { evidenceRequiredIssues, evidenceSelectionIssues, showAdvancedEvidenceRole } from './evidenceValidation';
 import { quickValidationRoute,requiredQuickZoneOwner } from './quickValidationRoute';
-import { reconcileActiveSession, isCurrentSessionLoad } from './sessionLifecycleSync';
+import { reconcileActiveSession, isCurrentSessionLoad, shouldKeepUnsavedActiveDraft } from './sessionLifecycleSync';
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
@@ -679,7 +679,7 @@ export function App(){
     }
     // Selecting the same Draft in the sidebar is not permission to discard
     // uncommitted Plan/Zone edits by reloading the last persisted draft.
-    if(draftDirty&&active?.status==='DRAFT'&&active.session_id===s.session_id&&!requestedTradeId){
+    if(shouldKeepUnsavedActiveDraft(active?.session_id??null,s.session_id,active?.status??null,draftDirty,requestedTradeId)){
       setMessage('This Draft has unsaved Plan/Zone changes. Save the Draft before reloading it.');
       return;
     }
