@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {manualFillIssues} from './tradeFillValidation';
+import {manualFillIssues,manualStopRevisionIssues} from './tradeFillValidation';
 
 const sample={action:'EXIT' as const,price:6025.25,quantity:1,openQuantity:2,tickSize:0.25};
 const ids=(input:Parameters<typeof manualFillIssues>[0])=>manualFillIssues(input).map(i=>i.id);
@@ -31,5 +31,20 @@ describe('Package B: safe pre-write manual ENTRY and EXIT fills',()=>{
   });
   it('reports both price and quantity issues in one click',()=>{
     expect(ids({...sample,price:6025.3,quantity:3})).toEqual(['fill.price','fill.quantity']);
+  });
+});
+
+describe('Package B: manual stop revision saves an auditable, tick-valid price',()=>{
+  it('accepts tick-aligned new stops for ES, GC, and a valid negative-price instrument',()=>{
+    expect(manualStopRevisionIssues(6020.25,0.25)).toEqual([]);
+    expect(manualStopRevisionIssues(3512.4,0.1)).toEqual([]);
+    expect(manualStopRevisionIssues(-1.25,0.25)).toEqual([]);
+  });
+  it('rejects off-tick, blank, non-finite or invalid snapshot before any save',()=>{
+    expect(manualStopRevisionIssues(6020.3,0.25)[0]?.id).toBe('management.stop');
+    for(const stop of [null,NaN,Infinity,-Infinity])
+      expect(manualStopRevisionIssues(stop,0.25)[0]?.id).toBe('management.stop');
+    for(const tick of [0,NaN,Infinity,-1])
+      expect(manualStopRevisionIssues(6020.25,tick)[0]?.id).toBe('management.stop');
   });
 });
