@@ -66,13 +66,13 @@ export function verifiedFillCostSummary(fills:readonly ExecutionFill[]):Verified
 export function verifiedRealizedMetrics(
   fills:readonly ExecutionFill[],
   totalExitQuantity:number,
-  nativeNet:number|null,
-  nativeR:number|null,
+  nativeNet:number|null|undefined,
+  nativeR:number|null|undefined,
 ):Readonly<{net:number|null;r:number|null}>{
   if(!Number.isFinite(totalExitQuantity)||totalExitQuantity<=0
      ||fills.length===0||verifiedFillCostSummary(fills).verifiedTotal===null)
     return {net:null,r:null};
-  const verifiedNet=nativeNet!==null&&Number.isFinite(nativeNet)?nativeNet:null;
+  const verifiedNet=typeof nativeNet==='number'&&Number.isFinite(nativeNet)?nativeNet:null;
   return {net:verifiedNet,
-    r:verifiedNet!==null&&nativeR!==null&&Number.isFinite(nativeR)?nativeR:null};
+    r:verifiedNet!==null&&typeof nativeR==='number'&&Number.isFinite(nativeR)?nativeR:null};
 }
