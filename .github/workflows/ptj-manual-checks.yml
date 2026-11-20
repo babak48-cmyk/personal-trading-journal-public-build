@@ -69,3 +69,8 @@ jobs:
       - name: Targeted Package A native custom-field lifecycle regression tests
         working-directory: app/src-tauri
         run: 'cargo test --locked --lib custom_fields::tests::'
+      - name: Native SQLite Evidence and Decision package regression tests
+        working-directory: app/src-tauri
+        run: |
+          cargo test --locked --lib evidence_atomic_batch_tests::
+          cargo test --locked --lib decision_mismatch_persistence_tests::
