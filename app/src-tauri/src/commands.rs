@@ -942,3 +942,31 @@ pub fn open_export_folder(app: AppHandle) -> Result<(), AppError> {
         Err(AppError::Validation("Open export folder is supported on Windows only".into()))
     }
 }
+
+#[cfg(test)]
+mod field_requirement_override_guard_tests {
+    use super::validate_field_requirement_overrides_json as valid;
+
+    #[test]
+    fn valid_optional_and_user_required_map_passes() {
+        assert!(valid("{}").is_ok());
+        assert!(valid(r#"{"plan.mainScenario":true,"decision.note":false}"#).is_ok());
+        assert!(valid(r#"{"candidate.sources":true,"review.note":true}"#).is_ok());
+    }
+
+    #[test]
+    fn malformed_requirement_maps_are_rejected_before_persistence() {
+        for input in [
+            "null", "[]", "true", r#"{"plan.mainScenario":"true"}"#,
+            r#"{"decision.note":1}"#, r#"{"decision.note":null}"#,
+            r#"{"":true}"#, r#"{" ":false}"#, "{malformed}",
+        ] {
+            assert!(valid(input).is_err(), "unexpectedly accepted: {input}");
+        }
+        let long_key = "x".repeat(129);
+        assert!(valid(&format!(r#"{{"{long_key}":true}}"#)).is_err());
+        let oversized = (0..201).map(|i|format!(r#""field.{i}":true"#))
+            .collect::<Vec<_>>().join(",");
+        assert!(valid(&format!("{{{oversized}}}")).is_err());
+    }
+}
