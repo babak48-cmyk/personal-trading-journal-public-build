@@ -41,6 +41,7 @@ describe('verified net P&L/R on manual partial exits and unknown costs',()=>{
     expect(verifiedFillCostSummary(fills).verifiedTotal).toBe(7.5);
     expect(verifiedRealizedMetrics(fills,1,117.5,1.175)).toEqual({net:117.5,r:1.175});
     expect(verifiedRealizedMetrics(fills,0,117.5,1.175)).toEqual({net:null,r:null});
+    expect(verifiedRealizedMetrics([],1,117.5,1.175)).toEqual({net:null,r:null});
   });
   it('treats known zero as a confirmed amount, never as unknown',()=>{
     const fills=[fill(0,0),fill(0,0)];
