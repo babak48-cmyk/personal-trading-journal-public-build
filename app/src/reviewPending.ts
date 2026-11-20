@@ -8,6 +8,8 @@ export function pendingReviewTrades(
   rows:readonly Readonly<{trade:TradeMetrics;review:TradeReview|null}>[],
 ):TradeMetrics[]{
   return rows
-    .filter(({trade,review})=>trade.session_id===sessionId && trade.status==='CLOSED' && review?.status!=='COMPLETED')
+    .filter(({trade,review})=>trade.session_id===sessionId && trade.status==='CLOSED'
+      // A COMPLETED review for another Trade cannot close this Trade's work.
+      && !(review?.status==='COMPLETED'&&review.trade_id===trade.trade_id))
     .map(({trade})=>trade);
 }
