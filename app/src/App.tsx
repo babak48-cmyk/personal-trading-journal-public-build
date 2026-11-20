@@ -690,7 +690,7 @@ export function App(){
       setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
       setEvidenceCandidate(null);setSelectedEvidenceIds([]);setEvidenceStances({});setSavedEvidenceIds([]);
       setEvidenceSaved(false);setEvidencePrice(null);setEvidenceDirection('');setEvidenceNote('');setEvidenceFeedback('');
-      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
+      setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setPendingDecisionPage(null);setPendingDirectEvidenceZone(null);setDecisionClosePrompt(false);setQuickZoneId('');setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
     const loadRequest=++sessionLoadRequestRef.current;
     const stillCurrent=()=>isCurrentSessionLoad(loadRequest,sessionLoadRequestRef.current);
