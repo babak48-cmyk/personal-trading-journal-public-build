@@ -16,3 +16,15 @@ export function reconcileActiveSession<T extends {session_id:string}>(
   if(!currentlyActive||currentlyActive.session_id!==requestedSessionId)return currentlyActive;
   return refreshedSessions.find(session=>session.session_id===requestedSessionId)??currentlyActive;
 }
+
+/** An asynchronous read is authoritative only for the still-current selection
+ * request, not whichever Session happens to have resolved first.  A request
+ * token is bumped on open/new/clear, and checked after each awaited read. */
+export function isCurrentSessionLoad(
+  requestedGeneration:number,
+  activeGeneration:number,
+):boolean {
+  return Number.isSafeInteger(requestedGeneration)
+    && requestedGeneration>0
+    && requestedGeneration===activeGeneration;
+}
