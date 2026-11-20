@@ -65,7 +65,7 @@ export function verifiedRealizedMetrics(
   nativeR:number|null,
 ):Readonly<{net:number|null;r:number|null}>{
   if(!Number.isFinite(totalExitQuantity)||totalExitQuantity<=0
-     ||verifiedFillCostSummary(fills).verifiedTotal===null)
+     ||fills.length===0||verifiedFillCostSummary(fills).verifiedTotal===null)
     return {net:null,r:null};
   return {net:nativeNet!==null&&Number.isFinite(nativeNet)?nativeNet:null,
     r:nativeR!==null&&Number.isFinite(nativeR)?nativeR:null};
