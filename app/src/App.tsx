@@ -1965,7 +1965,11 @@ export function App(){
               <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>{
                 // Never silently discard a Decision editor, including direction/type-only drafts.
                 if(e.target.value===quickZoneId)return;
-                if(decisionCandidate){requestCloseDecisionEditor();return;}
+                if(decisionCandidate){
+                  if(decisionEditorHasUnsavedInput()){requestCloseDecisionEditor();return;}
+                  if(!confirmCloseDecisionEditor())return;
+                  setDecisionCandidate(null);
+                }
                 setQuickZoneId(e.target.value);
               }}><option value="">Choose Zone</option>{plan.candidates.map(c=><option key={c.candidate_id} value={c.candidate_id}>{c.label||'Unnamed zone'} · {c.directional_intent}</option>)}</select>
               <button type="button" disabled={!quickZoneId||evidenceSaving||decisionSaving} onClick={()=>{
@@ -1978,9 +1982,9 @@ export function App(){
                 const zone=plan.candidates.find(c=>c.candidate_id===quickZoneId);if(!zone)return;
                 if(decisionCandidate?.candidate_id===zone.candidate_id&&decisionType===type){
                   // Reopening the same exact editor is not navigation.
-                }else if(decisionCandidate){
+                }else if(decisionCandidate&&decisionEditorHasUnsavedInput()){
                   // A different Zone or Decision type is a distinct draft owner.
-                  // Require the existing visible keep/discard path before reopening.
+                  // Offer the visible keep/discard control instead of resetting it.
                   requestCloseDecisionEditor();return;
                 }else{void openDecision(zone,type);}
                 window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
