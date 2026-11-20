@@ -708,6 +708,96 @@ mod tests {
     }
 
     #[test]
+    fn package_a_two_zone_custom_fields_roundtrip_preserves_stage_and_historical_snapshots() {
+        // Full migrated SQLite in memory: same canonical Zone ID can own
+        // Candidate and Zone fields, without either stage leaking to its peer.
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        db.execute_batch("
+            INSERT INTO workspaces(workspace_id,name,created_at) VALUES('wz','TEST','2026-11-20');
+            INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+              VALUES('iz','wz','ES',0.25,50);
+            INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+              VALUES('sz','wz','iz','2026-11-20','DEMO','2026-11-20','ACTIVE','2026-11-20','2026-11-20');
+            INSERT INTO candidates(candidate_id,session_id,instrument_id,identified_when,created_at)
+              VALUES('za','sz','iz','PRE_SESSION','2026-11-20'),
+                    ('zb','sz','iz','DURING_SESSION','2026-11-20');
+        ").unwrap();
+        for (field,stage,kind,required) in [
+            ("zone-source","zone","SINGLE_SELECT",false),
+            ("candidate-thesis","candidate","TEXT",true),
+            ("zone-delta","zone","NUMBER",true),
+        ] {
+            create_custom_field(&mut db,&CustomFieldDefinitionInput{
+                field_id:field.into(),stage:stage.into(),field_type:kind.into(),
+                label:field.into(),help_text:"".into(),required,display_order:0,
+            }).unwrap();
+        }
+        create_option(&mut db,&OptionDefinitionInput{
+            option_id:"prior-high".into(),field_id:"zone-source".into(),
+            label:"Prior day high".into(),display_order:0,
+        }).unwrap();
+        for (event,owner) in [("source-a","za"),("source-b","zb")] {
+            record_select(&mut db,&RecordSelectInput{
+                event_id:event.into(),field_id:"zone-source".into(),
+                owner_stage:"zone".into(),owner_id:owner.into(),
+                option_ids:vec!["prior-high".into()],
+            }).unwrap();
+        }
+        let text=|event:&str,owner:&str,value:&str|TypedValueInput{
+            event_id:event.into(),field_id:"candidate-thesis".into(),
+            owner_stage:"candidate".into(),owner_id:owner.into(),
+            text_value:Some(value.into()),number_value:None,
+            boolean_value:None,date_value:None,
+        };
+        record_typed_value(&mut db,&text("thesis-a","za","Rejection at value boundary")).unwrap();
+        record_typed_value(&mut db,&text("thesis-b","zb","Breakout continuation")).unwrap();
+        let number=|event:&str,owner:&str,value:f64|TypedValueInput{
+            event_id:event.into(),field_id:"zone-delta".into(),
+            owner_stage:"zone".into(),owner_id:owner.into(),
+            text_value:None,number_value:Some(value),
+            boolean_value:None,date_value:None,
+        };
+        record_typed_value(&mut db,&number("delta-a","za",0.0)).unwrap();
+        record_typed_value(&mut db,&number("delta-b","zb",-17.25)).unwrap();
+
+        // A different stage or nonexistent owner cannot satisfy another
+        // field's Required value or append a mistaken event.
+        // Wrong-stage writes must be rejected without changing original answers.
+        let mut wrong=text("wrong-stage-event","za","Wrong stage");
+        wrong.owner_stage="zone".into();
+        assert!(record_typed_value(&mut db,&wrong).is_err());
+        assert!(record_typed_value(&mut db,&number("missing-owner","unknown",2.0)).is_err());
+
+        edit_option(&mut db,"zone-source","prior-high","Prior high (renamed)",true,0).unwrap();
+        let before=read_current_selection(&db,"zone","za","zone-source").unwrap().unwrap();
+        assert_eq!(before.options[0].label_at_selection,"Prior day high");
+        record_select(&mut db,&RecordSelectInput{
+            event_id:"source-a-new".into(),field_id:"zone-source".into(),
+            owner_stage:"zone".into(),owner_id:"za".into(),
+            option_ids:vec!["prior-high".into()],
+        }).unwrap();
+        let history=read_selection_history(&db,"zone","za","zone-source").unwrap();
+        assert_eq!(history.len(),2);
+        assert_eq!(history[0].options[0].label_at_selection,"Prior high (renamed)");
+        assert_eq!(history[1].options[0].label_at_selection,"Prior day high");
+        assert_eq!(read_current_selection(&db,"zone","zb","zone-source")
+            .unwrap().unwrap().options[0].label_at_selection,"Prior day high");
+
+        assert_eq!(read_current_typed_value(&db,"candidate","za","candidate-thesis")
+            .unwrap().unwrap().text_value.as_deref(),Some("Rejection at value boundary"));
+        assert_eq!(read_current_typed_value(&db,"candidate","zb","candidate-thesis")
+            .unwrap().unwrap().text_value.as_deref(),Some("Breakout continuation"));
+        assert!(read_current_typed_value(&db,"zone","za","candidate-thesis").unwrap().is_none());
+        assert_eq!(read_current_typed_value(&db,"zone","za","zone-delta")
+            .unwrap().unwrap().number_value,Some(0.0));
+        assert_eq!(read_current_typed_value(&db,"zone","zb","zone-delta")
+            .unwrap().unwrap().number_value,Some(-17.25));
+        assert_eq!(crate::db::integrity_check(&db).unwrap(),"ok");
+        assert_eq!(crate::db::foreign_key_violation_count(&db).unwrap(),0);
+    }
+
+    #[test]
     fn custom_field_definition_manager_guards_type_and_preserves_identity() {
         let mut c=Connection::open_in_memory().unwrap();
         crate::db::migrate(&c).unwrap();
