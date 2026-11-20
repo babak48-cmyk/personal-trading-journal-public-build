@@ -663,6 +663,51 @@ mod tests {
         assert_eq!(count,1);
     }
     #[test]
+    fn package_a_native_text_required_guard_matches_quick_detailed_on_real_schema() {
+        // This uses an isolated, fully migrated in-memory SQLite database.
+        // Before the fix, Rust accepted whitespace and empty TEXT as an
+        // immutable event while Quick's Required validator rejected them.
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        db.execute_batch("
+            INSERT INTO workspaces(workspace_id,name,created_at) VALUES('test-w','TEST','2026-11-20');
+            INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+              VALUES('test-i','test-w','ES',0.25,50);
+            INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+              VALUES('test-s','test-w','test-i','2026-11-20','DEMO','2026-11-20','DRAFT','2026-11-20','2026-11-20');
+        ").unwrap();
+        create_custom_field(&mut db,&CustomFieldDefinitionInput{
+            field_id:"required-text".into(),stage:"session".into(),
+            field_type:"TEXT".into(),label:"Why today?".into(),help_text:"".into(),
+            required:true,display_order:0
+        }).unwrap();
+        let mut input=TypedValueInput{
+            event_id:"blank".into(),field_id:"required-text".into(),
+            owner_stage:"session".into(),owner_id:"test-s".into(),
+            text_value:Some("   ".into()),number_value:None,
+            boolean_value:None,date_value:None,
+        };
+        assert!(record_typed_value(&mut db,&input).is_err());
+        input.event_id="empty".into();input.text_value=Some("".into());
+        assert!(record_typed_value(&mut db,&input).is_err());
+        input.event_id="control".into();input.text_value=Some("a\u{0000}b".into());
+        assert!(record_typed_value(&mut db,&input).is_err());
+        assert!(read_current_typed_value(&db,"session","test-s","required-text").unwrap().is_none());
+        let count:i64=db.query_row(
+            "SELECT count(*) FROM custom_field_value_events WHERE field_id='required-text'",
+            [],|row|row.get(0)).unwrap();
+        assert_eq!(count,0,"invalid Required TEXT must never create history");
+        input.event_id="valid".into();
+        input.text_value=Some("Wait for confirmation".into());
+        record_typed_value(&mut db,&input).unwrap();
+        let persisted=read_current_typed_value(&db,"session","test-s","required-text")
+            .unwrap().unwrap();
+        assert_eq!(persisted.event_id,"valid");
+        assert_eq!(persisted.text_value.as_deref(),Some("Wait for confirmation"));
+        assert_eq!(crate::db::integrity_check(&db).unwrap(),"ok");
+    }
+
+    #[test]
     fn custom_field_definition_manager_guards_type_and_preserves_identity() {
         let mut c=Connection::open_in_memory().unwrap();
         crate::db::migrate(&c).unwrap();
