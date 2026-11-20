@@ -796,28 +796,36 @@ export function App(){
 
   async function saveAndAdvanceDraft(nextStep:number){
     if(!active||active.status!=='DRAFT'||draftSaveInFlightRef.current)return;
+    const requestedGeneration=sessionLoadRequestRef.current;
+    const saveSessionId=active.session_id;
+    const stillCurrent=()=>isCurrentSessionLoad(requestedGeneration,sessionLoadRequestRef.current);
     draftSaveInFlightRef.current=true;setDraftBusy(true);
     setDraftSaveFeedback('');
     try {
-      await localApi.saveInitialPlanDraft(active.session_id,{
+      await localApi.saveInitialPlanDraft(saveSessionId,{
         version:1,step:nextStep,bias,mainScenario,altScenario,preSessionState,preSessionStateIntensity,candidates
       });
+      if(!stillCurrent())return; // Previous Session save must not advance new Session's draft.
       setDraftStep(nextStep);setDraftDirty(false);
       setMessage('Draft saved to local database.');
       setDraftSaveFeedback('Draft saved successfully. You can safely continue; the initial plan is not yet confirmed.');
-    }catch(e){setMessage('Draft not saved: '+String(e));setDraftSaveFeedback('Draft was NOT saved. Review the error in the header before retrying.');}
+    }catch(e){if(stillCurrent()){setMessage('Draft not saved: '+String(e));setDraftSaveFeedback('Draft was NOT saved. Review the error in the header before retrying.');}}
     finally{draftSaveInFlightRef.current=false;setDraftBusy(false);}
   }
 
   async function saveDraftSessionSetup(){
     if(!active||active.status!=='DRAFT'||draftSetupSavingRef.current)return;
+    const requestedGeneration=sessionLoadRequestRef.current;
+    const saveSessionId=active.session_id;
+    const stillCurrent=()=>isCurrentSessionLoad(requestedGeneration,sessionLoadRequestRef.current);
     draftSetupSavingRef.current=true;setDraftSetupSaving(true);setDraftSetupFeedback('Saving session settings…');
     try{
-      const saved=await localApi.updateDraftSession({session_id:active.session_id,session_date:date,instrument_symbol:instrument,environment});
+      const saved=await localApi.updateDraftSession({session_id:saveSessionId,session_date:date,instrument_symbol:instrument,environment});
+      if(!stillCurrent())return; // Do not switch the user back after a delayed old-Session write.
       setActive(saved);setShowDraftSetup(false);setDraftStep(1);setMessage('Draft session setup updated.');
       setDraftSetupFeedback('Session settings saved.');
-      try{await refresh();}catch(e){setMessage('Settings saved, but list refresh failed: '+String(e));}
-    }catch(e){setMessage(String(e));setDraftSetupFeedback('Save not confirmed. Inspect session settings before retrying.');}
+      try{await refresh();}catch(e){if(stillCurrent())setMessage('Settings saved, but list refresh failed: '+String(e));}
+    }catch(e){if(stillCurrent()){setMessage(String(e));setDraftSetupFeedback('Save not confirmed. Inspect session settings before retrying.');}}
     finally{draftSetupSavingRef.current=false;setDraftSetupSaving(false);}
   }
 
