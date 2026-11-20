@@ -56,10 +56,14 @@ describe('verified net P&L/R on manual partial exits and unknown costs',()=>{
     }
     const huge=[fill(1e308,1e308)];
     expect(verifiedFillCostSummary(huge).verifiedTotal).toBeNull();
+    expect(fillCostCoverage([fill(NaN,0)]).completeFillCount).toBe(0);
+    expect(fillCostCoverage([fill(-1,0)]).allKnown).toBe(false);
+    expect(fillCostCoverage(huge).allKnown).toBe(false);
   });
   it('does not transform invalid or unrepresentable native metrics into displayed results',()=>{
     const fills=[fill(1,1)];
     expect(verifiedRealizedMetrics(fills,1,Infinity,NaN)).toEqual({net:null,r:null});
+    expect(verifiedRealizedMetrics(fills,1,null,1.5)).toEqual({net:null,r:null});
     expect(verifiedRealizedMetrics(fills,1,null,null)).toEqual({net:null,r:null});
   });
 });
