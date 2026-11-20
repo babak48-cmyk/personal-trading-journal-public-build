@@ -44,3 +44,19 @@ export function confirmedEvidenceZoneDestination(
 ):string|null {
   return confirmedPage==='EVIDENCE'&&!!requestedZoneId?.trim()?requestedZoneId:null;
 }
+
+
+/** Pure Quick Capture owner/type transition rule. An unsaved Decision belongs
+ * to its exact Zone and decision kind; changing either must use the visible
+ * keep/discard flow, not replace the React editor directly. */
+export function quickDecisionSwitchDisposition(
+  currentZoneId:string|null,
+  currentType:'TRADE'|'NO_TRADE'|'MISSED'|null,
+  requestedZoneId:string,
+  requestedType:'TRADE'|'NO_TRADE'|'MISSED'|null,
+  dirty:boolean,
+):'SAME'|'PROMPT'|'SWITCH' {
+  if(currentZoneId===requestedZoneId &&
+     (requestedType===null || currentType===requestedType))return 'SAME';
+  return currentZoneId!==null && dirty?'PROMPT':'SWITCH';
+}
