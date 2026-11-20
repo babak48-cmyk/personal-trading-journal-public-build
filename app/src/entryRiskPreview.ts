@@ -41,9 +41,22 @@ export function previewEntryRisk(input:{
   }
   const riskDollars=Math.abs(entry-stop)*pointValue*quantity;
   const riskTicks=Math.abs(entry-stop)/tickSize;
+  // JS numbers are finite at the input boundary but multiplication can overflow.
+  // Never display Infinity/NaN as a calculated risk or submit an entry whose
+  // expected initial-risk snapshot cannot be represented reliably.
+  if(!Number.isFinite(riskDollars)||riskDollars<=0||!Number.isFinite(riskTicks)||riskTicks<=0){
+    problems.push({id:'trade.stopPrice',label:'Initial risk must be positive and finite for the saved instrument and quantity'});
+    return {riskDollars:null,riskTicks:null,targetRewardDollars:null,targetGrossR:null,problems};
+  }
   const targetOK=target!==null&&target!==undefined&&Number.isFinite(target)&&aligned(target);
-  const targetRewardDollars=targetOK
+  const rawTargetReward=targetOK
     ?(direction==='LONG'?(target!-entry):(entry-target!))*pointValue*quantity:null;
-  const targetGrossR=targetRewardDollars!==null&&riskDollars>0?targetRewardDollars/riskDollars:null;
+  if(rawTargetReward!==null&&!Number.isFinite(rawTargetReward))
+    problems.push({id:'trade.plannedTarget',label:'Planned reward cannot be represented for this quantity and instrument'});
+  const targetRewardDollars=rawTargetReward!==null&&Number.isFinite(rawTargetReward)?rawTargetReward:null;
+  const rawR=targetRewardDollars!==null?targetRewardDollars/riskDollars:null;
+  const targetGrossR=rawR!==null&&Number.isFinite(rawR)?rawR:null;
+  if(rawR!==null&&!Number.isFinite(rawR))
+    problems.push({id:'trade.plannedTarget',label:'Planned R cannot be represented for this risk and target'});
   return {riskDollars,riskTicks,targetRewardDollars,targetGrossR,problems};
 }
