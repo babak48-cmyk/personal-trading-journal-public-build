@@ -28,3 +28,17 @@ export function isCurrentSessionLoad(
     && requestedGeneration>0
     && requestedGeneration===activeGeneration;
 }
+
+/** A sidebar click on the currently edited Draft must not silently replace
+ * unsaved Plan/Zone inputs with the last database draft snapshot. */
+export function shouldKeepUnsavedActiveDraft(
+  activeSessionId:string|null,
+  selectedSessionId:string,
+  activeStatus:string|null,
+  draftDirty:boolean,
+  requestedTradeId?:string,
+):boolean {
+  return draftDirty&&activeStatus==='DRAFT'
+    &&activeSessionId===selectedSessionId
+    &&!requestedTradeId;
+}
