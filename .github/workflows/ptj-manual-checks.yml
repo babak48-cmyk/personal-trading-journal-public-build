@@ -74,3 +74,8 @@ jobs:
         run: |
           cargo test --locked --lib evidence_atomic_batch_tests::
           cargo test --locked --lib decision_mismatch_persistence_tests::
+      - name: Native Field Manager requirement and Custom Field presentation integrity
+        working-directory: app/src-tauri
+        run: |
+          cargo test --locked --lib field_requirement_override_guard_tests::
+          cargo test --locked --lib custom_presentation::tests::
