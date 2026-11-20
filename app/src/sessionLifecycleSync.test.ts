@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {reconcileActiveSession,isCurrentSessionLoad} from './sessionLifecycleSync';
+import {reconcileActiveSession,isCurrentSessionLoad,shouldKeepUnsavedActiveDraft} from './sessionLifecycleSync';
 import {quickValidationRoute} from './quickValidationRoute';
 import {customFieldFocusId} from './customFieldStage';
 
@@ -155,5 +155,18 @@ describe('Plan confirmation must not apply stale required checks to another Sess
     complete();
     await attempt;
     expect(ui).toBe('session-B');
+  });
+});
+
+describe('Same-Session sidebar reload must preserve unsaved Plan and Zone inputs',()=>{
+  it('blocks reloading the current dirty Draft without discarding its form data',()=>{
+    expect(shouldKeepUnsavedActiveDraft('session-A','session-A','DRAFT',true)).toBe(true);
+    expect(shouldKeepUnsavedActiveDraft('session-A','session-A','DRAFT',false)).toBe(false);
+  });
+  it('does not block normal confirmed Session or separate-session navigation',()=>{
+    expect(shouldKeepUnsavedActiveDraft('session-A','session-A','ACTIVE',true)).toBe(false);
+    expect(shouldKeepUnsavedActiveDraft('session-A','session-B','DRAFT',true)).toBe(false);
+    expect(shouldKeepUnsavedActiveDraft(null,'session-A',null,true)).toBe(false);
+    expect(shouldKeepUnsavedActiveDraft('session-A','session-A','DRAFT',true,'trade-id')).toBe(false);
   });
 });
