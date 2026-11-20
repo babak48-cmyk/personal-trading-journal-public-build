@@ -120,3 +120,40 @@ describe('Late Draft save acknowledgements cannot alter the next Session',()=>{
     expect(selectedOwner).toBe('session-B');
   });
 });
+
+describe('Plan confirmation must not apply stale required checks to another Session',()=>{
+  it('cancels confirmation before durable write when custom-field verification belongs to prior Session',async()=>{
+    let generation=30,confirmed=false,shown='session-B';
+    let complete!:()=>void;
+    const requiredRead=new Promise<void>(resolve=>{complete=resolve;});
+    const confirm=async()=>{
+      const ownerGeneration=generation;
+      await requiredRead;
+      if(!isCurrentSessionLoad(ownerGeneration,generation))return;
+      confirmed=true;
+      shown='session-A';
+    };
+    const attempt=confirm();
+    generation++; // user opened another Session before required values returned
+    complete();
+    await attempt;
+    expect(confirmed).toBe(false);
+    expect(shown).toBe('session-B');
+  });
+  it('does not replace a newly active Session after the old Session confirmation returns',async()=>{
+    let generation=55;
+    let complete!:()=>void;
+    const committed=new Promise<void>(resolve=>{complete=resolve;});
+    let ui='session-B';
+    const confirm=async()=>{
+      const requested=generation;
+      await committed; // durable backend may already have confirmed older Session
+      if(isCurrentSessionLoad(requested,generation))ui='session-A confirmed';
+    };
+    const attempt=confirm();
+    generation++;
+    complete();
+    await attempt;
+    expect(ui).toBe('session-B');
+  });
+});
