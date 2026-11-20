@@ -1,5 +1,8 @@
 name: PTJ Package A ONE isolated Windows acceptance DEMO
 # One user-authorized candidate build from the isolated PUBLIC feature branch.
+# 2026-11-20: user explicitly requested prompt Package A DEMO delivery; this
+# workflow-only text update triggers ONE isolated candidate after exact-code CI
+# PASS (run 44735624897); Windows installed acceptance remains OPEN.
 # Trigger only when this workflow file changes; docs and product commits do not
 # create new installers. No merge and no install into any user's data profile.
 on:
