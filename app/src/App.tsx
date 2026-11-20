@@ -6,6 +6,7 @@ import { reconcileActiveSession, isCurrentSessionLoad, shouldKeepUnsavedActiveDr
 import {customEditorKey,hasUnsubmittedCustomTypedDraft,hasUnsubmittedCustomSelectionDraft,hasUnsavedCustomEditors,hasUnsavedCustomZoneInputs} from './customUnsavedEditorGuard';
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
+import { manualFillIssues } from './tradeFillValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
@@ -1568,9 +1569,9 @@ export function App(){
     const fillCommission=parseOptionalFillCost(fillCommissionInput);
     const fillFees=parseOptionalFillCost(fillFeesInput);
     const fillIssues:ValidationIssue[]=[
-      ...([{id:'fill.price',label:'Fill price',missing:fillPrice===null||!Number.isFinite(fillPrice)},
-           {id:'fill.quantity',label:'Valid fill quantity (cannot exit more than open)',missing:!Number.isInteger(fillQty)||fillQty<=0||(fillAction==='EXIT'&&fillQty>activeTrade.metrics.open_quantity)}]
-          .filter(x=>x.missing).map(x=>({id:x.id,label:x.label}))),
+      ...manualFillIssues({action:fillAction,price:fillPrice,quantity:fillQty,
+        openQuantity:activeTrade.metrics.open_quantity,
+        tickSize:active?.instrument_tick_size??NaN}),
       ...missingRequired([['fill.reason',!!fillReason.trim()]]),
       ...(!fillCommission.valid?[{id:'fill.commission',label:'Fill commission (non-negative total)'}]:[]),
       ...(!fillFees.valid?[{id:'fill.fees',label:'Fill fees (non-negative total)'}]:[]),
