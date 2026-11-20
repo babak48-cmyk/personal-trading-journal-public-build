@@ -677,6 +677,12 @@ export function App(){
       }else setMessage('The selected pending Review trade could not be verified in this session. Refresh the backlog.');
       return;
     }
+    // Selecting the same Draft in the sidebar is not permission to discard
+    // uncommitted Plan/Zone edits by reloading the last persisted draft.
+    if(draftDirty&&active?.status==='DRAFT'&&active.session_id===s.session_id&&!requestedTradeId){
+      setMessage('This Draft has unsaved Plan/Zone changes. Save the Draft before reloading it.');
+      return;
+    }
     if(draftDirty && active?.status==='DRAFT' && active.session_id!==s.session_id && !window.confirm('Current draft has unsaved changes. Switch sessions?'))return;
     if(active?.session_id!==s.session_id){
       if(evidenceCandidate&&!confirmCloseEvidenceEditor())return;
