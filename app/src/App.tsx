@@ -136,6 +136,9 @@ export function App(){
   const [evidenceTypes,setEvidenceTypes]=useState<EvidenceType[]>([]);
   const [active,setActive]=useState<SessionSummary|null>(null);
   const activeSessionIdRef=useRef<string|null>(null);
+  // Monotonic ownership token for async Session/Draft/Plan reads. A previous
+  // Session must never paint its late response into the newly opened Session.
+  const sessionLoadRequestRef=useRef(0);
   activeSessionIdRef.current=active?.session_id??null;
   const [plan,setPlan]=useState<CurrentPlan|null>(null);
   const [timeline,setTimeline]=useState<TimelineEvent[]>([]);
@@ -689,6 +692,8 @@ export function App(){
       setEvidenceSaved(false);setEvidencePrice(null);setEvidenceDirection('');setEvidenceNote('');setEvidenceFeedback('');
       setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setQuickZoneId('');setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
+    const loadRequest=++sessionLoadRequestRef.current;
+    const stillCurrent=()=>loadRequest===sessionLoadRequestRef.current;
     setShowDraftSetup(false);setValidationErrors([]);
     setReviewQueue(null);setActive(s);rememberOpenedSession(s.session_id);
     if(s.status==='DRAFT'){
@@ -699,6 +704,7 @@ export function App(){
       setEnvironment(s.environment as 'REAL'|'DEMO'|'FORWARD_TEST');
       try {
         const raw=await localApi.getInitialPlanDraft(s.session_id);
+        if(!stillCurrent())return;
         if(raw) {
           const d=JSON.parse(raw) as {version:number;step:number;bias:typeof bias;mainScenario:string;altScenario:string;preSessionState:string;preSessionStateIntensity:number|null;candidates:CandidateDraftInput[]};
           if(d.version!==1||!Array.isArray(d.candidates)) throw new Error('Unsupported or corrupt draft');
@@ -706,14 +712,21 @@ export function App(){
           setPreSessionState(d.preSessionState??'');setPreSessionStateIntensity(d.preSessionStateIntensity??null);
           setCandidates(d.candidates);setDraftZonePage(0);setDraftPlanPage(0);setDraftStep(Number.isInteger(d.step)&&d.step>=1&&d.step<=3?d.step:1);
         } else setDraftStep(1);
-      } catch(e) { setMessage('Could not restore draft fields: '+String(e)); }
+      } catch(e) { if(stillCurrent())setMessage('Could not restore draft fields: '+String(e)); }
       return;
     }
     try{
-      const p=await localApi.getCurrentPlan(s.session_id); setPlan(p);
-      setTimeline(await localApi.listPlanTimeline(s.session_id));
-      setConsistency(await localApi.checkPlanConsistency(s.session_id));
+      const p=await localApi.getCurrentPlan(s.session_id);
+      if(!stillCurrent())return;
+      setPlan(p);
+      const loadedTimeline=await localApi.listPlanTimeline(s.session_id);
+      if(!stillCurrent())return;
+      setTimeline(loadedTimeline);
+      const loadedConsistency=await localApi.checkPlanConsistency(s.session_id);
+      if(!stillCurrent())return;
+      setConsistency(loadedConsistency);
       const restoredTrades=await localApi.listSessionTrades(s.session_id);
+      if(!stillCurrent())return;
       setSessionTrades(restoredTrades);
       if(requestedTradeId){
         if(findClosedReviewTarget(s.session_id,requestedTradeId,restoredTrades)){
@@ -728,10 +741,12 @@ export function App(){
       // that requires an explicit decision_id-to-trade association.
       try{
         const histories=await Promise.all(p.candidates.map(async c=>[c.candidate_id,await localApi.listCandidateDecisions(c.candidate_id)] as const));
+        if(!stillCurrent())return;
         setCandidateDecisions(Object.fromEntries(histories));
         if(histories.some(([,rows])=>rows.length>0))setNotebookMaxPage(v=>Math.max(v,2));
-      }catch(e){setCandidateDecisions({});setMessage('Session loaded, but Decision history could not refresh: '+String(e));}
+      }catch(e){if(stillCurrent()){setCandidateDecisions({});setMessage('Session loaded, but Decision history could not refresh: '+String(e));}}
     }catch(e){
+      if(!stillCurrent())return;
       setPlan(null);setTimeline([]);setConsistency(null);setSessionTrades([]);
       setMessage(`Could not load the confirmed plan for this ${s.status.toLowerCase()} session: ${String(e)}`);
     }
@@ -773,7 +788,9 @@ export function App(){
     setSessionTrades(trades);
   }
   async function start(){
-    try{const s=await localApi.createDraftSession({session_date:date,instrument_symbol:instrument,environment}); setActive(s); rememberOpenedSession(s.session_id); setPlan(null); setDraftDirty(false); setDraftStep(1); setMessage('Draft session created. Build the initial plan, then confirm it.'); await refresh();}
+    // Invalidate a prior Session reopen before committing to a new Draft.
+    const loadRequest=++sessionLoadRequestRef.current;
+    try{const s=await localApi.createDraftSession({session_date:date,instrument_symbol:instrument,environment}); if(loadRequest!==sessionLoadRequestRef.current)return; setActive(s); rememberOpenedSession(s.session_id); setPlan(null); setDraftDirty(false); setDraftStep(1); setMessage('Draft session created. Build the initial plan, then confirm it.'); await refresh();}
     catch(e){setMessage(String(e));}
   }
 
@@ -912,6 +929,7 @@ export function App(){
     if(evidenceCandidate&&!confirmCloseEvidenceEditor())return;
     if(decisionCandidate&&!confirmCloseDecisionEditor())return;
     if(!confirmDiscardUnsavedTradeCapture('to a new session'))return;
+    sessionLoadRequestRef.current++;
     setShowAnalysis(false);setShowSafety(false);setShowSettings(false);setShowDraftSetup(false);
     setActive(null);setPlan(null);setTimeline([]);setConsistency(null);
     resetSessionInputState();setDraftDirty(false);setDraftStep(1);
