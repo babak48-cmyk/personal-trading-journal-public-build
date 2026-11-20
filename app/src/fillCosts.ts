@@ -31,3 +31,42 @@ export function fillCostCoverage(fills:readonly ExecutionFill[]):FillCostCoverag
   }
   return {fillCount:fills.length,completeFillCount,unknownFields,knownCostTotal,allKnown:unknownFields===0};
 }
+
+
+/** Strict read-only economics disclosure. Historical null costs stay UNKNOWN;
+ * invalid or overflowing historical numbers cannot be presented as verified
+ * net P&L/R, nor written back as zero. */
+export type VerifiedFillCostSummary=Readonly<{
+  verifiedTotal:number|null;
+  missingFields:number;
+  invalidFields:number;
+}>;
+export function verifiedFillCostSummary(fills:readonly ExecutionFill[]):VerifiedFillCostSummary{
+  let total=0,missingFields=0,invalidFields=0;
+  for(const fill of fills){
+    for(const value of [fill.commission,fill.fees]){
+      if(value===null||value===undefined){missingFields++;continue;}
+      if(!Number.isFinite(value)||value<0){invalidFields++;continue;}
+      total+=value;
+      if(!Number.isFinite(total)){invalidFields++;total=NaN;}
+    }
+  }
+  return {verifiedTotal:missingFields===0&&invalidFields===0&&Number.isFinite(total)?total:null,
+    missingFields,invalidFields};
+}
+
+/** Native ledger remains authoritative for numeric P&L/R. This helper is
+ * presentation-only: a native number is not 'verified net' while any cost
+ * is missing, invalid or unrepresentable. No exit means no realized return. */
+export function verifiedRealizedMetrics(
+  fills:readonly ExecutionFill[],
+  totalExitQuantity:number,
+  nativeNet:number|null,
+  nativeR:number|null,
+):Readonly<{net:number|null;r:number|null}>{
+  if(!Number.isFinite(totalExitQuantity)||totalExitQuantity<=0
+     ||verifiedFillCostSummary(fills).verifiedTotal===null)
+    return {net:null,r:null};
+  return {net:nativeNet!==null&&Number.isFinite(nativeNet)?nativeNet:null,
+    r:nativeR!==null&&Number.isFinite(nativeR)?nativeR:null};
+}
