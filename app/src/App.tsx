@@ -6,7 +6,7 @@ import { reconcileActiveSession, isCurrentSessionLoad, shouldKeepUnsavedActiveDr
 import {customEditorKey,hasUnsubmittedCustomTypedDraft,hasUnsubmittedCustomSelectionDraft,hasUnsavedCustomEditors,hasUnsavedCustomZoneInputs} from './customUnsavedEditorGuard';
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
-import { manualFillIssues } from './tradeFillValidation';
+import { manualFillIssues, manualStopRevisionIssues } from './tradeFillValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
 import { hasUncertainWrite, canAcknowledgeVerifiedHistory } from './writeOutcomeGuard';
@@ -1614,7 +1614,7 @@ export function App(){
   }
   async function moveStop(){
     if(stopSavingRef.current||!activeTrade||hasUncertainWrite(stopSaveUncertainTradeId,activeTrade.metrics.trade_id))return;
-    if(blockMissing([...(newStop===null||!Number.isFinite(newStop)?[{id:'management.stop',label:'New stop price'}]:[]),...missingRequired([['management.reason',!!stopReason.trim()]])])){setStopFeedback('Complete the highlighted required stop fields.');return;}
+    if(blockMissing([...manualStopRevisionIssues(newStop,active?.instrument_tick_size??NaN),...missingRequired([['management.reason',!!stopReason.trim()]])])){setStopFeedback('Complete the highlighted required stop fields.');return;}
     stopSavingRef.current=true;setStopSaving(true);setStopFeedback('Saving stop change…');
     try{
       const detail=await localApi.moveTradeStop({trade_id:activeTrade.metrics.trade_id,stop_price:newStop!,reason:stopReason||null});
