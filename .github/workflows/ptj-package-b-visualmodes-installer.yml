@@ -2,9 +2,10 @@ name: PTJ Package B Visual Modes isolated Windows candidate
 # ONE cohesive output candidate. Never builds on ordinary source/doc changes.
 # CI and installed Windows acceptance remain separate verification gates.
 on:
-  push:
+  pull_request:
+    types: [synchronize]
     branches:
-      - feature/ptj-package-b-three-visual-modes-2026-11-22
+      - feature/ptj-package-b-execution-risk-review-2026-11-21
     paths:
       - .github/workflows/ptj-package-b-visualmodes-installer.yml
 
