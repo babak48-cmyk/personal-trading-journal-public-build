@@ -53,7 +53,7 @@ jobs:
         run: |
           $base = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
           $overlay = Get-Content src-tauri/tauri.visualmodes.conf.json -Raw | ConvertFrom-Json
-          if ($overlay.identifier -ne 'com.personaltradingjournal.desktop.demo.visualmodes.acceptance') { throw 'Wrong Visual Modes data profile' }
+          if ($overlay.identifier -ne 'com.personaltradingjournal.desktop.demo.visualicons.acceptance') { throw 'Wrong Visual Modes data profile' }
           if ($base.identifier -eq $overlay.identifier) { throw 'Would overwrite production identity' }
           if ($base.bundle.icon -notcontains 'icons/icon.ico') { throw 'Approved executable icon missing' }
           if ($base.bundle.windows.nsis.installerIcon -ne 'icons/icon.ico') { throw 'Approved NSIS installer icon missing' }
@@ -71,12 +71,12 @@ jobs:
       - name: Build ONE isolated Visual Modes Windows NSIS candidate
         run: npm run tauri build -- --config src-tauri/tauri.visualmodes.conf.json --bundles nsis
 
-      - name: Verify exactly one Package B EXE and print SHA256 and size
+      - name: Verify exactly one Visual Icons EXE and print SHA256 and size
         shell: pwsh
         run: |
           $files = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*.exe' -ErrorAction SilentlyContinue)
           if ($files.Count -ne 1) { throw "Expected one installer, found $($files.Count)" }
-          if ($files[0].Name -notmatch 'Visual Modes DEMO') { throw "Wrong visual installer name: $($files[0].Name)" }
+          if ($files[0].Name -notmatch 'Visual Icons DEMO') { throw "Wrong visual installer name: $($files[0].Name)" }
           Write-Output "VerifiedFilename: $($files[0].Name)"
           Write-Output "VerifiedBytes: $($files[0].Length)"
           Get-FileHash -Path $files[0].FullName -Algorithm SHA256 | Format-List
@@ -84,7 +84,7 @@ jobs:
       - name: Preserve isolated uninstalled artifact only
         uses: actions/upload-artifact@v4
         with:
-          name: PTJ-VISUAL-MODES-ISOLATED-DEMO-UNTESTED
-          path: app/src-tauri/target/release/bundle/nsis/*Visual Modes DEMO*.exe
+          name: PTJ-VISUAL-ICONS-ISOLATED-DEMO-UNTESTED
+          path: app/src-tauri/target/release/bundle/nsis/*Visual Icons DEMO*.exe
           if-no-files-found: error
           retention-days: 7
