@@ -6,6 +6,7 @@ on:
       - feature/package-a-evidence-decision-completion-2026-11-06
       - feature/ptj-package-a-cohesive-validation-repair-2026-11-18
       - feature/ptj-package-b-execution-risk-review-2026-11-21
+      - feature/ptj-three-visual-templates-2026-11-21
     paths:
       - 'app/**'
       - '.github/workflows/ptj-manual-checks.yml'
