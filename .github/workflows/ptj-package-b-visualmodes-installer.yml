@@ -58,6 +58,12 @@ jobs:
           if ($base.bundle.icon -notcontains 'icons/icon.ico') { throw 'Approved executable icon missing' }
           if ($base.bundle.windows.nsis.installerIcon -ne 'icons/icon.ico') { throw 'Approved NSIS installer icon missing' }
 
+      - name: Resolve Rust dependency lockfile on isolated Windows runner
+        working-directory: app/src-tauri
+        run: cargo check
+      - name: Verify locked native Rust dependency tree
+        working-directory: app/src-tauri
+        run: cargo check --locked
       - name: Verify native Rust regression suite
         working-directory: app/src-tauri
         run: cargo test --locked --lib
