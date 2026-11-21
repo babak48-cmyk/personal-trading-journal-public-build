@@ -1,3 +1,4 @@
+import { JournalIcon } from './JournalIcon';
 import type {CandidateDecision} from './services/localApi';
 
 /** Read-only saved decision history. Does not create or modify a Decision. */
