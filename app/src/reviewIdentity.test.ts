@@ -9,6 +9,10 @@ describe('review belongs to selected trade', () => {
   it('locks only the exact completed trade', () => {
     expect(isCompletedReviewForTrade(completed, 'older-trade', 'older-trade')).toBe(true);
   });
+  it('never locks a trade when a stale COMPLETED payload belongs to another persisted trade',()=>{
+    expect(isCompletedReviewForTrade({status:'COMPLETED',trade_id:'older-trade'},'new-trade','new-trade')).toBe(false);
+    expect(isCompletedReviewForTrade({status:'COMPLETED',trade_id:'new-trade'},'new-trade','new-trade')).toBe(true);
+  });
   it('leaves new and draft reviews editable', () => {
     expect(isCompletedReviewForTrade(null, 'new-trade', 'new-trade')).toBe(false);
     expect(isCompletedReviewForTrade({status:'DRAFT'}, 'new-trade', 'new-trade')).toBe(false);
