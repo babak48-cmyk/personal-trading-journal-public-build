@@ -39,6 +39,7 @@ jobs:
         run: npm test
       - run: npm run build
       - run: node scripts/verify-demo-config.mjs
+      - run: node scripts/verify-packageb-isolation.mjs
   rust:
     runs-on: windows-latest
     timeout-minutes: 35
