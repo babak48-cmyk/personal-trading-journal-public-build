@@ -7,6 +7,7 @@ import {customEditorKey,hasUnsubmittedCustomTypedDraft,hasUnsubmittedCustomSelec
 import { openRequiredFieldDisclosures } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
 import { sameZoneReentryIssue } from './sameZoneReentryGuard';
+import { reviewReadbackOwnerIssue } from './reviewReadbackIntegrity';
 import { manualFillIssues, manualStopRevisionIssues } from './tradeFillValidation';
 import { zoneRequiredIssues, zoneRangeOrderIssue } from './zoneRequired';
 import { tradePositionDisclosure } from './tradeMetricsDisclosure';
@@ -1713,20 +1714,27 @@ export function App(){
     void openDecision(zone,'TRADE');
   }
   async function openTradeDetail(t:TradeMetrics){
+    if(!active||t.session_id!==active.session_id){
+      setMessage('This Trade does not belong to the selected Session. Reopen the correct Session.');return;
+    }
     if(!confirmDiscardUnsavedTradeCapture('trades / refresh Review',false))return;
     if(!navigateNotebookPage('EXECUTION'))return;
     resetManagementCapture();
     const request=++reviewSelectionRequestRef.current;
     setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
-    setActiveTrade(null);applyReview(null,t.trade_id);setReviewVerifiedTradeId(null);setReviewFeedback('');
+    setActiveTrade(null);applyReview(null,t.trade_id);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('');
     try{
       const detail=await localApi.getTradeDetail(t.trade_id);
       if(reviewSelectionRequestRef.current!==request)return;
+      if(detail.metrics.session_id!==t.session_id||detail.metrics.trade_id!==t.trade_id)
+        throw new Error('Loaded Trade does not match its original Session and Trade ID.');
       setActiveTrade(detail);
       const [review,ruleCheck]=await Promise.all([localApi.getTradeReview(t.trade_id),localApi.getTradeRuleCheck(t.trade_id)]);
       if(reviewSelectionRequestRef.current!==request)return;
+      const ownerIssue=reviewReadbackOwnerIssue(t.trade_id,detail.metrics.trade_id,review,ruleCheck);
+      if(ownerIssue)throw new Error(ownerIssue);
       applyReview(review,t.trade_id);setReviewVerifiedTradeId(t.trade_id);applyRuleCheck(ruleCheck);
-    }catch(e){if(reviewSelectionRequestRef.current===request){setReviewFeedback('Review state could not be verified. Reopen trade before saving.');setMessage(String(e));}}
+    }catch(e){if(reviewSelectionRequestRef.current===request){applyReview(null,t.trade_id);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('Review and rule-check ownership could not be verified. Reopen trade before saving.');setMessage(String(e));}}
   }
   function toggleReviewMistake(id:string){setReviewMistakes(v=>v.includes(id)?v.filter(x=>x!==id):[...v,id]);clearValidation('review.mistakes');}
 
