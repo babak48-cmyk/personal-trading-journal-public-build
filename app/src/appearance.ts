@@ -3,6 +3,8 @@ export type AppearanceFontSize='COMPACT'|'DEFAULT'|'LARGE';
 export type AppearanceFontFamily='SYSTEM'|'SEGOE'|'SERIF';
 export type AppearanceBackgroundTone='NEUTRAL'|'COOL'|'WARM';
 export type AppearanceAccent='DEFAULT'|'BLUE'|'TEAL'|'PURPLE'|'AMBER';
+/** Rendering-only presets. CURRENT preserves all existing CSS and spacing. */
+export type AppearanceVisualPreset='CURRENT'|'PROFESSIONAL'|'QUICK_HIGHLIGHT';
 
 export type AppearancePreferences={
   theme:AppearanceTheme;
@@ -10,6 +12,7 @@ export type AppearancePreferences={
   fontFamily:AppearanceFontFamily;
   backgroundTone:AppearanceBackgroundTone;
   accent:AppearanceAccent;
+  visualPreset:AppearanceVisualPreset;
 };
 
 export const DEFAULT_APPEARANCE:AppearancePreferences={
@@ -18,6 +21,7 @@ export const DEFAULT_APPEARANCE:AppearancePreferences={
   fontFamily:'SYSTEM',
   backgroundTone:'NEUTRAL',
   accent:'DEFAULT',
+  visualPreset:'CURRENT',
 };
 
 const allowed={
@@ -26,6 +30,7 @@ const allowed={
   fontFamily:new Set<AppearanceFontFamily>(['SYSTEM','SEGOE','SERIF']),
   backgroundTone:new Set<AppearanceBackgroundTone>(['NEUTRAL','COOL','WARM']),
   accent:new Set<AppearanceAccent>(['DEFAULT','BLUE','TEAL','PURPLE','AMBER']),
+  visualPreset:new Set<AppearanceVisualPreset>(['CURRENT','PROFESSIONAL','QUICK_HIGHLIGHT']),
 };
 
 export function normalizeAppearance(value:unknown):AppearancePreferences{
@@ -37,6 +42,7 @@ export function normalizeAppearance(value:unknown):AppearancePreferences{
     fontFamily:allowed.fontFamily.has(v.fontFamily as AppearanceFontFamily)?v.fontFamily as AppearanceFontFamily:DEFAULT_APPEARANCE.fontFamily,
     backgroundTone:allowed.backgroundTone.has(v.backgroundTone as AppearanceBackgroundTone)?v.backgroundTone as AppearanceBackgroundTone:DEFAULT_APPEARANCE.backgroundTone,
     accent:allowed.accent.has(v.accent as AppearanceAccent)?v.accent as AppearanceAccent:DEFAULT_APPEARANCE.accent,
+    visualPreset:allowed.visualPreset.has(v.visualPreset as AppearanceVisualPreset)?v.visualPreset as AppearanceVisualPreset:DEFAULT_APPEARANCE.visualPreset,
   };
 }
 
