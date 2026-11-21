@@ -4,7 +4,7 @@ import { DEFAULT_APPEARANCE, normalizeAppearance, resolvedTheme } from './appear
 describe('user-selected appearance accent', () => {
   it('preserves the original default for existing stored settings without an accent', () => {
     expect(normalizeAppearance({theme:'DARK',fontSize:'LARGE',fontFamily:'SEGOE',backgroundTone:'WARM'}))
-      .toEqual({theme:'DARK',fontSize:'LARGE',fontFamily:'SEGOE',backgroundTone:'WARM',accent:'DEFAULT'});
+      .toEqual({theme:'DARK',fontSize:'LARGE',fontFamily:'SEGOE',backgroundTone:'WARM',accent:'DEFAULT',visualPreset:'CURRENT'});
     expect(normalizeAppearance(null)).toEqual(DEFAULT_APPEARANCE);
   });
 
