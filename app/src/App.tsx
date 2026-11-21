@@ -87,7 +87,7 @@ import {
 } from './services/localApi';
 import { FIELD_DEFINITIONS, FIELD_DEFINITION_BY_ID, type RequirementOverrides, isUserRequired, requirementLabel } from './fieldDefinitions';
 import { DEFAULT_APPEARANCE, normalizeAppearance, resolvedTheme, type AppearancePreferences } from './appearance';
-import { JournalIcon, type JournalIconName } from './JournalIcon';
+import { JournalIcon } from './JournalIcon';
 import { FIELD_CONTROL_INVENTORY, ACTIVE_VISIBILITY_FIELD_IDS, RENDERED_FIELD_TEXT_IDS, isActiveVisibilityControl, isFieldPresented, isFieldShown, orderFieldIdsWithinSection, type FieldPlacement } from './fieldInventory';
 
 const emptyCandidate = (identified_when: CandidateDraftInput['identified_when'] = 'PRE_SESSION'): CandidateDraftInput => ({
