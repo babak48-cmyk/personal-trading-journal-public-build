@@ -702,3 +702,35 @@
 .appShell[data-visual-mode="colorful"] .appearanceGroup{border-color:#4b87ad}
 @media(max-width:780px){.visualModeChoices{grid-template-columns:1fr}.appShell[data-visual-mode="colorful"] .summaryStrip>span{padding:.85rem .7rem .85rem 2.3rem}.appShell[data-visual-mode="colorful"] .summaryStrip>span::before{left:.5rem}}
 @media(prefers-reduced-motion:reduce){.appShell[data-visual-mode="highlight"] *, .appShell[data-visual-mode="colorful"] *{transition:none!important}}
+
+
+/* Approved visual icon family: decorative only; keyboard/focus/action ownership stays unchanged. */
+.ptjIcon{width:1.15em;height:1.15em;flex:0 0 auto;display:inline-block;vertical-align:-.19em;margin-right:.4em;color:inherit;stroke-width:1.85}
+.panel h2>.ptjIcon,.guideCard h2>.ptjIcon{width:1.4em;height:1.4em;vertical-align:-.26em;margin-right:.45em}
+.summaryStrip span>b .ptjIcon,.decisionSnapshot span>b .ptjIcon{width:1.45em;height:1.45em;vertical-align:-.27em;margin-right:.5em}
+button .ptjIcon{vertical-align:-.2em;margin-right:.4em;pointer-events:none}
+.journeyStep b .ptjIcon{width:1.25em;height:1.25em;margin-right:.38em;vertical-align:-.25em}
+.appShell[data-visual-mode="highlight"] .ptjIcon{stroke-width:2;color:#86d9ff;filter:drop-shadow(0 0 2px #2ca8e766)}
+.appShell[data-visual-mode="colorful"] .ptjIcon{stroke-width:2.25;color:#72d7ff;filter:drop-shadow(0 0 5px #31beff88)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-stop,.appShell[data-visual-mode="colorful"] .ptjIcon-stop,
+.appShell[data-visual-mode="highlight"] .ptjIcon-risk,.appShell[data-visual-mode="colorful"] .ptjIcon-risk,
+.appShell[data-visual-mode="highlight"] .ptjIcon-cancel,.appShell[data-visual-mode="colorful"] .ptjIcon-cancel{color:#ff738e;filter:drop-shadow(0 0 6px #fb3c6890)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-quantity,.appShell[data-visual-mode="colorful"] .ptjIcon-quantity,
+.appShell[data-visual-mode="highlight"] .ptjIcon-appearance,.appShell[data-visual-mode="colorful"] .ptjIcon-appearance,
+.appShell[data-visual-mode="highlight"] .ptjIcon-ratio,.appShell[data-visual-mode="colorful"] .ptjIcon-ratio,
+.appShell[data-visual-mode="highlight"] .ptjIcon-review,.appShell[data-visual-mode="colorful"] .ptjIcon-review{color:#d7a1ff;filter:drop-shadow(0 0 6px #b05cff88)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-reward,.appShell[data-visual-mode="colorful"] .ptjIcon-reward,
+.appShell[data-visual-mode="highlight"] .ptjIcon-closed,.appShell[data-visual-mode="colorful"] .ptjIcon-closed,
+.appShell[data-visual-mode="highlight"] .ptjIcon-result,.appShell[data-visual-mode="colorful"] .ptjIcon-result,
+.appShell[data-visual-mode="highlight"] .ptjIcon-target,.appShell[data-visual-mode="colorful"] .ptjIcon-target{color:#8df877;filter:drop-shadow(0 0 6px #73ff4f99)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-pending,.appShell[data-visual-mode="colorful"] .ptjIcon-pending,
+.appShell[data-visual-mode="highlight"] .ptjIcon-partial,.appShell[data-visual-mode="colorful"] .ptjIcon-partial{color:#ffd37e;filter:drop-shadow(0 0 5px #ffd13d77)}
+.appShell[data-visual-mode="colorful"] .panel h2>.ptjIcon{border-radius:10px;background:linear-gradient(135deg,#1d5a90,#563d8f);padding:.23em;width:1.7em;height:1.7em;box-shadow:0 0 12px #399cfa55}
+.appShell[data-visual-mode="colorful"] .summaryStrip span>b .ptjIcon,.appShell[data-visual-mode="colorful"] .decisionSnapshot span>b .ptjIcon{width:2.1em;height:2.1em;float:left;padding:.35em;margin-right:.6em;border-radius:9px;background:#ffffff16;box-shadow:inset 0 0 9px #ffffff19}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span,.appShell[data-visual-mode="colorful"] .decisionSnapshot>span{padding:1rem .85rem!important;display:block}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span::before,.appShell[data-visual-mode="colorful"] .decisionSnapshot>span::before{display:none}
+.appShell[data-visual-mode="colorful"] .summaryStrip span>b,.appShell[data-visual-mode="colorful"] .decisionSnapshot span>b{display:block;min-height:2.7em}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span{font-size:1.05rem}
+.appShell[data-visual-mode="colorful"] button.primary .ptjIcon{color:#fff}
+.appShell[data-visual-mode="highlight"] button:focus-visible,.appShell[data-visual-mode="colorful"] button:focus-visible{outline:3px solid #f5db7b;outline-offset:2px}
+@media(max-width:700px){.appShell[data-visual-mode="colorful"] .summaryStrip span>b .ptjIcon{float:none;width:1.4em;height:1.4em;padding:0}}
