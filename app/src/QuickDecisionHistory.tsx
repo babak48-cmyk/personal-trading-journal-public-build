@@ -34,6 +34,6 @@ export function PendingTradeDecisionRow({decision,current,onResume,disabled=fals
       <strong>{decision.intended_direction??'Unknown direction'} · Zone {decision.candidate_id??'Unplanned'}</strong>
       <small>Decision ID: {decision.decision_id}{decision.reason_code?' · '+decision.reason_code:''}</small>
     </div>
-    <button type="button" disabled={disabled||current} onClick={onResume}>{current?'Current entry':'Resume original Decision'}</button>
+    <button type="button" disabled={disabled||current} onClick={onResume} ><JournalIcon name={current?'closed':'reentry'}/>{current?'Current entry':'Resume original Decision'}</button>
   </div>;
 }
