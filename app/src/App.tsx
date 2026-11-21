@@ -1891,7 +1891,7 @@ export function App(){
   const conditionalZones=activeCandidates.filter(c=>!['LONG','SHORT'].includes(c.directional_intent));
   const activeTheme=resolvedTheme(appearance.theme,prefersDark);
 
-  return <main className="appShell" data-theme={activeTheme.toLowerCase()} data-font-size={appearance.fontSize.toLowerCase()} data-font-family={appearance.fontFamily.toLowerCase()} data-background-tone={appearance.backgroundTone.toLowerCase()} data-accent={appearance.accent.toLowerCase()}>
+  return <main className="appShell" data-theme={activeTheme.toLowerCase()} data-font-size={appearance.fontSize.toLowerCase()} data-font-family={appearance.fontFamily.toLowerCase()} data-background-tone={appearance.backgroundTone.toLowerCase()} data-accent={appearance.accent.toLowerCase()} data-visual-mode={appearance.visualMode.toLowerCase()}>
     <header className="topbar"><div><p className="eyebrow">Personal Trading Journal</p><h1>Planning + Decisions + Execution</h1></div><div className="topActions"><button onClick={()=>setShowGuide(true)}>Guide</button><button className={quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(true)}>Quick</button><button className={!quickMode?'modeButton activeMode':'modeButton'} onClick={()=>setQuickMode(false)}>Detailed</button><span className="statusText">{message}</span>{quickShortcutReport&&<small role="status" title={quickShortcutReport.error??'Registered with Windows'}>{quickShortcutReport.registered?'Ctrl+Alt+J registered':'Ctrl+Alt+J unavailable — use the Taskbar (check for key conflicts)'}</small>}</div></header>
     {validationErrors.length>0&&!showAnalysis&&!showSettings&&<section className="panel requiredNavigator" role="alert" aria-label="Required fields to complete">
       <div className="panelTitle"><strong>Complete {validationErrors.length} highlighted required field{validationErrors.length===1?'':'s'}</strong><button type="button" onClick={()=>setValidationErrors([])}>Dismiss</button></div>
@@ -2385,6 +2385,17 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   return <div className="guideOverlay" onClick={onClose}><div className="guideCard sourceManagerCard appearanceManagerCard" onClick={e=>e.stopPropagation()}>
     <div className="panelTitle"><div><h2>Appearance</h2><p className="subtle">Comfort and readability only. These settings never change journal data.</p></div><div className="headerActions"><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onRequirements}>Field requirements</button><button onClick={onClose}>Close</button></div></div>
     {msg&&<p className="subtle">{msg}</p>}
+    <section className="appearanceGroup visualModeSettings" aria-label="Visual display mode">
+      <h3>Visual display mode</h3>
+      <p className="subtle">Choose across the entire journal. Basic retains the original Package B design; only presentation changes, never saved trading records or workflow.</p>
+      <div className="visualModeChoices" role="group" aria-label="Visual display mode">
+        {(['BASIC','HIGHLIGHT','COLORFUL'] as const).map(mode=><button key={mode} type="button" aria-pressed={draft.visualMode===mode} className={'visualModeChoice visualModeChoice-'+mode.toLowerCase()+(draft.visualMode===mode?' selectedButton':'')} onClick={()=>patch('visualMode',mode)}>
+          <span className="visualModeChoiceIcon" aria-hidden="true">{mode==='BASIC'?'▤':mode==='HIGHLIGHT'?'◆':'✦'}</span>
+          <strong>{mode==='BASIC'?'Basic':mode==='HIGHLIGHT'?'Highlight':'Colorful'}</strong>
+          <small>{mode==='BASIC'?'Original Package B':mode==='HIGHLIGHT'?'Balanced emphasis and clearer cards':'Vivid glass cards, colored information groups and luminous accents'}</small>
+        </button>)}
+      </div>
+    </section>
     <div className="appearanceGrid">
       <section className="appearanceGroup"><h3>Theme</h3><p className="subtle">System follows Windows light/dark mode.</p><div className="appearanceChoices">{(['SYSTEM','LIGHT','DARK'] as const).map(x=><button key={x} className={draft.theme===x?'selectedButton':''} onClick={()=>patch('theme',x)}>{x[0]+x.slice(1).toLowerCase()}</button>)}</div></section>
       <section className="appearanceGroup"><h3>Font size</h3><div className="appearanceChoices">{(['COMPACT','DEFAULT','LARGE'] as const).map(x=><button key={x} className={draft.fontSize===x?'selectedButton':''} onClick={()=>patch('fontSize',x)}>{x==='DEFAULT'?'Default':x[0]+x.slice(1).toLowerCase()}</button>)}</div></section>
