@@ -55,7 +55,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
     }
     let staged=restore::restore_to_staging(paths,archive)?;
     let c=db::open_database(&staged.join("database.sqlite"))?;
-    let live_count:i64=c.query_row("SELECT COUNT(*) FROM sessions WHERE UPPER(environment)='LIVE'",[],|r|r.get(0))?;
+    let live_count:i64=c.query_row("SELECT COUNT(*) FROM sessions WHERE UPPER(environment) IN ('REAL','LIVE')",[],|r|r.get(0))?;
     if live_count>0 {
         return Err(AppError::Validation("Source contains LIVE sessions. Only isolated test data transfer is permitted".into()));
     }
