@@ -1952,6 +1952,13 @@ pub struct JournalTradeRowDto {
     /// Number of immutable audit events recorded against this Trade's Fills;
     /// counts audit provenance, not corrected/confirmed profitability.
     pub audited_correction_count: i64,
+    /// At-decision Setup version is distinct from retrospective closed-trade attribution.
+    pub setup_version_id: Option<String>,
+    pub setup_version_name: Option<String>,
+    pub setup_version_number: Option<i64>,
+    pub setup_attribution: String,
+    /// Definition context for the saved version; never market conditions observed at execution.
+    pub setup_defined_market_context: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2144,6 +2151,27 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
            JOIN execution_fills f ON f.execution_id=ce.execution_id
            WHERE f.trade_id=?1",
           [&trade_id],|r|r.get(0))?;
+        // This read-only attribution uses the saved version ID snapshotted at
+        // the original entry. Historical closed-trade links are labelled
+        // RETROSPECTIVE, never misrepresented as known at decision time.
+        let setup=conn.query_row(
+          "SELECT COALESCE(t.setup_version_id,stl.version_id),
+                  d.name_snapshot,d.version_number,
+                  CASE WHEN t.setup_version_id IS NOT NULL THEN 'AT_ENTRY'
+                       WHEN stl.version_id IS NOT NULL THEN 'RETROSPECTIVE'
+                       ELSE 'NOT_RECORDED' END,
+                  d.market_context
+           FROM trades t
+           LEFT JOIN setup_trade_links stl ON stl.trade_id=t.trade_id
+           LEFT JOIN setup_playbook_details d
+             ON d.version_id=COALESCE(t.setup_version_id,stl.version_id)
+           WHERE t.trade_id=?1",
+          [&trade_id],|r|Ok((
+            r.get::<_,Option<String>>(0)?,r.get::<_,Option<String>>(1)?,
+            r.get::<_,Option<i64>>(2)?,r.get::<_,String>(3)?,
+            r.get::<_,Option<String>>(4)?
+          ))
+        )?;
         out.push(JournalTradeRowDto{
             trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
@@ -2151,6 +2179,9 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
             realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,
             open_quantity:metrics.open_quantity,audited_correction_count,
+            setup_version_id:setup.0,setup_version_name:setup.1,
+            setup_version_number:setup.2,setup_attribution:setup.3,
+            setup_defined_market_context:setup.4,
         });
     }
     Ok(out)
