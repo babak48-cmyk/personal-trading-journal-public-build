@@ -1737,7 +1737,7 @@ export function App(){
     resetManagementCapture();
     const request=++reviewSelectionRequestRef.current;
     setNotebookPage('EXECUTION');setNotebookMaxPage(v=>Math.max(v,3));
-    if(openReview)setReviewPendingOpenNotice('Opening saved Review for this closed Trade…');
+    setReviewPendingOpenNotice(openReview?'Opening saved Review for this closed Trade…':'');
     setActiveTrade(null);applyReview(null,t.trade_id);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('');
     try{
       const detail=await localApi.getTradeDetail(t.trade_id);
@@ -1751,7 +1751,7 @@ export function App(){
       if(ownerIssue)throw new Error(ownerIssue);
       applyReview(review,t.trade_id);setReviewVerifiedTradeId(t.trade_id);applyRuleCheck(ruleCheck);
       if(openReview){
-        setReviewPendingOpenNotice('Review loaded for the selected Trade; opening its form below.');
+        setReviewPendingOpenNotice(review?.status==='COMPLETED'?'Completed Review loaded for the selected Trade (read-only).':'Saved Review loaded for the selected Trade.');
         revealVerifiedPostTradeReview(t.trade_id,request);
       }
     }catch(e){if(reviewSelectionRequestRef.current===request){applyReview(null,t.trade_id);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('Review and rule-check ownership could not be verified. Reopen trade before saving.');if(openReview)setReviewPendingOpenNotice('Could not open Review: '+String(e));setMessage(String(e));}}
@@ -1872,7 +1872,7 @@ export function App(){
         applyRuleCheck(rc);
       }
       const r=await localApi.saveTradeReview({trade_id:activeTrade.metrics.trade_id,decision_quality:reviewDecisionQuality||null,execution_quality:reviewExecutionQuality||null,management_quality:reviewManagementQuality||null,exit_reason_code:reviewExitReason||null,exit_reason_note:reviewExitNote||null,emotion_affected:emotionAffected,psychology_state:emotionAffected?psychState||null:null,psychology_intensity:emotionAffected?psychIntensity:null,psychology_stage:emotionAffected?(psychStage||null):null,mistake_type_ids:reviewMistakes,note:reviewNote||null,finalize});
-      if(reviewSelectionRequestRef.current===reviewRequestAtStart){applyReview(r,savingTradeId);setReviewQueueRefreshToken(v=>v+1);setReviewFeedback(finalize?'Review completed and locked.':'Review draft saved.');}
+      if(reviewSelectionRequestRef.current===reviewRequestAtStart){applyReview(r,savingTradeId);setReviewQueueRefreshToken(v=>v+1);setReviewPendingOpenNotice('');setReviewFeedback(finalize?'Review completed and locked.':'Review draft saved.');}
       setMessage(finalize?'Post-trade review completed and locked.':'Review draft saved.');
     }catch(e){setReviewFeedback('Save not confirmed. Check the review/event history before retrying.');setMessage(String(e));}
     }finally{reviewSavingRef.current=false;setReviewSaving(false);}
@@ -2180,7 +2180,7 @@ export function App(){
   <span><b><JournalIcon name="result"/>Recorded trades</b>{pulse.totalTrades}</span>
   <span><b><JournalIcon name="open"/>Open / partially closed</b>{pulse.activeTrades}</span>
   <span><b><JournalIcon name="closed"/>Closed</b>{pulse.closedTrades}</span>
-  <span><b><JournalIcon name="partial"/>Partial exits</b>{pulse.partialExitTrades}</span>
+  <span title="Number of trades with an exit fill and remaining open quantity. Fully closed trades with earlier partial exits are not included."><b><JournalIcon name="partial"/>Currently partly exited</b>{pulse.partialExitTrades}</span>
   <span><b><JournalIcon name="ratio"/>Net R known</b>{pulse.knownRTrades} / {pulse.closedTrades} closed</span>
   <span><b>Net R of known closed trades</b>{pulse.knownRTrades?pulse.sumKnownR.toFixed(2)+' R':'—'}</span>
 </div>})()}
