@@ -13,6 +13,7 @@ mod setup_playbook;
 mod paths;
 mod repository;
 mod restore;
+mod weekly_actions;
 mod runtime;
 
 #[derive(Clone, serde::Serialize)]
@@ -211,6 +212,8 @@ pub fn run() {
             commands::delete_attachment,
             commands::export_journal_html,
             commands::export_journal_csv,
+            commands::list_weekly_actions,
+            commands::save_weekly_action,
             commands::open_export_folder
         ])
         .run(tauri::generate_context!())
