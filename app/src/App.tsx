@@ -39,7 +39,7 @@ import { summarizeSessionTradeExecution } from './tradeSessionPulse';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCustomFields, customFieldFocusId, showSessionCustomFieldsOnPage, type CustomFieldOwnerStage } from './customFieldStage';
 import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2244,6 +2244,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const weeklyReasons=activeWeek?decisionReasonRows.filter(item=>journalWeekStart(item.session_date)===activeWeek):[];
   const decisionWeekSummary=decisionWeekRows.reduce((acc,item)=>({noTrade:acc.noTrade+item.no_trade_count,missed:acc.missed+item.missed_count,missingReason:acc.missingReason+item.reason_missing_count}),{noTrade:0,missed:0,missingReason:0});
   const weeklyAction=weekly?(decisionOnlyError?weekly.action:weeklyDecisionAwareAction(weekly,decisionWeekSummary.missed,weeklyReasons)):'';
+  const weeklyThreePart=weekly?weeklyThreePartReview(weekly,setupVersionBreakdown,decisionOnlyError?0:decisionWeekSummary.missed,weeklyAction):null;
   const instrumentBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'instrument_symbol'):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
   const setupVersionBreakdown=activeWeek?weeklySetupVersionBreakdown(rows,activeWeek):[];
@@ -2311,7 +2312,11 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           </div>)}</div>
         </details>
         {weekly.mistakes.length>0&&<p><strong>Recorded recurring mistakes:</strong> {weekly.mistakes.slice(0,3).map(m=>m.label+' ('+m.count+')').join(' · ')}</p>}
-        <p><strong>One review action to consider:</strong> {weeklyAction}</p>
+        {weeklyThreePart&&<div className="weeklyBreakdown" aria-label="Three-part weekly review">
+          <div className="weeklyBreakdownRow"><strong>1 · Setup to evaluate (not a proven edge)</strong><span>{weeklyThreePart.setupCandidate}</span></div>
+          <div className="weeklyBreakdownRow"><strong>2 · Recorded concern to investigate</strong><span>{weeklyThreePart.recordedConcern}</span></div>
+          <div className="weeklyBreakdownRow"><strong>3 · One actionable next-week experiment</strong><span>{weeklyThreePart.nextAction}</span></div>
+        </div>}
         <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown})} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
