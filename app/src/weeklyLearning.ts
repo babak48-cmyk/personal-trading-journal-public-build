@@ -118,7 +118,7 @@ export function weeklyDefinedContextBreakdown(
   for(const row of rows){
     if(journalWeekStart(row.session_date)!==weekStart)continue;
     const context=row.setup_defined_market_context?.trim()||'Setup context not recorded';
-    const scope=row.setup_attribution==='RETROSPECTIVE'?' (retrospective)': ' (at entry / unspecified)';
+    const scope=row.setup_attribution==='RETROSPECTIVE'?' (retrospective)':row.setup_version_id?' (at entry)':' (no linked version)';
     const key=context+scope;
     const group=groups.get(key)||[];group.push(row);groups.set(key,group);
   }
