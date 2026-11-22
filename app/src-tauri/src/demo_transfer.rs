@@ -64,6 +64,10 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
     }
     let staged=restore::restore_to_staging(paths,archive)?;
     let c=db::open_database(&staged.join("database.sqlite"))?;
+    let staged_schema=db::schema_version(&c)?;
+    if staged_schema!=db::CURRENT_SCHEMA_VERSION{
+        return Err(AppError::Validation("Staged test archive schema is not supported by this Package C build".into()));
+    }
     require_test_sessions(&c)?;
     if db::integrity_check(&c)?!="ok"||db::foreign_key_violation_count(&c)?>0{
         return Err(AppError::Validation("Migrated staged journal failed integrity verification".into()));
@@ -71,7 +75,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
     crate::fill_corrections::verify_all_correction_chains(&c)?;
     Ok(DemoTransferPreview{
         source_schema_version:info.schema_version,
-        target_schema_version:db::schema_version(&c)?,
+        target_schema_version:staged_schema,
         database_sha256:info.database_sha256,
         sessions:count(&c,"sessions")?,trades:count(&c,"trades")?,
         fills:count(&c,"execution_fills")?,reviews:count(&c,"trade_reviews")?,
