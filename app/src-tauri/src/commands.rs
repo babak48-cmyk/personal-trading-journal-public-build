@@ -1012,3 +1012,26 @@ pub fn save_weekly_action(app:AppHandle,input:crate::weekly_actions::SaveWeeklyA
     let mut conn=db::open_database(&paths.database())?;
     crate::weekly_actions::save_weekly_action(&mut conn,input)
 }
+
+fn require_isolated_package_c_demo(app:&AppHandle)->Result<(),AppError>{
+    if app.config().identifier!="com.personaltradingjournal.desktop.demo.packagec"{
+        return Err(AppError::Validation("Import is permitted only inside the separately identified Package C DEMO app".into()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn preview_package_c_demo_import(app:AppHandle,backup_path:String)
+ ->Result<crate::demo_transfer::DemoTransferPreview,AppError>{
+    require_isolated_package_c_demo(&app)?;
+    let paths=AppPaths::from_app(&app)?;
+    crate::demo_transfer::preview(&paths,&PathBuf::from(backup_path))
+}
+
+#[tauri::command]
+pub fn import_package_b_demo_backup(app:AppHandle,backup_path:String,expected_database_sha256:String)
+ ->Result<restore::RestoreResult,AppError>{
+    require_isolated_package_c_demo(&app)?;
+    let paths=AppPaths::from_app(&app)?;
+    crate::demo_transfer::import_into_empty(&paths,&PathBuf::from(backup_path),&expected_database_sha256)
+}
