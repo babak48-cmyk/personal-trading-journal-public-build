@@ -3178,3 +3178,39 @@ mod exact_decision_trade_recovery_tests {
 #[cfg(test)]
 #[path = "package_b_lifecycle_tests.rs"]
 mod package_b_lifecycle_tests;
+
+#[cfg(test)]
+mod decision_absolute_time_order_tests {
+    use super::*;
+
+    #[test]
+    fn saved_and_unexecuted_trade_decisions_sort_by_utc_instant_not_iso_text() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE candidate_decisions(
+                decision_id TEXT PRIMARY KEY,candidate_id TEXT,session_id TEXT,
+                occurred_at TEXT,decision_type TEXT,intended_direction TEXT,
+                reason_code TEXT,reason_note TEXT,decision_quality TEXT,
+                plan_alignment TEXT,plan_mismatch_reason TEXT,
+                based_on_plan_revision_id TEXT,based_on_candidate_revision_id TEXT
+            );
+            CREATE TABLE trades(trade_id TEXT PRIMARY KEY,decision_id TEXT);
+            INSERT INTO candidate_decisions(decision_id,candidate_id,session_id,occurred_at,decision_type)
+            VALUES ('earlier','zone','session','2026-11-22T10:00:00+11:00','TRADE'),
+                   ('later','zone','session','2026-11-22T00:30:00+00:00','TRADE'),
+                   ('legacy','zone','session','time-unverified','TRADE');
+        ").unwrap();
+        let saved=list_candidate_decisions(&db,"zone").unwrap();
+        assert_eq!(saved.iter().map(|r|r.decision_id.as_str()).collect::<Vec<_>>(),
+                   vec!["later","earlier","legacy"]);
+        // Do not normalize/overwrite old raw timestamps while sorting.
+        assert_eq!(saved[1].occurred_at,"2026-11-22T10:00:00+11:00");
+        let unexecuted=list_unexecuted_trade_decisions(&db,"session").unwrap();
+        assert_eq!(unexecuted.iter().map(|r|r.decision_id.as_str()).collect::<Vec<_>>(),
+                   vec!["later","earlier","legacy"]);
+        db.execute("INSERT INTO trades(trade_id,decision_id) VALUES('t','later')",[]).unwrap();
+        let remaining=list_unexecuted_trade_decisions(&db,"session").unwrap();
+        assert_eq!(remaining.iter().map(|r|r.decision_id.as_str()).collect::<Vec<_>>(),
+                   vec!["earlier","legacy"]);
+    }
+}
