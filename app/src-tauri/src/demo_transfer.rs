@@ -99,3 +99,100 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
     crate::fill_corrections::verify_all_correction_chains(&c)?;
     Ok(receipt)
 }
+
+#[cfg(test)]
+mod isolated_transfer_tests {
+    use super::*;
+    use std::{fs::{self,File},io::Write};
+    use sha2::{Digest,Sha256};
+    use zip::{ZipWriter,write::SimpleFileOptions};
+    use uuid::Uuid;
+    fn target_paths(root:&Path)->AppPaths{
+        let paths=AppPaths{
+          root:root.to_owned(),data:root.join("data"),
+          attachments:root.join("attachments"),backups:root.join("backups"),
+          exports:root.join("exports"),logs:root.join("logs"),
+        };
+        for dir in [&paths.root,&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs]{
+            fs::create_dir_all(dir).unwrap();
+        }
+        paths
+    }
+    #[test]
+    fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
+        let base=std::env::temp_dir().join(format!("ptj-bc-copy-{}",Uuid::new_v4()));
+        let source=base.join("old-b");
+        let new_c=target_paths(&base.join("new-package-c"));
+        fs::create_dir_all(&source).unwrap();
+        let old_path=source.join("journal.db");
+        let c=db::open_database(&old_path).unwrap();
+        c.execute_batch(
+          "INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic B','2026-11-22');
+           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+             VALUES('i','w','ES',0.25,50);
+           INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+             VALUES('s','w','i','2026-11-22','DEMO','2026-11-22','ACTIVE','2026-11-22','2026-11-22');
+           INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+             VALUES ('d1','s','2026-11-22T08:00:00Z','TRADE','LONG'),
+                    ('d2','s','2026-11-22T10:00:00Z','TRADE','LONG');
+           INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+             VALUES ('t1','d1','s','LONG','CLOSED'),('t2','d2','s','LONG','CLOSED');
+           INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+             VALUES ('f1','t1','2026-11-22T08:01:00Z','ENTRY','BUY',6961,2,4,0),
+                    ('f2','t1','2026-11-22T08:02:00Z','EXIT','SELL',6963,1,2,0),
+                    ('f3','t1','2026-11-22T08:03:00Z','EXIT','SELL',6965,1,2,0),
+                    ('f4','t2','2026-11-22T10:01:00Z','ENTRY','BUY',6961,1,2,0),
+                    ('f5','t2','2026-11-22T10:02:00Z','EXIT','SELL',6959,1,2,0);
+           INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars)
+             VALUES('r1','t1','2026-11-22T08:01:00Z','INITIAL',6959,2,200),
+                   ('r2','t2','2026-11-22T10:01:00Z','INITIAL',6959,1,100);
+           INSERT INTO trade_reviews(review_id,trade_id,status,created_at,updated_at,completed_at,decision_quality)
+             VALUES ('review1','t1','COMPLETED','2026-11-22','2026-11-22','2026-11-22','C'),
+                    ('review2','t2','COMPLETED','2026-11-22','2026-11-22','2026-11-22','A');
+           DROP TABLE weekly_learning_action_events;
+           UPDATE schema_meta SET schema_version=11;
+           PRAGMA wal_checkpoint(TRUNCATE);"
+        ).unwrap();
+        assert_eq!(db::schema_version(&c).unwrap(),11);
+        assert_eq!(db::integrity_check(&c).unwrap(),"ok");
+        drop(c);
+        let old_bytes=fs::read(&old_path).unwrap();
+        let old_hash=hex::encode(Sha256::digest(&old_bytes));
+        let backup=source.join("B-TEST-history.zip");
+        let mut zip=ZipWriter::new(File::create(&backup).unwrap());
+        let options=SimpleFileOptions::default();
+        zip.start_file("database.sqlite",options).unwrap();zip.write_all(&old_bytes).unwrap();
+        zip.start_file("attachments/example.txt",options).unwrap();zip.write_all(b"saved B attachment").unwrap();
+        zip.start_file("backup_info.json",options).unwrap();
+        zip.write_all(serde_json::json!({
+          "backup_version":1,"created_at_utc":"2026-11-22T12:00:00Z",
+          "schema_version":11,"database_sha256":old_hash,"attachment_count":1
+        }).to_string().as_bytes()).unwrap();
+        zip.finish().unwrap();
+        let backup_bytes=fs::read(&backup).unwrap();
+        let observed=preview(&new_c,&backup).unwrap();
+        assert_eq!(observed.source_schema_version,11);
+        assert_eq!(observed.target_schema_version,12);
+        assert_eq!((observed.sessions,observed.trades,observed.fills,observed.reviews,observed.attachments),(1,2,5,2,1));
+        let receipt=import_into_empty(&new_c,&backup,&observed.database_sha256).unwrap();
+        assert_eq!(receipt.integrity,"ok");
+        assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
+        assert_eq!(fs::read(&old_path).unwrap(),old_bytes,"old Package B SQLite must stay byte-identical");
+        let restored=db::open_database(&new_c.database()).unwrap();
+        assert_eq!(db::schema_version(&restored).unwrap(),12);
+        let first=crate::repository::get_trade_detail(&restored,"t1").unwrap();
+        let second=crate::repository::get_trade_detail(&restored,"t2").unwrap();
+        assert!((first.metrics.realized_r.unwrap()-1.46).abs()<0.00001);
+        assert!((second.metrics.realized_r.unwrap()+1.04).abs()<0.00001);
+        let reviews:Vec<String>={
+          let mut q=restored.prepare("SELECT decision_quality FROM trade_reviews ORDER BY trade_id").unwrap();
+          q.query_map([],|r|r.get(0)).unwrap().map(Result::unwrap).collect()
+        };
+        assert_eq!(reviews,vec!["C","A"]);
+        assert_eq!(fs::read(new_c.attachments.join("example.txt")).unwrap(),b"saved B attachment");
+        assert!(import_into_empty(&new_c,&backup,&observed.database_sha256).is_err(),
+               "a destination with B history cannot be silently overwritten");
+        drop(restored);
+        fs::remove_dir_all(base).unwrap();
+    }
+}
