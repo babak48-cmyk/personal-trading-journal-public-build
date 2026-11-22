@@ -2666,6 +2666,51 @@ mod chronological_trade_accounting_tests {
     }
 
     #[test]
+    fn gc_contract_partial_exits_cost_aware_net_r_uses_initial_risk() {
+        // GC: 0.10 price tick, $100 per full price point ($10 per tick).
+        // Two contracts bought 4100.0, initial stop 4099.5 => $100 initial risk.
+        let tick_size=0.10_f64;
+        let point_value=100.0_f64;
+        assert!(price_tick_aligned(4100.0,tick_size));
+        assert!(price_tick_aligned(4100.7,tick_size));
+        assert!(!price_tick_aligned(4100.75,tick_size));
+        let initial_risk=(4100.0-4099.5)*point_value*2.0;
+        assert!((initial_risk-100.0).abs()<1e-8);
+        let fills=events(&[
+            ("ENTRY",4100.0,2.0,4.0,0.0),
+            ("EXIT",4100.7,1.0,2.0,0.0),
+            ("EXIT",4099.8,1.0,2.0,0.0),
+        ]);
+        let before=execution_ledger(&fills[..2],"LONG",point_value).unwrap();
+        assert_eq!(before.open_qty,1.0);
+        assert!((before.gross_realized.unwrap()-70.0).abs()<1e-8);
+        let after=execution_ledger(&fills,"LONG",point_value).unwrap();
+        assert_eq!(after.open_qty,0.0);
+        let gross=after.gross_realized.unwrap();
+        let net=gross-after.costs;
+        assert!((gross-50.0).abs()<1e-8);
+        assert!((after.costs-8.0).abs()<1e-8);
+        assert!((net-42.0).abs()<1e-8);
+        assert!((net/initial_risk-0.42).abs()<1e-8);
+    }
+
+    #[test]
+    fn gc_short_side_and_invalid_exit_quantities_are_not_silently_accepted() {
+        let fills=events(&[
+            ("ENTRY",4100.0,1.0,2.0,0.0),
+            ("EXIT",4099.5,1.0,2.0,0.0),
+        ]);
+        let state=execution_ledger(&fills,"SHORT",100.0).unwrap();
+        assert!((state.gross_realized.unwrap()-50.0).abs()<1e-8);
+        assert!((state.gross_realized.unwrap()-state.costs-46.0).abs()<1e-8);
+        let over_exit=events(&[
+            ("ENTRY",4100.0,1.0,2.0,0.0),
+            ("EXIT",4099.5,2.0,2.0,0.0),
+        ]);
+        assert!(execution_ledger(&over_exit,"SHORT",100.0).is_err());
+    }
+
+    #[test]
     fn open_trade_without_exit_has_no_realized_pnl_even_with_entry_cost() {
         let ledger=execution_ledger(&events(&[("ENTRY",100.0,2.0,4.0,0.0)]),"LONG",50.0).unwrap();
         assert_eq!(ledger.gross_realized,None);
