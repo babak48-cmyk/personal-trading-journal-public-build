@@ -88,7 +88,7 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     ]);
     expect(groups.reduce((sum,g)=>sum+g.tradeCount,0)).toBe(5); // 4 distinct weekly trades
     expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('Decision-time level source groups (overlapping; do not sum');
-    expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('R unknown');
+    expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('Prior Day High [2 linked trades, 1/2 R eligible');
     expect(weeklyLevelSourceBreakdown(records,'2026-10-05')).toEqual([]);
   });
   it('never represents no eligible R or an empty week as zero profit',()=>{
