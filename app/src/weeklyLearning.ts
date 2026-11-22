@@ -45,6 +45,38 @@ export function weeklyTradeBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** A trade may have multiple saved decision-time level sources. Group counts
+ * overlap by design and MUST NOT be added together as distinct trades.
+ * Missing historical provenance snapshots cannot be interpreted as "none".
+ */
+export function weeklyLevelSourceBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const groups=new Map<string,JournalTradeRow[]>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const labels=row.level_source_snapshot_missing
+      ? ['Decision-time provenance unknown']
+      : row.level_sources.length>0
+        ? [...new Set(row.level_sources.map(label=>label.trim()).filter(Boolean))]
+        : ['No source recorded at decision'];
+    for(const label of labels.length?labels:['No source recorded at decision']){
+      const group=groups.get(label)||[];
+      group.push(row);groups.set(label,group);
+    }
+  }
+  return [...groups].map(([label,items])=>{
+    const closed=items.filter(row=>row.status==='CLOSED');
+    const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
+    return {
+      label,tradeCount:items.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
+      ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length,
+    };
+  }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
 export type WeeklyLearningSnapshot=Readonly<{
   weekStart:string;
   tradeCount:number;
