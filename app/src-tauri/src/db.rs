@@ -316,3 +316,66 @@ mod setup_playbook_v11_migration_tests {
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
     }
 }
+
+#[cfg(test)]
+mod weekly_action_schema_v12_tests {
+    use super::*;
+    fn v11_database()->Connection{
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        let migrations=[
+            MIGRATION_001,MIGRATION_002,MIGRATION_003,MIGRATION_004,
+            MIGRATION_005,MIGRATION_006,MIGRATION_007,MIGRATION_008,
+            MIGRATION_009,MIGRATION_010,MIGRATION_011
+        ];
+        c.execute_batch(
+          "CREATE TABLE schema_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL);
+           INSERT INTO schema_meta VALUES(1,0);").unwrap();
+        for (i,sql) in migrations.iter().enumerate(){
+            let tx=c.unchecked_transaction().unwrap();
+            tx.execute_batch(sql).unwrap();
+            tx.execute("UPDATE schema_meta SET schema_version=?1 WHERE id=1",[(i+1) as i64]).unwrap();
+            tx.commit().unwrap();
+        }
+        c.execute_batch(
+          "INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','B DEMO','2026-11-22');
+           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+             VALUES('i','w','ES',0.25,50);
+           INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+             VALUES('s','w','i','2026-11-22','DEMO','2026-11-22','ACTIVE','2026-11-22','2026-11-22');").unwrap();
+        assert_eq!(schema_version(&c).unwrap(),11);
+        c
+    }
+    #[test]
+    fn v11_package_b_session_survives_v12_migration_idempotently(){
+        let c=v11_database();
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),12);
+        assert_eq!(c.query_row("SELECT session_date FROM sessions WHERE session_id='s'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-11-22");
+        assert_eq!(c.query_row("SELECT count(*) FROM weekly_learning_action_events",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),12);
+        assert_eq!(integrity_check(&c).unwrap(),"ok");
+        assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
+    }
+    #[test]
+    fn aborted_v12_install_rolls_back_whole_schema_and_leaves_old_session(){
+        let c=v11_database();
+        let fail=(||->Result<(),rusqlite::Error>{
+            let tx=c.unchecked_transaction()?;
+            tx.execute_batch(MIGRATION_012)?;
+            tx.execute("INSERT INTO deliberately_nonexistent_test_table VALUES(1)",[])?;
+            tx.execute("UPDATE schema_meta SET schema_version=12 WHERE id=1",[])?;
+            tx.commit()?;
+            Ok(())
+        })();
+        assert!(fail.is_err());
+        assert_eq!(schema_version(&c).unwrap(),11);
+        let table_count:i64=c.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='weekly_learning_action_events'",[],|r|r.get(0)).unwrap();
+        assert_eq!(table_count,0);
+        assert_eq!(c.query_row("SELECT COUNT(*) FROM sessions",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),12);
+        assert_eq!(integrity_check(&c).unwrap(),"ok");
+    }
+}
