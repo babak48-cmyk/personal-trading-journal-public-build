@@ -139,14 +139,41 @@ export function weeklyLearningSnapshot(
   };
 }
 
+/** Draws on original NO_TRADE/MISSED aggregates only when the higher-priority
+ * executed-trade integrity/process action has no specific trigger.
+ * A MISSED label is not proof the opportunity was valid or profitable.
+ */
+export function weeklyDecisionAwareAction(
+  snapshot:WeeklyLearningSnapshot,
+  missedCount:number,
+  reasonGroups:readonly {decision_type:string;reason_code:string;decision_count:number}[],
+):string{
+  if(snapshot.ruleViolationCount>0||snapshot.mistakes.length>0||
+     snapshot.missingRCount>0||snapshot.uncheckedRuleCount>0)return snapshot.action;
+  if(!Number.isInteger(missedCount)||missedCount<=0)return snapshot.action;
+  const missedReasons=reasonGroups.filter(row=>
+    row.decision_type==='MISSED'&&row.reason_code!=='[NO_REASON]'&&
+    row.reason_code!=='[FREE_TEXT_ONLY]'&&
+    Number.isInteger(row.decision_count)&&row.decision_count>0);
+  const ranked=[...missedReasons].sort((a,b)=>b.decision_count-a.decision_count||
+    a.reason_code.localeCompare(b.reason_code));
+  if(!ranked.length){
+    return 'Review '+missedCount+' recorded MISSED decision(s); verify whether each opportunity was actually valid, then choose one observable improvement.';
+  }
+  const reason=ranked[0];
+  return 'Review '+missedCount+' recorded MISSED decision(s), including '+
+    reason.decision_count+' with reason '+reason.reason_code+
+    '; verify opportunity validity before choosing one actionable prevention step.';
+}
+
 export function journalWeeks(rows:readonly JournalTradeRow[]):string[]{
   return [...new Set(rows.map(row=>journalWeekStart(row.session_date)).filter((x):x is string=>x!==null))].sort().reverse();
 }
 
-export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:readonly WeeklyTradeBreakdown[]=[]):string{
+export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:readonly WeeklyTradeBreakdown[]=[],decisionContext?:{missed:number;noTrade:number;action:string}):string{
   return [
     'PTJ weekly learning — week of '+snapshot.weekStart,
-    'Scope: filtered recorded trades ONLY; does not include NO_TRADE/MISSED decisions without trade records.',
+    'Scope: trade metrics use filtered recorded trades only. Decision-only counts, when present, use date/instrument filters and are NOT limited by trade-only filters.',
     'Trades: '+snapshot.tradeCount+'; closed: '+snapshot.closedCount+'; open/other: '+snapshot.openCount+'.',
     'Net R eligible: '+snapshot.eligibleRCount+'/'+snapshot.closedCount+' closed; missing eligible R: '+snapshot.missingRCount+'.',
     'Sum of eligible net R: '+(snapshot.netR==null?'unknown':snapshot.netR.toFixed(2)+'R')+'.',
@@ -155,7 +182,8 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:
     'Rule violations: '+snapshot.ruleViolationCount+'; rule status unchecked: '+snapshot.uncheckedRuleCount+'.',
     'Most frequent recorded mistake: '+(snapshot.mistakes[0]?snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' trades)':'none recorded')+'.',
     'Decision-time level source groups (overlapping; do not sum group samples/R): '+(levelSources.length?levelSources.map(g=>g.label+' ['+g.tradeCount+' linked trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR===null?'R unknown':g.netR.toFixed(2)+'R')+']').join('; '):'none in the selected week')+'.',
-    'Suggested review action (not proven trading advice): '+snapshot.action,
+    'Decision-only events: '+(decisionContext?'NO_TRADE '+decisionContext.noTrade+'; MISSED '+decisionContext.missed+'.':'unavailable in this trade-only summary.') ,
+    'Suggested review action (not proven trading advice): '+(decisionContext?.action??snapshot.action),
     'Record an approved personal action separately; this read-only summary does not save a review event.',
   ].join('\n');
 }
