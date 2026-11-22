@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -70,6 +70,24 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(snap.netR).toBeCloseTo(.25);
     expect(weeklyLearningText(snap)).toContain('Audited-correction affected trades: 2');
     expect(weeklyLearningText(snap)).toContain('original event records');
+  });
+  it('reports overlapping level provenance without inventing missing snapshots or double counting within one group',()=>{
+    const records=[
+      row('a','2026-11-09',{level_sources:['Prior Day High','Hourly POC','Hourly POC'],realized_r:1.5}),
+      row('b','2026-11-10',{level_sources:['Prior Day High'],realized_r:null}),
+      row('c','2026-11-11',{level_sources:[],level_source_snapshot_missing:true,realized_r:-1}),
+      row('d','2026-11-11',{level_sources:[],realized_r:0}),
+      row('outside','2026-11-02',{level_sources:['Prior Day High'],realized_r:55}),
+    ];
+    const groups=weeklyLevelSourceBreakdown(records,'2026-11-09');
+    expect(groups).toEqual([
+      {label:'Prior Day High',tradeCount:2,closedCount:2,eligibleRCount:1,netR:1.5,ruleViolationCount:0},
+      {label:'Decision-time provenance unknown',tradeCount:1,closedCount:1,eligibleRCount:1,netR:-1,ruleViolationCount:0},
+      {label:'Hourly POC',tradeCount:1,closedCount:1,eligibleRCount:1,netR:1.5,ruleViolationCount:0},
+      {label:'No source recorded at decision',tradeCount:1,closedCount:1,eligibleRCount:1,netR:0,ruleViolationCount:0},
+    ]);
+    expect(groups.reduce((sum,g)=>sum+g.tradeCount,0)).toBe(5); // 4 distinct weekly trades
+    expect(weeklyLevelSourceBreakdown(records,'2026-10-05')).toEqual([]);
   });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
