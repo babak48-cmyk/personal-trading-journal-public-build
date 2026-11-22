@@ -92,7 +92,7 @@ export function weeklySetupVersionBreakdown(
       : 'Not recorded';
     const name=row.setup_version_name?.trim()||'Unnamed / legacy setup';
     const label=row.setup_version_id
-      ? name+' · '+(row.setup_version_number==null?'version unknown':'v'+row.setup_version_number)+' · '+origin
+      ? name+' · '+(row.setup_version_number==null?'version unknown':'v'+row.setup_version_number)+' · '+origin+' · ID '+row.setup_version_id.slice(-8)
       : 'No recorded Setup version';
     const key=row.setup_version_id?origin+':'+row.setup_version_id:'NONE';
     const group=groups.get(key)||{label,items:[]};
@@ -225,7 +225,7 @@ export function journalWeeks(rows:readonly JournalTradeRow[]):string[]{
   return [...new Set(rows.map(row=>journalWeekStart(row.session_date)).filter((x):x is string=>x!==null))].sort().reverse();
 }
 
-export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:readonly WeeklyTradeBreakdown[]=[],decisionContext?:{missed:number;noTrade:number;action:string}):string{
+export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:readonly WeeklyTradeBreakdown[]=[],decisionContext?:{missed:number;noTrade:number;action:string},setupContext?:{setups:readonly WeeklyTradeBreakdown[];definedContexts:readonly WeeklyTradeBreakdown[]}):string{
   return [
     'PTJ weekly learning — week of '+snapshot.weekStart,
     'Scope: trade metrics use filtered recorded trades only. Decision-only counts, when present, use date/instrument filters and are NOT limited by trade-only filters.',
@@ -238,6 +238,8 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:
     'Most frequent recorded mistake: '+(snapshot.mistakes[0]?snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' trades)':'none recorded')+'.',
     'Decision-time level source groups (overlapping; do not sum group samples/R): '+(levelSources.length?levelSources.map(g=>g.label+' ['+g.tradeCount+' linked trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR===null?'R unknown':g.netR.toFixed(2)+'R')+']').join('; '):'none in the selected week')+'.',
     'Decision-only events: '+(decisionContext?'NO_TRADE '+decisionContext.noTrade+'; MISSED '+decisionContext.missed+'.':'unavailable in this trade-only summary.') ,
+    'Setup versions (at entry vs retrospective, no inferred observation): '+(setupContext?.setups.length?setupContext.setups.map(g=>g.label+' ['+g.eligibleRCount+'/'+g.closedCount+' eligible, '+(g.netR===null?'R unknown':g.netR.toFixed(2)+'R')+']').join('; '):'none')+'.',
+    'Setup-defined context (not observed market conditions): '+(setupContext?.definedContexts.length?setupContext.definedContexts.map(g=>g.label+' ['+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' eligible R]').join('; '):'none')+'.',
     'Suggested review action (not proven trading advice): '+(decisionContext?.action??snapshot.action),
     'Record an approved personal action separately; this read-only summary does not save a review event.',
   ].join('\n');
