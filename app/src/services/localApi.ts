@@ -132,6 +132,17 @@ export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:st
 export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
 export type AnalyticsSummary = { trade_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
 export type MistakeSummary = { mistake_type_id:string; label:string; count:number };
+export type WeeklyActionEvent = {
+  action_event_id:string;week_start:string;filter_snapshot_json:string;
+  action_text:string;event_kind:'COMMITMENT'|'FOLLOW_UP';note:string|null;
+  based_on_event_id:string|null;recorded_at_utc:string;actor:string;
+};
+export type SaveWeeklyActionInput = {
+  week_start:string;filter_snapshot_json:string;
+  action_text:string;event_kind:'COMMITMENT'|'FOLLOW_UP';
+  note:string|null;based_on_event_id:string|null;
+};
+
 
 export type Attachment = { attachment_id:string; owner_type:string; owner_id:string; stage:string; occurred_at?:string|null; original_filename?:string|null; media_type?:string|null; file_size?:number|null; sha256?:string|null; caption?:string|null; created_at:string };
 export type ImportAttachmentInput = { owner_type:'SESSION'|'CANDIDATE'|'DECISION'|'TRADE'|'REVIEW'; owner_id:string; stage:'PRE_MARKET'|'PRE_ENTRY'|'ENTRY'|'DURING'|'POST_EXIT'|'FOLLOW_UP'|'ORDER_FLOW'|'OTHER'; source_path:string; caption?:string|null };
@@ -265,6 +276,8 @@ export const localApi = {
   getSessionReview: (sessionId:string) => invoke<SessionReview|null>('get_session_review',{sessionId}),
   listJournalTrades: (filter:JournalFilter={}) => invoke<JournalTradeRow[]>('list_journal_trades',{filter}),
 
+  listWeeklyActions: (weekStart:string,filterSnapshotJson:string) => invoke<WeeklyActionEvent[]>('list_weekly_actions',{weekStart,filterSnapshotJson}),
+  saveWeeklyAction: (input:SaveWeeklyActionInput) => invoke<WeeklyActionEvent>('save_weekly_action',{input}),
   listDecisionReasonAnalytics: (filter:JournalFilter={}) => invoke<DecisionReasonAnalyticsRow[]>('list_decision_reason_analytics',{filter}),  listDecisionOnlyAnalytics: (filter:JournalFilter={}) => invoke<DecisionOnlyAnalyticsRow[]>('list_decision_only_analytics',{filter}),
   getAnalyticsSummary: (filter:JournalFilter={}) => invoke<AnalyticsSummary>('get_analytics_summary',{filter}),
   listMistakeSummary: (filter:JournalFilter={}) => invoke<MistakeSummary[]>('list_mistake_summary',{filter}),
