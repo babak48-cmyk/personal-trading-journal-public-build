@@ -77,6 +77,61 @@ export function weeklyLevelSourceBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** A saved Setup definition is not proof that its market context actually
+ * occurred. At-entry and retrospectively linked trades remain distinct.
+ * Group identity uses immutable version ID, not potentially reused labels.
+ */
+export function weeklySetupVersionBreakdown(
+  rows:readonly JournalTradeRow[], weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const groups=new Map<string,{label:string;items:JournalTradeRow[]}>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const origin=row.setup_version_id
+      ? row.setup_attribution==='RETROSPECTIVE'?'Retrospective':'At entry'
+      : 'Not recorded';
+    const name=row.setup_version_name?.trim()||'Unnamed / legacy setup';
+    const label=row.setup_version_id
+      ? name+' · '+(row.setup_version_number==null?'version unknown':'v'+row.setup_version_number)+' · '+origin
+      : 'No recorded Setup version';
+    const key=row.setup_version_id?origin+':'+row.setup_version_id:'NONE';
+    const group=groups.get(key)||{label,items:[]};
+    group.items.push(row);groups.set(key,group);
+  }
+  return [...groups.values()].map(({label,items})=>{
+    const closed=items.filter(row=>row.status==='CLOSED');
+    const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
+    return {label,tradeCount:items.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
+      ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length};
+  }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
+/** Version definition text, not observed session market conditions.
+ * Retrospective links are kept separate from known-at-entry versions.
+ */
+export function weeklyDefinedContextBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const groups=new Map<string,JournalTradeRow[]>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const context=row.setup_defined_market_context?.trim()||'Setup context not recorded';
+    const scope=row.setup_attribution==='RETROSPECTIVE'?' (retrospective)': ' (at entry / unspecified)';
+    const key=context+scope;
+    const group=groups.get(key)||[];group.push(row);groups.set(key,group);
+  }
+  return [...groups.entries()].map(([label,items])=>{
+    const closed=items.filter(row=>row.status==='CLOSED');
+    const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
+    return {label,tradeCount:items.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
+      ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length};
+  }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
 export type WeeklyLearningSnapshot=Readonly<{
   weekStart:string;
   tradeCount:number;
