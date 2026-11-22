@@ -47,6 +47,15 @@ fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     }
     Ok(())
 }
+fn require_test_sessions(conn:&Connection)->Result<(),AppError>{
+    let non_test:i64=conn.query_row(
+       "SELECT COUNT(*) FROM sessions WHERE UPPER(environment) IN ('REAL','LIVE')",
+       [],|r|r.get(0))?;
+    if non_test>0{
+        return Err(AppError::Validation("Source contains REAL sessions. Only isolated DEMO/FORWARD_TEST records may be transferred".into()));
+    }
+    Ok(())
+}
 pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppError>{
     ensure_empty_target(paths)?;
     let info=restore::validate_backup(archive)?;
@@ -55,10 +64,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
     }
     let staged=restore::restore_to_staging(paths,archive)?;
     let c=db::open_database(&staged.join("database.sqlite"))?;
-    let live_count:i64=c.query_row("SELECT COUNT(*) FROM sessions WHERE UPPER(environment) IN ('REAL','LIVE')",[],|r|r.get(0))?;
-    if live_count>0 {
-        return Err(AppError::Validation("Source contains LIVE sessions. Only isolated test data transfer is permitted".into()));
-    }
+    require_test_sessions(&c)?;
     if db::integrity_check(&c)?!="ok"||db::foreign_key_violation_count(&c)?>0{
         return Err(AppError::Validation("Migrated staged journal failed integrity verification".into()));
     }
@@ -117,6 +123,15 @@ mod isolated_transfer_tests {
             fs::create_dir_all(dir).unwrap();
         }
         paths
+    }
+    #[test]
+    fn demo_import_refuses_real_money_session_classification(){
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch("CREATE TABLE sessions(environment TEXT NOT NULL);
+          INSERT INTO sessions VALUES('DEMO'),('FORWARD_TEST');").unwrap();
+        assert!(require_test_sessions(&c).is_ok());
+        c.execute("INSERT INTO sessions VALUES('REAL')",[]).unwrap();
+        assert!(require_test_sessions(&c).is_err());
     }
     #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
