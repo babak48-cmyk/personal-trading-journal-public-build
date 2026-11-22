@@ -82,3 +82,11 @@ For any schema/persistence semantics changes, obtain applicable explicit authori
 نقطه ادامه: branch feature/ptj-b26-completed-review-readonly-2026-11-22، Draft PR #16، آخرین کد اصلاح نمایش Completed Review، و CI run 45022664998. نتایج تست‌شده B01–B25 را بپذیر و بدون دلیل تکرار نکن؛ موارد UNKNOWN را PASS اعلام نکن.
 
 ترتیب اجرایی: **اول نقص‌های باقی‌مانده Package B را به‌صورت منسجم اصلاح و تست کن؛ بعد Package C (Audited Data Correction و Analytics/Weekly Learning) را پس از ممیزی قابلیت‌های موجود و طبق تمام الزامات مصوب کامل کن؛ پس از آماده‌شدن هر دو فقط یک ISOLATED DEMO جدید ویندوز بساز.** برای هر تغییر پرخطر دیتابیس/مهاجرت یا Merge تأیید جداگانه بگیر. چک‌پوینت‌های مهم GitHub را ثبت و مستقل بازخوانی کن و توسعه را واقعاً از همان نقطه ادامه بده.
+
+## 11. POST-HANDOFF VERIFIED CI RESULT — 2026-11-22
+
+After the preceding content was drafted, independently re-fetched GitHub check-runs for the **exact fixed code SHA** 5cd5bbc8a11b900e1ed382e0f6762cf394b1d135. GitHub Actions run **45022664998** now reports both:
+- Frontend job **137208781190**: COMPLETED / **SUCCESS** (full frontend tests, TypeScript/Vite build, DEMO config and Package B isolation verification).
+- Rust job **137208781041**: COMPLETED / **SUCCESS** (check exact job step evidence if deeper details needed).
+
+Thus the B26 source fix is **IMPLEMENTED + CI-TESTED for that exact code SHA**, not merely frontend tested. It remains **NOT installed-Windows tested on updated build**, **NOT user accepted as updated DEMO**, and **NOT merged**. Later handoff documentation commits do not modify the tested app source but may trigger their own CI checks; do not conflate those SHAs with source content. The next master should reuse this verified PASS as long as the affected app source has not changed, then test any future B/C changes against their new exact final SHA.
