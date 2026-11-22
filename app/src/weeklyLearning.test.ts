@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -90,6 +90,31 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('Decision-time level source groups (overlapping; do not sum');
     expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('Prior Day High [2 linked trades, 1/2 R eligible');
     expect(weeklyLevelSourceBreakdown(records,'2026-10-05')).toEqual([]);
+  });
+  it('uses decision-only MISSED reasons for one cautious weekly action when trade process has no priority issue',()=>{
+    const snap=weeklyLearningSnapshot([row('a','2026-11-09',{realized_r:1})],'2026-11-09');
+    const reasons=[
+      {decision_type:'MISSED',reason_code:'HESITATION',decision_count:3},
+      {decision_type:'MISSED',reason_code:'[FREE_TEXT_ONLY]',decision_count:10},
+      {decision_type:'NO_TRADE',reason_code:'NO_CONFIRMATION',decision_count:8}
+    ];
+    const action=weeklyDecisionAwareAction(snap,4,reasons);
+    expect(action).toContain('4 recorded MISSED');
+    expect(action).toContain('3 with reason HESITATION');
+    expect(action).toContain('verify opportunity validity');
+    expect(action).not.toContain('10 with reason');
+    expect(weeklyLearningText(snap,[],{missed:4,noTrade:8,action})).toContain('NO_TRADE 8; MISSED 4');
+    expect(weeklyLearningText(snap,[],{missed:4,noTrade:8,action})).toContain(action);
+  });
+  it('keeps known process or missing-cost data quality concerns ahead of missed-decision suggestions',()=>{
+    const violation=weeklyLearningSnapshot([row('a','2026-11-09',{rule_status:'VIOLATED'})],'2026-11-09');
+    const reason=[{decision_type:'MISSED',reason_code:'HESITATION',decision_count:3}];
+    expect(weeklyDecisionAwareAction(violation,3,reason)).toBe(violation.action);
+    const unknownR=weeklyLearningSnapshot([row('a','2026-11-09',{realized_r:null})],'2026-11-09');
+    expect(weeklyDecisionAwareAction(unknownR,3,reason)).toBe(unknownR.action);
+    const zero=weeklyLearningSnapshot([],'2026-11-09');
+    expect(weeklyDecisionAwareAction(zero,0,reason)).toBe(zero.action);
+    expect(weeklyDecisionAwareAction(zero,1,[{decision_type:'MISSED',reason_code:'[NO_REASON]',decision_count:1}])).toContain('verify whether each opportunity was actually valid');
   });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
