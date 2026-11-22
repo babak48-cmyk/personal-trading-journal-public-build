@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -135,6 +135,26 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(byContext.find(g=>g.label==='TREND (at entry)')).toMatchObject({tradeCount:1,netR:1});
     expect(byContext.find(g=>g.label==='TREND (retrospective)')).toMatchObject({tradeCount:1,netR:-2});
     expect(byContext.find(g=>g.label==='Setup context not recorded (no linked version)')).toMatchObject({tradeCount:1,netR:0});
+  });
+  it('gives a factual three-part weekly review and never calls a Setup proven profitable',()=>{
+    const snap=weeklyLearningSnapshot([
+      row('a','2026-11-09',{setup_version_id:'v1',setup_version_name:'Rejection',setup_version_number:1,setup_attribution:'AT_ENTRY',realized_r:2}),
+      row('b','2026-11-10',{setup_version_id:'v1',setup_version_name:'Rejection',setup_version_number:1,setup_attribution:'AT_ENTRY',realized_r:null}),
+      row('c','2026-11-11',{setup_version_id:'v2',setup_version_name:'Other',setup_version_number:1,setup_attribution:'RETROSPECTIVE',realized_r:5})
+    ],'2026-11-09');
+    const groups=weeklySetupVersionBreakdown([
+      row('a','2026-11-09',{setup_version_id:'v1',setup_version_name:'Rejection',setup_version_number:1,setup_attribution:'AT_ENTRY',realized_r:2}),
+      row('b','2026-11-10',{setup_version_id:'v1',setup_version_name:'Rejection',setup_version_number:1,setup_attribution:'AT_ENTRY',realized_r:null}),
+      row('c','2026-11-11',{setup_version_id:'v2',setup_version_name:'Other',setup_version_number:1,setup_attribution:'RETROSPECTIVE',realized_r:5})
+    ],'2026-11-09');
+    const report=weeklyThreePartReview(snap,groups,2,'Verify the missing costs next week.');
+    expect(report.setupCandidate).toContain('Rejection · v1 · At entry · ID v1 (2 trades; 1/2');
+    expect(report.setupCandidate).not.toContain('Other');
+    expect(report.setupCandidate).toContain('not evidence it is the best or repeatable');
+    expect(report.recordedConcern).toContain('lack eligible R');
+    expect(report.nextAction).toBe('Verify the missing costs next week.');
+    const empty=weeklyThreePartReview(weeklyLearningSnapshot([],'2026-11-09'),[],0,'Investigate');
+    expect(empty.setupCandidate).toContain('Do not infer a best setup');
   });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
