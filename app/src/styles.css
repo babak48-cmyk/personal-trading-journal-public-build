@@ -580,3 +580,157 @@
 .appShell .formGrid .orderedDecisionField input,
 .appShell .formGrid .orderedDecisionField select,
 .appShell .formGrid .orderedDecisionField textarea{width:100%;min-width:0}
+
+
+/* Package B visual presentations: BASIC deliberately receives no overrides.
+   Entire journal is styled through its root attribute; controls and event owners are unchanged. */
+.visualModeSettings{margin:1rem 0 1.3rem}
+.visualModeChoices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem}
+.visualModeChoice{min-height:126px;display:flex;flex-direction:column;align-items:flex-start;gap:.38rem;text-align:left;padding:1rem;position:relative;overflow:hidden}
+.visualModeChoice strong{font-size:1rem}.visualModeChoice small{font-size:.78rem;line-height:1.4}
+.visualModeChoiceIcon{font-size:1.9rem;line-height:1}
+.visualModeChoice-highlight{background:linear-gradient(130deg,#17354e,#245377);color:#f1f8ff;border:1px solid #54b7fb}
+.visualModeChoice-colorful{background:linear-gradient(120deg,#063d51,#173575 42%,#53286f);color:#fff;border:1px solid #38e4ff;box-shadow:0 6px 24px #268ae340}
+.visualModeChoice-basic{background:var(--panel-bg,transparent)}
+.visualModeChoice.selectedButton{outline:3px solid #38bdf8;outline-offset:2px}
+.appShell[data-visual-mode="highlight"],.appShell[data-visual-mode="colorful"]{
+ --vm-blue:#3b9ff5;--vm-cyan:#31d4e2;--vm-teal:#21d7ae;--vm-purple:#c084fc;--vm-amber:#ffcf65;
+ background:radial-gradient(ellipse at 65% -15%,#1d4463 0%,transparent 42%),#0c1829!important;color:#e7f3ff;
+ min-height:100vh;
+}
+.appShell[data-visual-mode="highlight"] .topbar,.appShell[data-visual-mode="colorful"] .topbar{
+ background:linear-gradient(105deg,#10253a,#173653)!important;border-bottom:1px solid #3a668e;color:#fff;
+ box-shadow:0 6px 24px #020d1b40;
+}
+.appShell[data-visual-mode="highlight"] .sidebar,.appShell[data-visual-mode="highlight"] .currentPanel,
+.appShell[data-visual-mode="colorful"] .sidebar,.appShell[data-visual-mode="colorful"] .currentPanel{
+ background:linear-gradient(180deg,#122b42,#0b192d)!important;color:#e8f4ff;border-color:#315474;
+}
+.appShell[data-visual-mode="highlight"] .workspace,.appShell[data-visual-mode="colorful"] .workspace{max-width:1300px}
+.appShell[data-visual-mode="highlight"] .panel,.appShell[data-visual-mode="highlight"] .zoneSummary,
+.appShell[data-visual-mode="highlight"] .summaryStrip>span,.appShell[data-visual-mode="highlight"] .decisionSnapshot>span,
+.appShell[data-visual-mode="highlight"] .tradeRow,
+.appShell[data-visual-mode="colorful"] .panel,.appShell[data-visual-mode="colorful"] .zoneSummary,
+.appShell[data-visual-mode="colorful"] .summaryStrip>span,.appShell[data-visual-mode="colorful"] .decisionSnapshot>span,
+.appShell[data-visual-mode="colorful"] .tradeRow{
+ background:linear-gradient(150deg,#17324e,#102339)!important;color:#eef8ff!important;
+ border:1px solid #3d729a;border-radius:16px;
+ box-shadow:0 5px 16px #030d1b40;
+}
+.appShell[data-visual-mode="highlight"] .panel h2,.appShell[data-visual-mode="colorful"] .panel h2{color:#f3faff;font-weight:800;letter-spacing:.01em}
+.appShell[data-visual-mode="highlight"] .subtle,.appShell[data-visual-mode="colorful"] .subtle,
+.appShell[data-visual-mode="highlight"] small,.appShell[data-visual-mode="colorful"] small{color:#accce5}
+.appShell[data-visual-mode="highlight"] button,.appShell[data-visual-mode="colorful"] button{transition:filter .15s ease,box-shadow .15s ease,transform .15s ease}
+.appShell[data-visual-mode="highlight"] .sidebar button,.appShell[data-visual-mode="highlight"] .currentPanel button,
+.appShell[data-visual-mode="colorful"] .sidebar button,.appShell[data-visual-mode="colorful"] .currentPanel button{
+ background:linear-gradient(135deg,#1a3b5b,#173047);color:#eef8ff;border:1px solid #477da7;
+ box-shadow:0 3px 9px #020a1740;
+}
+.appShell[data-visual-mode="highlight"] .sidebar button:hover,.appShell[data-visual-mode="colorful"] .sidebar button:hover{filter:brightness(1.22)}
+.appShell[data-visual-mode="highlight"] input,.appShell[data-visual-mode="highlight"] select,.appShell[data-visual-mode="highlight"] textarea,
+.appShell[data-visual-mode="colorful"] input,.appShell[data-visual-mode="colorful"] select,.appShell[data-visual-mode="colorful"] textarea{
+ background:#0e2339;color:#f2f9ff;border:1px solid #4d7e9c;
+}
+.appShell[data-visual-mode="highlight"] .summaryStrip>span,.appShell[data-visual-mode="colorful"] .summaryStrip>span{
+ padding:.9rem 1rem;min-height:90px;border-left:5px solid var(--vm-blue);justify-content:center;gap:.25rem;
+}
+.appShell[data-visual-mode="highlight"] .summaryStrip b,.appShell[data-visual-mode="colorful"] .summaryStrip b,
+.appShell[data-visual-mode="highlight"] .decisionSnapshot b,.appShell[data-visual-mode="colorful"] .decisionSnapshot b{color:#b7d6f0}
+.appShell[data-visual-mode="highlight"] .summaryStrip>span:nth-child(4n+2){border-left-color:var(--vm-teal)}
+.appShell[data-visual-mode="highlight"] .summaryStrip>span:nth-child(4n+3){border-left-color:var(--vm-purple)}
+.appShell[data-visual-mode="highlight"] .summaryStrip>span:nth-child(4n){border-left-color:var(--vm-amber)}
+.appShell[data-visual-mode="highlight"] .executionPanel{border-left:5px solid #37c7c9}
+.appShell[data-visual-mode="highlight"] .postReview{border-top:2px solid #9875dc}
+.appShell[data-visual-mode="highlight"] .primary{background:#226fc9;color:white}
+.appShell[data-visual-mode="colorful"]{
+ background:radial-gradient(ellipse at 45% 0%,#154d6c 0%,transparent 40%),
+ radial-gradient(ellipse at 90% 35%,#35225d55 0%,transparent 35%),#071625!important;
+}
+.appShell[data-visual-mode="colorful"] .panel,.appShell[data-visual-mode="colorful"] .tradeRow{
+ background:linear-gradient(125deg,#143958,#102940 55%,#192a49)!important;
+ border-color:#388bb3;box-shadow:inset 0 1px 0 #a6ebff1c,0 9px 25px #02091970;
+}
+.appShell[data-visual-mode="colorful"] .panel:nth-of-type(4n+1){border-top:2px solid #22e1f1}
+.appShell[data-visual-mode="colorful"] .panel:nth-of-type(4n+2){border-top:2px solid #6cebaa}
+.appShell[data-visual-mode="colorful"] .panel:nth-of-type(4n+3){border-top:2px solid #e39aff}
+.appShell[data-visual-mode="colorful"] .panel:nth-of-type(4n){border-top:2px solid #ffc96e}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span,
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span{
+ position:relative;padding:1.1rem .9rem 1.1rem 3rem;min-height:100px;
+ background:linear-gradient(130deg,#084c4b,#073335)!important;
+ border:1px solid #1fe3b3;box-shadow:inset 0 1px 0 #a9fff455,0 5px 18px #00e3aa25;
+}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span::before,
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span::before{
+ content:"◉";position:absolute;left:.95rem;top:1rem;font-size:1.6rem;line-height:1;color:#40ffd3;text-shadow:0 0 12px #1cffb2bb;
+}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span:nth-child(4n+2),
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span:nth-child(4n+2){
+ background:linear-gradient(130deg,#103f72,#133258)!important;border-color:#4eacff;box-shadow:0 6px 20px #249dff36;
+}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span:nth-child(4n+2)::before,
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span:nth-child(4n+2)::before{content:"◆";color:#74c5ff;text-shadow:0 0 12px #48acff}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span:nth-child(4n+3),
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span:nth-child(4n+3){
+ background:linear-gradient(130deg,#493071,#352653)!important;border-color:#ca93ff;box-shadow:0 6px 20px #a665fc35;
+}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span:nth-child(4n+3)::before,
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span:nth-child(4n+3)::before{content:"⬟";color:#ddafff;text-shadow:0 0 12px #b778ff}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span:nth-child(4n),
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span:nth-child(4n){
+ background:linear-gradient(130deg,#695017,#4d321c)!important;border-color:#ffd37b;box-shadow:0 6px 20px #efbb4e30;
+}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span:nth-child(4n)::before,
+.appShell[data-visual-mode="colorful"] .decisionSnapshot>span:nth-child(4n)::before{content:"✦";color:#ffe390;text-shadow:0 0 12px #ffe18b}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span{font-size:1.15rem;font-weight:800}
+.appShell[data-visual-mode="colorful"] .summaryStrip b{font-weight:650;letter-spacing:.015em}
+.appShell[data-visual-mode="colorful"] .zoneSummary:nth-child(3n+1){background:linear-gradient(130deg,#073d4b,#103049)!important;border-color:#42dbe6}
+.appShell[data-visual-mode="colorful"] .zoneSummary:nth-child(3n+2){background:linear-gradient(130deg,#3d2c60,#1e2b49)!important;border-color:#bf8bff}
+.appShell[data-visual-mode="colorful"] .zoneSummary:nth-child(3n){background:linear-gradient(130deg,#214b3d,#143149)!important;border-color:#6eeab0}
+.appShell[data-visual-mode="colorful"] .executionPanel{border-left:6px solid #25f0c1;box-shadow:0 0 25px #0cdda522}
+.appShell[data-visual-mode="colorful"] .postReview{border-top:3px solid #bc87ff;background:linear-gradient(135deg,#422d6244,transparent)}
+.appShell[data-visual-mode="colorful"] .primary,.appShell[data-visual-mode="colorful"] .selectedButton{
+ background:linear-gradient(120deg,#1478ef,#24bdf6);color:#fff;border-color:#54d6ff;
+ box-shadow:0 3px 12px #1895ff5c;
+}
+.appShell[data-visual-mode="colorful"] .statusPill{background:#154f63;color:#d7faff;border:1px solid #39d5e6}
+.appShell[data-visual-mode="colorful"] .warningBox{background:#61451c;color:#fff0c7;border-color:#ffcc71}
+.appShell[data-visual-mode="colorful"] .okCell{background:#124a40!important;color:#b0ffdf}
+.appShell[data-visual-mode="colorful"] .warningCell{background:#64421a!important;color:#ffe9b4}
+.appShell[data-visual-mode="colorful"] .tradeRow{border-left:4px solid #35ead5}
+.appShell[data-visual-mode="colorful"] .tradeRow:hover{box-shadow:0 0 20px #20c6ef55}
+.appShell[data-visual-mode="colorful"] .appearanceGroup{border-color:#4b87ad}
+@media(max-width:780px){.visualModeChoices{grid-template-columns:1fr}.appShell[data-visual-mode="colorful"] .summaryStrip>span{padding:.85rem .7rem .85rem 2.3rem}.appShell[data-visual-mode="colorful"] .summaryStrip>span::before{left:.5rem}}
+@media(prefers-reduced-motion:reduce){.appShell[data-visual-mode="highlight"] *, .appShell[data-visual-mode="colorful"] *{transition:none!important}}
+
+
+/* Approved visual icon family: decorative only; keyboard/focus/action ownership stays unchanged. */
+.ptjIcon{width:1.15em;height:1.15em;flex:0 0 auto;display:inline-block;vertical-align:-.19em;margin-right:.4em;color:inherit;stroke-width:1.85}
+.panel h2>.ptjIcon,.guideCard h2>.ptjIcon{width:1.4em;height:1.4em;vertical-align:-.26em;margin-right:.45em}
+.summaryStrip span>b .ptjIcon,.decisionSnapshot span>b .ptjIcon{width:1.45em;height:1.45em;vertical-align:-.27em;margin-right:.5em}
+button .ptjIcon{vertical-align:-.2em;margin-right:.4em;pointer-events:none}
+.journeyStep b .ptjIcon{width:1.25em;height:1.25em;margin-right:.38em;vertical-align:-.25em}
+.appShell[data-visual-mode="highlight"] .ptjIcon{stroke-width:2;color:#86d9ff;filter:drop-shadow(0 0 2px #2ca8e766)}
+.appShell[data-visual-mode="colorful"] .ptjIcon{stroke-width:2.25;color:#72d7ff;filter:drop-shadow(0 0 5px #31beff88)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-stop,.appShell[data-visual-mode="colorful"] .ptjIcon-stop,
+.appShell[data-visual-mode="highlight"] .ptjIcon-risk,.appShell[data-visual-mode="colorful"] .ptjIcon-risk,
+.appShell[data-visual-mode="highlight"] .ptjIcon-cancel,.appShell[data-visual-mode="colorful"] .ptjIcon-cancel{color:#ff738e;filter:drop-shadow(0 0 6px #fb3c6890)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-quantity,.appShell[data-visual-mode="colorful"] .ptjIcon-quantity,
+.appShell[data-visual-mode="highlight"] .ptjIcon-appearance,.appShell[data-visual-mode="colorful"] .ptjIcon-appearance,
+.appShell[data-visual-mode="highlight"] .ptjIcon-ratio,.appShell[data-visual-mode="colorful"] .ptjIcon-ratio,
+.appShell[data-visual-mode="highlight"] .ptjIcon-review,.appShell[data-visual-mode="colorful"] .ptjIcon-review{color:#d7a1ff;filter:drop-shadow(0 0 6px #b05cff88)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-reward,.appShell[data-visual-mode="colorful"] .ptjIcon-reward,
+.appShell[data-visual-mode="highlight"] .ptjIcon-closed,.appShell[data-visual-mode="colorful"] .ptjIcon-closed,
+.appShell[data-visual-mode="highlight"] .ptjIcon-result,.appShell[data-visual-mode="colorful"] .ptjIcon-result,
+.appShell[data-visual-mode="highlight"] .ptjIcon-target,.appShell[data-visual-mode="colorful"] .ptjIcon-target{color:#8df877;filter:drop-shadow(0 0 6px #73ff4f99)}
+.appShell[data-visual-mode="highlight"] .ptjIcon-pending,.appShell[data-visual-mode="colorful"] .ptjIcon-pending,
+.appShell[data-visual-mode="highlight"] .ptjIcon-partial,.appShell[data-visual-mode="colorful"] .ptjIcon-partial{color:#ffd37e;filter:drop-shadow(0 0 5px #ffd13d77)}
+.appShell[data-visual-mode="colorful"] .panel h2>.ptjIcon{border-radius:10px;background:linear-gradient(135deg,#1d5a90,#563d8f);padding:.23em;width:1.7em;height:1.7em;box-shadow:0 0 12px #399cfa55}
+.appShell[data-visual-mode="colorful"] .summaryStrip span>b .ptjIcon,.appShell[data-visual-mode="colorful"] .decisionSnapshot span>b .ptjIcon{width:2.1em;height:2.1em;float:left;padding:.35em;margin-right:.6em;border-radius:9px;background:#ffffff16;box-shadow:inset 0 0 9px #ffffff19}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span,.appShell[data-visual-mode="colorful"] .decisionSnapshot>span{padding:1rem .85rem!important;display:block}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span::before,.appShell[data-visual-mode="colorful"] .decisionSnapshot>span::before{display:none}
+.appShell[data-visual-mode="colorful"] .summaryStrip span>b,.appShell[data-visual-mode="colorful"] .decisionSnapshot span>b{display:block;min-height:2.7em}
+.appShell[data-visual-mode="colorful"] .summaryStrip>span{font-size:1.05rem}
+.appShell[data-visual-mode="colorful"] button.primary .ptjIcon{color:#fff}
+.appShell[data-visual-mode="highlight"] button:focus-visible,.appShell[data-visual-mode="colorful"] button:focus-visible{outline:3px solid #f5db7b;outline-offset:2px}
+@media(max-width:700px){.appShell[data-visual-mode="colorful"] .summaryStrip span>b .ptjIcon{float:none;width:1.4em;height:1.4em;padding:0}}

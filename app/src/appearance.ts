@@ -1,3 +1,4 @@
+export type VisualDisplayMode='BASIC'|'HIGHLIGHT'|'COLORFUL';
 export type AppearanceTheme='SYSTEM'|'LIGHT'|'DARK';
 export type AppearanceFontSize='COMPACT'|'DEFAULT'|'LARGE';
 export type AppearanceFontFamily='SYSTEM'|'SEGOE'|'SERIF';
@@ -5,6 +6,7 @@ export type AppearanceBackgroundTone='NEUTRAL'|'COOL'|'WARM';
 export type AppearanceAccent='DEFAULT'|'BLUE'|'TEAL'|'PURPLE'|'AMBER';
 
 export type AppearancePreferences={
+  visualMode:VisualDisplayMode;
   theme:AppearanceTheme;
   fontSize:AppearanceFontSize;
   fontFamily:AppearanceFontFamily;
@@ -13,6 +15,7 @@ export type AppearancePreferences={
 };
 
 export const DEFAULT_APPEARANCE:AppearancePreferences={
+  visualMode:'BASIC',
   theme:'SYSTEM',
   fontSize:'DEFAULT',
   fontFamily:'SYSTEM',
@@ -21,6 +24,7 @@ export const DEFAULT_APPEARANCE:AppearancePreferences={
 };
 
 const allowed={
+  visualMode:new Set<VisualDisplayMode>(['BASIC','HIGHLIGHT','COLORFUL']),
   theme:new Set<AppearanceTheme>(['SYSTEM','LIGHT','DARK']),
   fontSize:new Set<AppearanceFontSize>(['COMPACT','DEFAULT','LARGE']),
   fontFamily:new Set<AppearanceFontFamily>(['SYSTEM','SEGOE','SERIF']),
@@ -32,6 +36,7 @@ export function normalizeAppearance(value:unknown):AppearancePreferences{
   if(!value||typeof value!=='object')return {...DEFAULT_APPEARANCE};
   const v=value as Partial<AppearancePreferences>;
   return {
+    visualMode:allowed.visualMode.has(v.visualMode as VisualDisplayMode)?v.visualMode as VisualDisplayMode:DEFAULT_APPEARANCE.visualMode,
     theme:allowed.theme.has(v.theme as AppearanceTheme)?v.theme as AppearanceTheme:DEFAULT_APPEARANCE.theme,
     fontSize:allowed.fontSize.has(v.fontSize as AppearanceFontSize)?v.fontSize as AppearanceFontSize:DEFAULT_APPEARANCE.fontSize,
     fontFamily:allowed.fontFamily.has(v.fontFamily as AppearanceFontFamily)?v.fontFamily as AppearanceFontFamily:DEFAULT_APPEARANCE.fontFamily,

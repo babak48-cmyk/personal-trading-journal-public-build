@@ -1,3 +1,4 @@
+import { JournalIcon } from './JournalIcon';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {localApi,type JournalTradeRow,type SaveSetupVersionInput,type SetupVersion,type SetupPerformance,type SetupEvidencePriority} from './services/localApi';
 import {setupPlaybookCandidate} from './setupPlaybookCandidate';
@@ -179,7 +180,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
    finally{setBusy(false);}
  }
  return <section className="panel" aria-label="Versioned Setup Playbook">
-   <div className="panelTitle"><div><h2>Setup Playbook · saved versions</h2>
+   <div className="panelTitle"><div><h2><JournalIcon name="setup"/>Setup Playbook · saved versions</h2>
     <p className="subtle">Reusable manual setup definitions with immutable revisions, prerequisites, entry triggers, contrary/veto evidence, invalidation and configurable evidence roles. Not automated signals or validated edges.</p>
    </div></div>
    <div className="summaryStrip">
@@ -199,7 +200,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      </select>
    </label>}
    {selected&&<div className="rowActions">
-      <button type="button" disabled={busy||!!uncertainSave} onClick={()=>requestTransition({kind:'new'})}>New independent Setup</button>
+      <button type="button" disabled={busy||!!uncertainSave} onClick={()=>requestTransition({kind:'new'})}><JournalIcon name="plus"/>New independent Setup</button>
       {selected.is_active&&<button type="button" disabled={busy||!!uncertainSave} onClick={()=>void deactivate()}>Deactivate Setup (preserve history)</button>}
    </div>}
    {selected&&<details className="guidedMore"><summary>Read immutable v{selected.version_number} evidence priorities</summary>
@@ -243,7 +244,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
          {fieldText['setup.evidenceHelp']?.help&&<small title={fieldText['setup.evidenceHelp'].help}>ⓘ</small>}
          <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
        </label>}
-       <button type="button" onClick={addEvidence} disabled={!newEvidence.trim()}>Add evidence requirement</button>
+       <button type="button" onClick={addEvidence} disabled={!newEvidence.trim()}><JournalIcon name="evidence"/>Add evidence requirement</button>
      </fieldset>
      {hasUncommittedEditorChanges&&<p role="status" className="subtle">Unsaved Setup editor changes. Save a NEW version before switching or closing this editor.</p>}
      {uncertainSave&&<div className="warningBox" role="alert">
@@ -256,12 +257,12 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      <div className="rowActions">
        {setupApprovalMissingFields(input).length>0&&<small role="status">To approve: complete {setupApprovalMissingFields(input).length} missing definition field(s). Draft save can remain partial.</small>}
        <button type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(false)}>{busy?'Saving…':'Save new DRAFT version'}</button>
-       <button className="primary" type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(true)}>Approve and save NEW version</button>
+       <button className="primary" type="button" disabled={busy||!!uncertainSave||!input.name.trim()} onClick={()=>void save(true)}><JournalIcon name="closed"/>Approve and save NEW version</button>
        {actionFeedback&&<p role={actionFeedback.startsWith('Approval not submitted')||actionFeedback.startsWith('Setup save NOT verified')?'alert':'status'} aria-live="polite" className={actionFeedback.startsWith('Approval not submitted')||actionFeedback.startsWith('Setup save NOT verified')?'warningBox':'subtle'} style={{flexBasis:'100%',width:'100%',marginTop:'.5rem'}}>{actionFeedback}</p>}
      </div>
      <p className="subtle">Every save creates a NEW immutable version. Saving a DRAFT does not later change that version into APPROVED: after completing the conditions, Approve creates the NEXT version. To make v1 approved directly, use Approve on a new Setup without first saving a draft. Approval requires context, Zone, prerequisites, triggers, contrary evidence and thesis invalidation.</p>
    </div>}
-   {performance.length>0&&<details className="guidedMore" open><summary>Performance by Setup VERSION · descriptive sample sizes only</summary>
+   {performance.length>0&&<details className="guidedMore" open><summary><JournalIcon name="analytics"/>Performance by Setup VERSION · descriptive sample sizes only</summary>
      <div className="weeklyBreakdown">{performance.map(p=><div className="weeklyBreakdownRow" key={p.version_id}>
        <strong>{p.setup_name} · v{p.version_number}</strong>
        <span>{p.trade_count} attributed trades · R eligible {p.eligible_r_count}/{p.trade_count} · {p.unknown_r_count} missing R</span>
