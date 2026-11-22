@@ -40,6 +40,7 @@ import { CAPTURABLE_CUSTOM_FIELD_STAGES, canCaptureCustomFieldStage, eligibleCus
 import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentation,nextCustomPresentation,compactCustomPresentation,type CustomFieldPresentationMap} from './customFieldPresentation';
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
+import {DemoDataTransferPanel} from './DemoDataTransferPanel';
 import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
@@ -2377,6 +2378,7 @@ function SafetyPanel({readiness,selfTest,selfTestBusy,onSelfTest,onRefresh,onBac
     <div className={readiness.ready_for_live_data?'okBox':'warningBox'}>{readiness.ready_for_live_data?'Ready for local journal data.':'Not yet cleared for real-money journal data. No trading action is blocked, but fix the items below first.'}</div>
     {readiness.warnings.length>0&&<ul className="safetyWarnings">{readiness.warnings.map(w=><li key={w}>{w}</li>)}</ul>}
     {selfTest&&<div className={selfTest.passed?'okBox':'warningBox'}><strong>{selfTest.passed?'Isolated beta self-test passed.':'Beta self-test failed.'}</strong><div className="selfTestSteps">{selfTest.steps.map((x,i)=><div key={`${i}-${x}`}>{x}</div>)}</div><small>Runs only in a temporary folder; it does not modify the live journal.</small></div>}
+    <DemoDataTransferPanel/>
     <div className="panel"><h3>Validate existing backup</h3><p className="subtle">Read-only integrity check. This does not replace or modify your journal. Restore is not available from this screen.</p><button disabled={validating} onClick={validateSelectedBackup}>{validating?"Validating…":"Select ZIP and validate backup"}</button>{validation&&<p role="status" aria-live="polite">{validation}</p>}</div>
     <details><summary>Storage paths</summary><div className="pathList"><code>{readiness.database_path}</code><code>{readiness.attachments_path}</code><code>{readiness.backups_path}</code><code>{readiness.exports_path}</code></div></details>
   </div>;
