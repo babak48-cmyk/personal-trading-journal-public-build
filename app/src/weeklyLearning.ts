@@ -221,6 +221,32 @@ export function weeklyDecisionAwareAction(
     '; verify opportunity validity before choosing one actionable prevention step.';
 }
 
+/** Three-part weekly reading aid; it does not save a review event, infer
+ * repeatability, or rate strategy profitability from a sparse sample.
+ */
+export function weeklyThreePartReview(snapshot:WeeklyLearningSnapshot,
+  setupGroups:readonly WeeklyTradeBreakdown[],missedCount:number,action:string,
+):{setupCandidate:string;recordedConcern:string;nextAction:string}{
+  const atEntry=[...setupGroups].filter(g=>g.label.includes(' · At entry · ID '));
+  atEntry.sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+  const top=atEntry[0];
+  const setupCandidate=top
+    ? 'Most frequently recorded at-entry Setup: '+top.label+' ('+top.tradeCount+
+      ' trades; '+top.eligibleRCount+'/'+top.closedCount+
+      ' closed R-eligible). This is not evidence it is the best or repeatable.'
+    : 'No at-entry Setup sample recorded under these filters. Do not infer a best setup.';
+  const recordedConcern=snapshot.ruleViolationCount>0
+    ? snapshot.ruleViolationCount+' trade(s) with recorded rule violations; inspect original decisions.'
+    : snapshot.mistakes[0]
+      ? snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' recorded trades); inspect individual cases.'
+      : snapshot.missingRCount>0
+        ? snapshot.missingRCount+' closed trade(s) lack eligible R; verify costs and initial risk.'
+        : missedCount>0
+          ? missedCount+' recorded MISSED decision(s); confirm opportunity validity before classifying a mistake.'
+          : 'No ranked process issue identified from recorded rows; blank fields are not proof of flawless execution.';
+  return {setupCandidate,recordedConcern,nextAction:action};
+}
+
 export function journalWeeks(rows:readonly JournalTradeRow[]):string[]{
   return [...new Set(rows.map(row=>journalWeekStart(row.session_date)).filter((x):x is string=>x!==null))].sort().reverse();
 }
