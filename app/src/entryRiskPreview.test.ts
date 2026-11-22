@@ -9,6 +9,22 @@ describe('session-snapshot entry risk preview',()=>{
     expect(previewEntryRisk({...baseline,entry:3500,stop:3501,quantity:1,tickSize:0.1,pointValue:100,direction:'SHORT',target:3498}))
       .toMatchObject({riskDollars:100,riskTicks:10,targetRewardDollars:200,targetGrossR:2,problems:[]});
   });
+  it('uses GC contract tick and point values for a two-contract initial risk preview',()=>{
+    const gc=previewEntryRisk({
+      entry:4100,stop:4099.5,quantity:2,tickSize:0.1,pointValue:100,
+      direction:'LONG',target:4101
+    });
+    expect(gc.problems).toEqual([]);
+    expect(gc.riskTicks).toBeCloseTo(5);
+    expect(gc.riskDollars).toBeCloseTo(100);
+    expect(gc.targetRewardDollars).toBeCloseTo(200);
+    expect(gc.targetGrossR).toBeCloseTo(2);
+    const offTick=previewEntryRisk({
+      entry:4100.05,stop:4099.5,quantity:2,tickSize:0.1,pointValue:100,direction:'LONG'
+    });
+    expect(offTick.riskDollars).toBeNull();
+    expect(offTick.problems.map(p=>p.id)).toContain('trade.entryPrice');
+  });
   it('does not invent a target or an R value if target was not recorded',()=>{
     expect(previewEntryRisk({...baseline,target:null})).toMatchObject({riskDollars:300,targetRewardDollars:null,targetGrossR:null});
   });
