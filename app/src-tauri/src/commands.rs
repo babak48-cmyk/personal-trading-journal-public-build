@@ -996,3 +996,19 @@ mod field_requirement_override_guard_tests {
         assert!(valid(&format!("{{{oversized}}}")).is_err());
     }
 }
+
+#[tauri::command]
+pub fn list_weekly_actions(app:AppHandle,week_start:String,filter_snapshot_json:String)
+  ->Result<Vec<crate::weekly_actions::WeeklyActionEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::weekly_actions::list_weekly_actions(&conn,&week_start,&filter_snapshot_json)
+}
+
+#[tauri::command]
+pub fn save_weekly_action(app:AppHandle,input:crate::weekly_actions::SaveWeeklyActionInput)
+  ->Result<crate::weekly_actions::WeeklyActionEvent,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::weekly_actions::save_weekly_action(&mut conn,input)
+}
