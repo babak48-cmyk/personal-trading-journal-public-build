@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -115,6 +115,26 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     const zero=weeklyLearningSnapshot([],'2026-11-09');
     expect(weeklyDecisionAwareAction(zero,0,reason)).toBe(zero.action);
     expect(weeklyDecisionAwareAction(zero,1,[{decision_type:'MISSED',reason_code:'[NO_REASON]',decision_count:1}])).toContain('verify whether each opportunity was actually valid');
+  });
+  it('groups immutable Setup version IDs, separating entry snapshots from retrospective attribution',()=>{
+    const trades=[
+      row('entry','2026-11-09',{setup_version_id:'v1',setup_version_name:'Rejection',setup_version_number:1,setup_attribution:'AT_ENTRY',setup_defined_market_context:'TREND',realized_r:1}),
+      row('retrospective','2026-11-10',{setup_version_id:'v1',setup_version_name:'Rejection',setup_version_number:1,setup_attribution:'RETROSPECTIVE',setup_defined_market_context:'TREND',realized_r:-2}),
+      row('second','2026-11-11',{setup_version_id:'v2',setup_version_name:'Rejection',setup_version_number:2,setup_attribution:'AT_ENTRY',setup_defined_market_context:'RANGE',realized_r:null}),
+      row('unknown','2026-11-12',{setup_version_id:null,setup_attribution:'NOT_RECORDED',realized_r:0}),
+      row('otherweek','2026-11-02',{setup_version_id:'v1',setup_attribution:'AT_ENTRY',realized_r:99}),
+    ];
+    const bySetup=weeklySetupVersionBreakdown(trades,'2026-11-09');
+    expect(bySetup).toHaveLength(4);
+    expect(bySetup.find(g=>g.label==='Rejection · v1 · At entry')).toMatchObject({tradeCount:1,netR:1,eligibleRCount:1});
+    expect(bySetup.find(g=>g.label==='Rejection · v1 · Retrospective')).toMatchObject({tradeCount:1,netR:-2,eligibleRCount:1});
+    expect(bySetup.find(g=>g.label==='Rejection · v2 · At entry')).toMatchObject({tradeCount:1,netR:null,eligibleRCount:0});
+    expect(bySetup.find(g=>g.label==='No recorded Setup version')).toMatchObject({tradeCount:1,netR:0});
+    const byContext=weeklyDefinedContextBreakdown(trades,'2026-11-09');
+    expect(byContext).toHaveLength(4);
+    expect(byContext.find(g=>g.label==='TREND (at entry)')).toMatchObject({tradeCount:1,netR:1});
+    expect(byContext.find(g=>g.label==='TREND (retrospective)')).toMatchObject({tradeCount:1,netR:-2});
+    expect(byContext.find(g=>g.label==='Setup context not recorded (no linked version)')).toMatchObject({tradeCount:1,netR:0});
   });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
