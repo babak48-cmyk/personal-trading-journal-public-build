@@ -13,6 +13,7 @@ CREATE TABLE weekly_learning_action_events (
   CHECK((event_kind='COMMITMENT' AND based_on_event_id IS NULL) OR
         (event_kind='FOLLOW_UP' AND based_on_event_id IS NOT NULL))
 );
+CREATE UNIQUE INDEX idx_weekly_learning_one_commitment ON weekly_learning_action_events(week_start,filter_snapshot_json) WHERE event_kind='COMMITMENT';
 CREATE INDEX idx_weekly_learning_action_week ON weekly_learning_action_events(week_start,recorded_at_utc);
 CREATE INDEX idx_weekly_learning_action_parent ON weekly_learning_action_events(based_on_event_id);
 CREATE TRIGGER weekly_learning_action_no_update BEFORE UPDATE ON weekly_learning_action_events
