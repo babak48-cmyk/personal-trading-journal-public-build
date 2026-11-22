@@ -20,6 +20,12 @@ export type CreateInstrumentInput = { symbol:string; display_name?:string|null; 
 export type UpdateInstrumentInput = { instrument_id:string; symbol:string; display_name?:string|null; tick_size:number; point_value:number; currency:string; market_type?:string|null; active:boolean; display_order:number };
 export type BackupInfo = { backup_version: number; created_at_utc: string; schema_version: number; database_sha256: string; attachment_count: number };
 export type RestoreResult = { restored_from: string; safety_backup: string; integrity: string; restored_at_utc: string };
+export type DemoTransferPreview = {
+  source_schema_version:number;target_schema_version:number;database_sha256:string;
+  sessions:number;trades:number;fills:number;reviews:number;correction_events:number;
+  attachments:number;original_backup_untouched:boolean;
+};
+
 export type LevelSourceType = { source_type_id: string; code: string; label: string; source_group: string; active:boolean; user_defined:boolean; description?:string|null; display_order:number };
 export type CreateLevelSourceInput = { label:string; source_group:string; description?:string|null };
 export type UpdateLevelSourceInput = { source_type_id:string; label:string; source_group:string; description?:string|null; active:boolean; display_order:number };
@@ -215,6 +221,8 @@ export const localApi = {
   setBackupDestination: (destination:string|null) => invoke<void>('set_backup_destination',{destination}),
   createBackup: () => invoke<string>('create_backup'),
   validateBackup: (backupPath:string) => invoke<BackupInfo>('validate_backup',{backupPath}),
+  previewPackageCDemoImport: (backupPath:string) => invoke<DemoTransferPreview>('preview_package_c_demo_import',{backupPath}),
+  importPackageBDemoBackup: (backupPath:string,expectedDatabaseSha256:string) => invoke<RestoreResult>('import_package_b_demo_backup',{backupPath,expectedDatabaseSha256}),
   restoreBackupToStaging: (backupPath:string) => invoke<string>('restore_backup_to_staging',{backupPath}),
   replaceLiveFromBackup: (backupPath:string) => invoke<RestoreResult>('replace_live_from_backup',{backupPath}),
   createDraftSession: (input:CreateSessionInput) => invoke<SessionSummary>('create_draft_session',{input}),
