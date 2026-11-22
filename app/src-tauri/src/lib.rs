@@ -14,6 +14,7 @@ mod paths;
 mod repository;
 mod restore;
 mod weekly_actions;
+mod demo_transfer;
 mod runtime;
 
 #[derive(Clone, serde::Serialize)]
@@ -142,6 +143,8 @@ pub fn run() {
             commands::create_backup,
             commands::validate_backup,
             commands::restore_backup_to_staging,
+            commands::preview_package_c_demo_import,
+            commands::import_package_b_demo_backup,
             commands::replace_live_from_backup,
             commands::create_draft_session,
             commands::update_draft_session,
