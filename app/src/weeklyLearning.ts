@@ -143,7 +143,7 @@ export function journalWeeks(rows:readonly JournalTradeRow[]):string[]{
   return [...new Set(rows.map(row=>journalWeekStart(row.session_date)).filter((x):x is string=>x!==null))].sort().reverse();
 }
 
-export function weeklyLearningText(snapshot:WeeklyLearningSnapshot):string{
+export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:readonly WeeklyTradeBreakdown[]=[]):string{
   return [
     'PTJ weekly learning — week of '+snapshot.weekStart,
     'Scope: filtered recorded trades ONLY; does not include NO_TRADE/MISSED decisions without trade records.',
@@ -154,6 +154,7 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot):string{
       '. Reported results use effective values; original event records and reasons remain in the audit history.',
     'Rule violations: '+snapshot.ruleViolationCount+'; rule status unchecked: '+snapshot.uncheckedRuleCount+'.',
     'Most frequent recorded mistake: '+(snapshot.mistakes[0]?snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' trades)':'none recorded')+'.',
+    'Decision-time level source groups (overlapping; do not sum group samples/R): '+(levelSources.length?levelSources.map(g=>g.label+' ['+g.tradeCount+' linked trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR===null?'R unknown':g.netR.toFixed(2)+'R')+']').join('; '):'none in the selected week')+'.',
     'Suggested review action (not proven trading advice): '+snapshot.action,
     'Record an approved personal action separately; this read-only summary does not save a review event.',
   ].join('\n');
