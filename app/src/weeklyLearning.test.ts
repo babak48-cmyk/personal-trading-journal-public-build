@@ -126,9 +126,9 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     ];
     const bySetup=weeklySetupVersionBreakdown(trades,'2026-11-09');
     expect(bySetup).toHaveLength(4);
-    expect(bySetup.find(g=>g.label==='Rejection · v1 · At entry')).toMatchObject({tradeCount:1,netR:1,eligibleRCount:1});
-    expect(bySetup.find(g=>g.label==='Rejection · v1 · Retrospective')).toMatchObject({tradeCount:1,netR:-2,eligibleRCount:1});
-    expect(bySetup.find(g=>g.label==='Rejection · v2 · At entry')).toMatchObject({tradeCount:1,netR:null,eligibleRCount:0});
+    expect(bySetup.find(g=>g.label==='Rejection · v1 · At entry · ID v1')).toMatchObject({tradeCount:1,netR:1,eligibleRCount:1});
+    expect(bySetup.find(g=>g.label==='Rejection · v1 · Retrospective · ID v1')).toMatchObject({tradeCount:1,netR:-2,eligibleRCount:1});
+    expect(bySetup.find(g=>g.label==='Rejection · v2 · At entry · ID v2')).toMatchObject({tradeCount:1,netR:null,eligibleRCount:0});
     expect(bySetup.find(g=>g.label==='No recorded Setup version')).toMatchObject({tradeCount:1,netR:0});
     const byContext=weeklyDefinedContextBreakdown(trades,'2026-11-09');
     expect(byContext).toHaveLength(4);
