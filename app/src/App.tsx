@@ -2312,7 +2312,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
         </details>
         {weekly.mistakes.length>0&&<p><strong>Recorded recurring mistakes:</strong> {weekly.mistakes.slice(0,3).map(m=>m.label+' ('+m.count+')').join(' · ')}</p>}
         <p><strong>One review action to consider:</strong> {weeklyAction}</p>
-        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction})} readOnly/></label>
+        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown})} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
     </>}
