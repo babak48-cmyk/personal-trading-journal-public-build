@@ -20,7 +20,7 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
       row('d','2026-11-02',{realized_r:99})];
     const s=weeklyLearningSnapshot(data,'2026-11-09');
     expect(s).toMatchObject({tradeCount:3,closedCount:2,openCount:1,eligibleRCount:1,missingRCount:1,netR:2,scope:'FILTERED_TRADES_ONLY'});
-    expect(weeklyLearningText(s)).toContain('does not include NO_TRADE/MISSED');
+    expect(weeklyLearningText(s)).toContain('Decision-only events: unavailable in this trade-only summary.');
   });
   it('counts each mistake at most once per trade, preserves rule status as different from profit',()=>{
     const s=weeklyLearningSnapshot([
