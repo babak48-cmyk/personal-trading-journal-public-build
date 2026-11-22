@@ -356,6 +356,14 @@ mod tests {
     assert_eq!(snapshot.version_id,a.version_id);
     assert_eq!(snapshot.version_number,Some(1));
     assert_eq!(snapshot.name.as_deref(),Some("Zone rejection"));
+    let rows=repository::list_journal_trades(&c,repository::JournalFilterInput::default()).unwrap();
+    let saved=rows.iter().find(|row|row.trade_id==trade.metrics.trade_id).unwrap();
+    assert_eq!(saved.setup_version_id.as_deref(),Some(a.version_id.as_str()));
+    assert_eq!(saved.setup_version_name.as_deref(),Some("Zone rejection"));
+    assert_eq!(saved.setup_version_number,Some(1));
+    assert_eq!(saved.setup_attribution,"AT_ENTRY");
+    assert_eq!(saved.setup_defined_market_context.as_deref(),Some("Rejection"));
+
     assert_eq!(db::integrity_check(&c).unwrap(),"ok");
  }
  #[test]
@@ -387,6 +395,14 @@ mod tests {
     assert!(c.execute("UPDATE setup_versions SET entry_triggers='changed' WHERE version_id=?1",[&a.version_id]).is_err());
     assert!(c.execute("DELETE FROM setup_versions WHERE version_id=?1",[&a.version_id]).is_err());
     link_closed_trade(&c,"t",&a.version_id,Some("retrospective attribution".into())).unwrap();
+    let rows=repository::list_journal_trades(&c,repository::JournalFilterInput::default()).unwrap();
+    let saved=rows.iter().find(|row|row.trade_id=="t").unwrap();
+    assert_eq!(saved.setup_version_id.as_deref(),Some(a.version_id.as_str()));
+    assert_eq!(saved.setup_version_number,Some(1));
+    assert_eq!(saved.setup_attribution,"RETROSPECTIVE");
+    assert_eq!(saved.setup_defined_market_context.as_deref(),Some("Rejection, ES"));
+    assert_eq!(saved.realized_r,None,"Unknown cost/risk must not be invented");
+
     assert!(link_closed_trade(&c,"t",&v2.version_id,None).is_err());
     let perf=setup_performance(&c).unwrap();
     let first=perf.iter().find(|p|p.version_id==a.version_id).unwrap();
