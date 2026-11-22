@@ -21,6 +21,17 @@ describe('session trade execution pulse never invents missing financials',()=>{
      knownRTrades:2,unknownRClosedTrades:1,sumKnownR:0.5
    });
  });
+ it('counts currently partly exited positions, not historical partial exits on fully closed trades',()=>{
+   const completedAfterTwoExits=trade('completed',{
+     status:'CLOSED',total_entry_quantity:2,total_exit_quantity:2,open_quantity:0,
+     realized_r:1.46
+   });
+   const stillPartlyOpen=trade('partly-open',{
+     status:'PARTIALLY_CLOSED',total_entry_quantity:2,total_exit_quantity:1,open_quantity:1
+   });
+   expect(summarizeSessionTradeExecution([completedAfterTwoExits]).partialExitTrades).toBe(0);
+   expect(summarizeSessionTradeExecution([completedAfterTwoExits,stillPartlyOpen]).partialExitTrades).toBe(1);
+ });
  it('does not confuse an unknown R with a zero-R completed trade',()=>{
    const rows=[trade('x',{status:'CLOSED',open_quantity:0,realized_r:0}),
                trade('y',{status:'CLOSED',open_quantity:0,realized_r:null})];
