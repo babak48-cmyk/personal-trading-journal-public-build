@@ -2276,6 +2276,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const decisionWeekSummary=decisionWeekRows.reduce((acc,item)=>({noTrade:acc.noTrade+item.no_trade_count,missed:acc.missed+item.missed_count,missingReason:acc.missingReason+item.reason_missing_count}),{noTrade:0,missed:0,missingReason:0});
   const weeklyAction=weekly?(decisionOnlyError?weekly.action:weeklyDecisionAwareAction(weekly,decisionWeekSummary.missed,weeklyReasons)):'';
   const instrumentBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'instrument_symbol'):[];
+  const directionBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'direction'):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
   const observedEvidenceBreakdown=activeWeek?weeklyObservedEvidenceBreakdown(rows,activeWeek):[];
   const setupVersionBreakdown=activeWeek?weeklySetupVersionBreakdown(rows,activeWeek):[];
@@ -2310,6 +2311,14 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded rule violation(s)</small>
           </div>)}</div>
+        </details>
+        <details className="guidedMore"><summary>Direction breakdown · LONG / SHORT</summary>
+          <p className="subtle">Recorded execution direction only. Descriptive trade samples within current filters; no prediction or inferred directional edge. Missing net R remains unknown.</p>
+          {directionBreakdown.length===0?<p className="subtle">No executed Trades in this selected week.</p>:<div className="weeklyBreakdown">{directionBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
+            <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
+            <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
+            <small>{group.ruleViolationCount} recorded rule violation(s)</small>
+          </div>)}</div>}
         </details>
         <details className="guidedMore"><summary>Setup / version breakdown · saved attribution</summary>
           <p className="subtle">Descriptive only. At-entry means the Setup version ID was stored with the execution, while Retrospective means a later closed-Trade classification; retrospective knowledge is never attributed to the original decision. Equal names with different immutable version IDs stay separate. Each group reports the number of R-eligible closed trades; missing R is not zero.</p>
