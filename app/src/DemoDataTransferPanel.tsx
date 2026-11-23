@@ -74,10 +74,11 @@ export function DemoDataTransferPanel(){
         <span><b>Correction events</b>{preview.correction_events}</span>
         <span><b>Initial-risk audit</b>{preview.initial_risk_correction_events}</span>
         <span><b>Level Source audit</b>{preview.source_type_correction_events}</span>
+        <span><b>Source price audit</b>{preview.source_price_correction_events}</span>
         <span><b>Weekly action events</b>{preview.weekly_learning_action_events}</span>
         <span><b>Attachments</b>{preview.attachments}</span>
       </div>
-      <p className="subtle">Source schema v{preview.source_schema_version} → staged schema v{preview.target_schema_version}. Checksums, foreign keys and all immutable correction chains (Fill, Initial Risk, Level Source) must verify. All existing Package C journal events, even draft-only records, block import.</p>
+      <p className="subtle">Source schema v{preview.source_schema_version} → staged schema v{preview.target_schema_version}. Checksums, foreign keys and all immutable correction chains (Fill, Initial Risk, Level Source Type, Source Price) must verify. All existing Package C journal events, even draft-only records, block import.</p>
       <label><input type="checkbox" checked={confirmed} disabled={busy}
         onChange={e=>setConfirmed(e.target.checked)}/>
         I confirm this is Package B DEMO test data and want to copy it into my empty Package C DEMO. I understand this does not modify the source.
