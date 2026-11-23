@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -7,6 +7,18 @@ const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTrade
   net_realized_pnl:100,open_quantity:0,...patch,
 });
 describe('weekly learning uses only observed local journal trade rows',()=>{
+  it('fails closed on missing Trade rows even when independently loaded MISSED decisions supply weeks',()=>{
+    // The week count can be positive exclusively because decision-only data
+    // succeeded; it cannot justify a zero-Trade weekly report or save action.
+    expect(weeklyTradeReadiness(false,'Trade analytics unavailable: database read failed',1))
+      .toBe('TRADE_UNAVAILABLE');
+    expect(weeklyTradeReadiness(false,'Trade read failed',0))
+      .toBe('TRADE_UNAVAILABLE');
+    expect(weeklyTradeReadiness(true,'Trade read failed',1)).toBe('LOADING');
+    expect(weeklyTradeReadiness(false,'',1)).toBe('READY');
+    expect(weeklyTradeReadiness(false,'',0)).toBe('EMPTY');
+  });
+
   it('groups ISO Monday weeks independent of local clock and rejects invalid calendar dates',()=>{
     expect(journalWeekStart('2026-11-09')).toBe('2026-11-09');
     expect(journalWeekStart('2026-11-15')).toBe('2026-11-09');
