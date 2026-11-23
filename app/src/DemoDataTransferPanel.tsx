@@ -72,6 +72,8 @@ export function DemoDataTransferPanel(){
         <span><b>Fills</b>{preview.fills}</span>
         <span><b>Reviews</b>{preview.reviews}</span>
         <span><b>Correction events</b>{preview.correction_events}</span>
+        <span><b>Initial-risk audit</b>{preview.initial_risk_correction_events}</span>
+        <span><b>Level Source audit</b>{preview.source_type_correction_events}</span>
         <span><b>Attachments</b>{preview.attachments}</span>
       </div>
       <p className="subtle">Source schema v{preview.source_schema_version} → staged schema v{preview.target_schema_version}. Checksums, foreign keys and immutable Fill correction chains must verify. Existing Package C data would block the import.</p>
