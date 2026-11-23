@@ -356,13 +356,21 @@ mod tests {
     assert_eq!(snapshot.version_id,a.version_id);
     assert_eq!(snapshot.version_number,Some(1));
     assert_eq!(snapshot.name.as_deref(),Some("Zone rejection"));
+    let rows=repository::list_journal_trades(&c,repository::JournalFilterInput::default()).unwrap();
+    let saved=rows.iter().find(|row|row.trade_id==trade.metrics.trade_id).unwrap();
+    assert_eq!(saved.setup_version_id.as_deref(),Some(a.version_id.as_str()));
+    assert_eq!(saved.setup_version_name.as_deref(),Some("Zone rejection"));
+    assert_eq!(saved.setup_version_number,Some(1));
+    assert_eq!(saved.setup_attribution,"AT_ENTRY");
+    assert_eq!(saved.setup_defined_market_context.as_deref(),Some("Rejection"));
+
     assert_eq!(db::integrity_check(&c).unwrap(),"ok");
  }
  #[test]
  fn versions_are_immutable_and_group_metrics_do_not_invent_r(){
     let mut c=Connection::open_in_memory().unwrap();
     c.execute_batch("PRAGMA foreign_keys=ON").unwrap();db::migrate(&c).unwrap();
-    assert_eq!(db::schema_version(&c).unwrap(),11);
+    assert_eq!(db::schema_version(&c).unwrap(),14);
     repository::ensure_default_workspace(&c).unwrap();
     c.execute_batch("INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at) VALUES ('s','default-workspace','instrument-ES','2026-11-16','DEMO','now','ACTIVE','now','now');
        INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('d','s','now','TRADE','LONG');
@@ -387,6 +395,14 @@ mod tests {
     assert!(c.execute("UPDATE setup_versions SET entry_triggers='changed' WHERE version_id=?1",[&a.version_id]).is_err());
     assert!(c.execute("DELETE FROM setup_versions WHERE version_id=?1",[&a.version_id]).is_err());
     link_closed_trade(&c,"t",&a.version_id,Some("retrospective attribution".into())).unwrap();
+    let rows=repository::list_journal_trades(&c,repository::JournalFilterInput::default()).unwrap();
+    let saved=rows.iter().find(|row|row.trade_id=="t").unwrap();
+    assert_eq!(saved.setup_version_id.as_deref(),Some(a.version_id.as_str()));
+    assert_eq!(saved.setup_version_number,Some(1));
+    assert_eq!(saved.setup_attribution,"RETROSPECTIVE");
+    assert_eq!(saved.setup_defined_market_context.as_deref(),Some("Rejection, ES"));
+    assert_eq!(saved.realized_r,None,"Unknown cost/risk must not be invented");
+
     assert!(link_closed_trade(&c,"t",&v2.version_id,None).is_err());
     let perf=setup_performance(&c).unwrap();
     let first=perf.iter().find(|p|p.version_id==a.version_id).unwrap();

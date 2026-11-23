@@ -20,6 +20,12 @@ export type CreateInstrumentInput = { symbol:string; display_name?:string|null; 
 export type UpdateInstrumentInput = { instrument_id:string; symbol:string; display_name?:string|null; tick_size:number; point_value:number; currency:string; market_type?:string|null; active:boolean; display_order:number };
 export type BackupInfo = { backup_version: number; created_at_utc: string; schema_version: number; database_sha256: string; attachment_count: number };
 export type RestoreResult = { restored_from: string; safety_backup: string; integrity: string; restored_at_utc: string };
+export type DemoTransferPreview = {
+  source_schema_version:number;target_schema_version:number;database_sha256:string;
+  sessions:number;trades:number;zones:number;decisions:number;plan_revisions:number;evidence_events:number;risk_snapshots:number;fills:number;reviews:number;correction_events:number;initial_risk_correction_events:number;source_type_correction_events:number;
+  attachments:number;original_backup_untouched:boolean;
+};
+
 export type LevelSourceType = { source_type_id: string; code: string; label: string; source_group: string; active:boolean; user_defined:boolean; description?:string|null; display_order:number };
 export type CreateLevelSourceInput = { label:string; source_group:string; description?:string|null };
 export type UpdateLevelSourceInput = { source_type_id:string; label:string; source_group:string; description?:string|null; active:boolean; display_order:number };
@@ -75,6 +81,47 @@ export type RiskSnapshot = {
 };
 export type SetupAtDecision = {version_id:string;name:string|null;version_number:number|null};
 export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[]; setup_at_decision:SetupAtDecision|null };
+export type HistoricalSourceReadout = {
+  candidate_source_id:string; candidate_revision_id:string;
+  original_source_type_id:string; original_label:string;
+  effective_source_type_id:string; effective_label:string;
+  revision:number; corrected:boolean;
+};
+export type SourceTypeCorrectionRequest = {
+  candidate_source_id:string; expected_effective_type_id:string;
+  expected_revision:number; replacement_type_id:string; reason:string;
+};
+export type SourceTypeCorrectionEvent = {
+  correction_id:string;candidate_source_id:string;revision:number;
+  original_source_type_id:string;previous_source_type_id:string;
+  replacement_source_type_id:string;expected_prior_correction_id:string|null;
+  reason:string;recorded_at_utc:string;actor:string;
+};
+export type SourceTypeCorrectionPreview = {
+  candidate_source_id:string;candidate_revision_id:string;
+  original_source_type_id:string;current_effective_type_id:string;
+  replacement_type_id:string;current_label:string;replacement_label:string;
+  expected_revision:number;related_decision_count:number;
+  related_trade_count:number;reason:string;monetary_result_unchanged:boolean;
+  explicit_confirmation_required:boolean;
+};
+export type InitialRiskCorrectionRequest = {
+  risk_snapshot_id:string; expected_effective:number|null; expected_revision:number;
+  replacement:number; reason:string;
+};
+export type InitialRiskCorrectionEvent = {
+  correction_id:string; risk_snapshot_id:string; revision:number;
+  original_risk_dollars:number|null; previous_risk_dollars:number|null;
+  replacement_risk_dollars:number; expected_prior_correction_id:string|null;
+  reason:string; recorded_at_utc:string; actor:string;
+};
+export type InitialRiskCorrectionPreview = {
+  risk_snapshot_id:string; trade_id:string; original:number|null;
+  current_effective:number|null; replacement:number; expected_revision:number;
+  before_net_r:number|null; after_net_r:number|null;
+  net_realized_pnl:number|null; gross_realized_pnl:number|null;
+  reason:string; explicit_confirmation_required:boolean;
+};
 export type FillCorrectionField = 'price'|'quantity'|'commission'|'fees';
 export type FillCorrectionInput = {
   execution_id:string; field:FillCorrectionField; expected_effective:number|null;
@@ -127,11 +174,22 @@ export type SessionReview = SaveSessionReviewInput & { review_id:string; status:
 
 
 export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null; evidence_timing?:'ANY_RECORDED'|'AT_DECISION'|null };
-export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; level_source_snapshot_missing?:boolean; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number; audited_correction_count?:number };
+export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; level_source_snapshot_missing?:boolean; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number; audited_correction_count?:number; setup_version_id?:string|null; setup_version_name?:string|null; setup_version_number?:number|null; setup_attribution?:'AT_ENTRY'|'RETROSPECTIVE'|'NOT_RECORDED'; setup_defined_market_context?:string|null; evidence_observed_at_decision?:string[]; evidence_post_decision_count?:number; evidence_unknown_timing_count?:number };
 export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:string;no_trade_count:number;missed_count:number;reason_missing_count:number};
 export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
 export type AnalyticsSummary = { trade_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
 export type MistakeSummary = { mistake_type_id:string; label:string; count:number };
+export type WeeklyActionEvent = {
+  action_event_id:string;week_start:string;filter_snapshot_json:string;
+  action_text:string;event_kind:'COMMITMENT'|'FOLLOW_UP';note:string|null;
+  based_on_event_id:string|null;recorded_at_utc:string;actor:string;
+};
+export type SaveWeeklyActionInput = {
+  week_start:string;filter_snapshot_json:string;
+  action_text:string;event_kind:'COMMITMENT'|'FOLLOW_UP';
+  note:string|null;based_on_event_id:string|null;
+};
+
 
 export type Attachment = { attachment_id:string; owner_type:string; owner_id:string; stage:string; occurred_at?:string|null; original_filename?:string|null; media_type?:string|null; file_size?:number|null; sha256?:string|null; caption?:string|null; created_at:string };
 export type ImportAttachmentInput = { owner_type:'SESSION'|'CANDIDATE'|'DECISION'|'TRADE'|'REVIEW'; owner_id:string; stage:'PRE_MARKET'|'PRE_ENTRY'|'ENTRY'|'DURING'|'POST_EXIT'|'FOLLOW_UP'|'ORDER_FLOW'|'OTHER'; source_path:string; caption?:string|null };
@@ -204,6 +262,9 @@ export const localApi = {
   setBackupDestination: (destination:string|null) => invoke<void>('set_backup_destination',{destination}),
   createBackup: () => invoke<string>('create_backup'),
   validateBackup: (backupPath:string) => invoke<BackupInfo>('validate_backup',{backupPath}),
+  isPackageCDemo: () => invoke<boolean>('is_package_c_demo'),
+  previewPackageCDemoImport: (backupPath:string) => invoke<DemoTransferPreview>('preview_package_c_demo_import',{backupPath}),
+  importPackageBDemoBackup: (backupPath:string,expectedDatabaseSha256:string) => invoke<RestoreResult>('import_package_b_demo_backup',{backupPath,expectedDatabaseSha256}),
   restoreBackupToStaging: (backupPath:string) => invoke<string>('restore_backup_to_staging',{backupPath}),
   replaceLiveFromBackup: (backupPath:string) => invoke<RestoreResult>('replace_live_from_backup',{backupPath}),
   createDraftSession: (input:CreateSessionInput) => invoke<SessionSummary>('create_draft_session',{input}),
@@ -249,6 +310,13 @@ export const localApi = {
   linkSetupTrade: (tradeId:string,versionId:string,linkNote:string|null) => invoke<void>('link_setup_trade',{tradeId,versionId,linkNote}),
   setupPlaybookPerformance: () => invoke<SetupPerformance[]>('setup_playbook_performance'),
   listTradeCorrectionHistory: (tradeId:string) => invoke<CorrectionHistoryEvent[]>('list_trade_correction_history',{tradeId}),
+  listTradeHistoricalSources: (tradeId:string) => invoke<HistoricalSourceReadout[]>('list_trade_historical_sources',{tradeId}),
+  previewSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionPreview>('preview_source_type_correction',{input}),
+  recordSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionEvent>('record_source_type_correction',{input}),
+  listTradeSourceTypeCorrections: (tradeId:string) => invoke<SourceTypeCorrectionEvent[]>('list_trade_source_type_corrections',{tradeId}),
+  previewInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionPreview>('preview_initial_risk_correction',{input}),
+  recordInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionEvent>('record_initial_risk_correction',{input}),
+  listInitialRiskCorrections: (tradeId:string) => invoke<InitialRiskCorrectionEvent[]>('list_initial_risk_corrections',{tradeId}),
   previewFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionPreview>('preview_fill_correction',{input}),
   recordFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionReceipt>('record_fill_correction',{input}),
   getTradeForDecision: (sessionId:string,decisionId:string) => invoke<TradeDetail|null>('get_trade_for_decision',{sessionId,decisionId}),
@@ -265,6 +333,8 @@ export const localApi = {
   getSessionReview: (sessionId:string) => invoke<SessionReview|null>('get_session_review',{sessionId}),
   listJournalTrades: (filter:JournalFilter={}) => invoke<JournalTradeRow[]>('list_journal_trades',{filter}),
 
+  listWeeklyActions: (weekStart:string,filterSnapshotJson:string) => invoke<WeeklyActionEvent[]>('list_weekly_actions',{weekStart,filterSnapshotJson}),
+  saveWeeklyAction: (input:SaveWeeklyActionInput) => invoke<WeeklyActionEvent>('save_weekly_action',{input}),
   listDecisionReasonAnalytics: (filter:JournalFilter={}) => invoke<DecisionReasonAnalyticsRow[]>('list_decision_reason_analytics',{filter}),  listDecisionOnlyAnalytics: (filter:JournalFilter={}) => invoke<DecisionOnlyAnalyticsRow[]>('list_decision_only_analytics',{filter}),
   getAnalyticsSummary: (filter:JournalFilter={}) => invoke<AnalyticsSummary>('get_analytics_summary',{filter}),
   listMistakeSummary: (filter:JournalFilter={}) => invoke<MistakeSummary[]>('list_mistake_summary',{filter}),

@@ -996,3 +996,98 @@ mod field_requirement_override_guard_tests {
         assert!(valid(&format!("{{{oversized}}}")).is_err());
     }
 }
+
+#[tauri::command]
+pub fn list_weekly_actions(app:AppHandle,week_start:String,filter_snapshot_json:String)
+  ->Result<Vec<crate::weekly_actions::WeeklyActionEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::weekly_actions::list_weekly_actions(&conn,&week_start,&filter_snapshot_json)
+}
+
+#[tauri::command]
+pub fn save_weekly_action(app:AppHandle,input:crate::weekly_actions::SaveWeeklyActionInput)
+  ->Result<crate::weekly_actions::WeeklyActionEvent,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::weekly_actions::save_weekly_action(&mut conn,input)
+}
+
+#[tauri::command]
+pub fn list_trade_historical_sources(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::source_type_corrections::HistoricalSourceReadout>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::sources_at_decision(&conn,&trade_id)
+}
+#[tauri::command]
+pub fn preview_source_type_correction(app:AppHandle,input:crate::source_type_corrections::SourceTypeCorrectionRequest)
+ ->Result<crate::source_type_corrections::SourceTypeCorrectionPreview,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::preview(&conn,&input)
+}
+#[tauri::command]
+pub fn record_source_type_correction(app:AppHandle,input:crate::source_type_corrections::SourceTypeCorrectionRequest)
+ ->Result<crate::source_type_corrections::SourceTypeCorrectionEvent,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::record(&mut conn,input)
+}
+#[tauri::command]
+pub fn list_trade_source_type_corrections(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::source_type_corrections::SourceTypeCorrectionEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::list_source_corrections_for_trade(&conn,&trade_id)
+}
+
+#[tauri::command]
+pub fn preview_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
+ ->Result<crate::initial_risk_corrections::InitialRiskCorrectionPreview,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::initial_risk_corrections::preview(&conn,&input)
+}
+#[tauri::command]
+pub fn record_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
+ ->Result<crate::initial_risk_corrections::InitialRiskCorrectionEvent,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::initial_risk_corrections::record(&mut conn,input)
+}
+#[tauri::command]
+pub fn list_initial_risk_corrections(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::initial_risk_corrections::InitialRiskCorrectionEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::initial_risk_corrections::list_initial_risk_corrections(&conn,&trade_id)
+}
+
+#[tauri::command]
+pub fn is_package_c_demo(app:AppHandle)->bool{
+    app.config().identifier=="com.personaltradingjournal.desktop.demo.packagec"
+}
+
+fn require_isolated_package_c_demo(app:&AppHandle)->Result<(),AppError>{
+    if app.config().identifier!="com.personaltradingjournal.desktop.demo.packagec"{
+        return Err(AppError::Validation("Import is permitted only inside the separately identified Package C DEMO app".into()));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn preview_package_c_demo_import(app:AppHandle,backup_path:String)
+ ->Result<crate::demo_transfer::DemoTransferPreview,AppError>{
+    require_isolated_package_c_demo(&app)?;
+    let paths=AppPaths::from_app(&app)?;
+    crate::demo_transfer::preview(&paths,&PathBuf::from(backup_path))
+}
+
+#[tauri::command]
+pub fn import_package_b_demo_backup(app:AppHandle,backup_path:String,expected_database_sha256:String)
+ ->Result<restore::RestoreResult,AppError>{
+    require_isolated_package_c_demo(&app)?;
+    let paths=AppPaths::from_app(&app)?;
+    crate::demo_transfer::import_into_empty(&paths,&PathBuf::from(backup_path),&expected_database_sha256)
+}

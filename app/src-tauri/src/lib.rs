@@ -8,11 +8,15 @@ mod diagnostics;
 mod error;
 mod exports;
 mod fill_corrections;
+mod initial_risk_corrections;
+mod source_type_corrections;
 mod import_readiness;
 mod setup_playbook;
 mod paths;
 mod repository;
 mod restore;
+mod weekly_actions;
+mod demo_transfer;
 mod runtime;
 
 #[derive(Clone, serde::Serialize)]
@@ -141,6 +145,9 @@ pub fn run() {
             commands::create_backup,
             commands::validate_backup,
             commands::restore_backup_to_staging,
+            commands::is_package_c_demo,
+            commands::preview_package_c_demo_import,
+            commands::import_package_b_demo_backup,
             commands::replace_live_from_backup,
             commands::create_draft_session,
             commands::update_draft_session,
@@ -184,6 +191,13 @@ pub fn run() {
             commands::inspect_ninjatrader_csv_headers,
             commands::list_trade_correction_history,
             commands::preview_fill_correction,
+            commands::preview_initial_risk_correction,
+            commands::record_initial_risk_correction,
+            commands::list_initial_risk_corrections,
+            commands::list_trade_historical_sources,
+            commands::preview_source_type_correction,
+            commands::record_source_type_correction,
+            commands::list_trade_source_type_corrections,
             commands::record_fill_correction,
             commands::get_trade_for_decision,
             commands::list_unexecuted_trade_decisions,
@@ -211,6 +225,8 @@ pub fn run() {
             commands::delete_attachment,
             commands::export_journal_html,
             commands::export_journal_csv,
+            commands::list_weekly_actions,
+            commands::save_weekly_action,
             commands::open_export_folder
         ])
         .run(tauri::generate_context!())

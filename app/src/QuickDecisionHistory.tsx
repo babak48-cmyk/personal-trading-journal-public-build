@@ -1,6 +1,17 @@
 import { JournalIcon } from './JournalIcon';
 import type {CandidateDecision} from './services/localApi';
 
+import {decisionTimestampDisplay} from './decisionTimestamp';
+
+function SavedDecisionTime({timestamp}:{timestamp:string}){
+  const t=decisionTimestampDisplay(timestamp);
+  return <time className="savedDecisionWhen" dateTime={t.valid?t.utc:undefined}
+    title={'Immutable raw occurred_at: '+t.raw}>
+    {t.valid?'Local '+t.local+' · UTC '+t.utc:'Time zone unverified · '+t.raw}
+  </time>;
+}
+
+
 /** Read-only saved decision history. Does not create or modify a Decision. */
 export function DecisionHistoryList({rows,limit=12}:{rows:readonly CandidateDecision[];limit?:number}){
   if(!rows.length)return <p className="subtle">No saved Decisions for this Zone.</p>;
@@ -8,7 +19,7 @@ export function DecisionHistoryList({rows,limit=12}:{rows:readonly CandidateDeci
     {rows.slice(0,limit).map(d=>
       <details className="savedDecisionRecord" key={d.decision_id}>
         <summary>
-          <span className="savedDecisionWhen">{d.occurred_at}</span>
+          <SavedDecisionTime timestamp={d.occurred_at}/>
           <strong>{d.decision_type}{d.intended_direction?' · '+d.intended_direction:''}</strong>
           <span className="savedDecisionReason">{d.reason_code||d.plan_alignment||'—'}</span>
         </summary>
@@ -30,7 +41,7 @@ export function PendingTradeDecisionRow({decision,current,onResume,disabled=fals
 }){
   return <div className="pendingDecisionRecord">
     <div className="pendingDecisionInfo">
-      <time className="savedDecisionWhen">{decision.occurred_at}</time>
+      <SavedDecisionTime timestamp={decision.occurred_at}/>
       <strong>{decision.intended_direction??'Unknown direction'} · Zone {decision.candidate_id??'Unplanned'}</strong>
       <small>Decision ID: {decision.decision_id}{decision.reason_code?' · '+decision.reason_code:''}</small>
     </div>

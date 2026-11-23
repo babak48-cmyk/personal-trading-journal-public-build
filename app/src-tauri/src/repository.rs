@@ -745,10 +745,17 @@ pub fn get_current_plan(conn: &Connection, session_id: &str) -> Result<CurrentPl
     let mut candidates=Vec::new();
     for (id,label,intent,trend,pm,pf,pt,rp,current_revision_id,required_json,invalidation_json,notes,setup_version_id) in base {
         let status:String=conn.query_row("SELECT status FROM candidate_status_events WHERE candidate_id=?1 ORDER BY occurred_at DESC,rowid DESC LIMIT 1",[&id],|r|r.get(0)).optional()?.unwrap_or_else(||"PLANNED".into());
-        let mut sstmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_id=?1 AND cs.candidate_revision_id=?2 ORDER BY cs.is_primary DESC,lst.label")?;
-        let rows=sstmt.query_map(params![&id,&current_revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
-        let source_type_ids=rows.iter().map(|x|x.0.clone()).collect();
-        let sources=rows.into_iter().map(|x|x.1).collect();
+        let mut sstmt=conn.prepare("SELECT cs.candidate_source_id,cs.source_type_id FROM candidate_sources cs WHERE cs.candidate_id=?1 AND cs.candidate_revision_id=?2 ORDER BY cs.is_primary DESC,cs.rowid")?;
+        let source_rows=sstmt.query_map(params![&id,&current_revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+        let mut source_type_ids=Vec::new();let mut sources=Vec::new();
+        for (source_id,original_type) in source_rows {
+            let (effective,revision,_)=crate::source_type_corrections::effective_type(conn,&source_id,&original_type)?;
+            let label:String=conn.query_row(
+              "SELECT label FROM level_source_types WHERE source_type_id=?1",
+              [&effective],|r|r.get(0))?;
+            source_type_ids.push(effective);
+            sources.push(if revision>0{format!("{label} [corrected historical entry]")}else{label});
+        }
         let required_conditions=required_json.as_deref().and_then(|x|serde_json::from_str(x).ok()).unwrap_or_default();
         let invalidation_conditions=invalidation_json.as_deref().and_then(|x|serde_json::from_str(x).ok()).unwrap_or_default();
         candidates.push(CandidateCurrentDto{candidate_id:id,label,directional_intent:intent,trend_relationship:trend,price_mode:pm,price_from:pf,price_to:pt,reference_price:rp,required_conditions,invalidation_conditions,notes,current_status:status,sources,source_type_ids,setup_version_id});
@@ -1017,13 +1024,15 @@ pub fn create_candidate_decision(conn: &Connection, input: CreateCandidateDecisi
 }
 
 pub fn list_candidate_decisions(conn: &Connection, candidate_id: &str) -> Result<Vec<CandidateDecisionDto>, AppError> {
-    let mut stmt = conn.prepare("SELECT decision_id,candidate_id,occurred_at,decision_type,intended_direction,reason_code,reason_note,decision_quality,plan_alignment,plan_mismatch_reason,based_on_plan_revision_id,based_on_candidate_revision_id FROM candidate_decisions WHERE candidate_id=?1 ORDER BY occurred_at DESC,rowid DESC")?;
+    let mut stmt = conn.prepare("SELECT decision_id,candidate_id,occurred_at,decision_type,intended_direction,reason_code,reason_note,decision_quality,plan_alignment,plan_mismatch_reason,based_on_plan_revision_id,based_on_candidate_revision_id FROM candidate_decisions WHERE candidate_id=?1 ORDER BY (julianday(occurred_at) IS NULL),julianday(occurred_at) DESC,rowid DESC")?;
     let rows = stmt.query_map([candidate_id], |r| Ok(CandidateDecisionDto {
         decision_id:r.get(0)?, candidate_id:r.get(1)?, occurred_at:r.get(2)?, decision_type:r.get(3)?, intended_direction:r.get(4)?, reason_code:r.get(5)?, reason_note:r.get(6)?, decision_quality:r.get(7)?, plan_alignment:r.get(8)?, plan_mismatch_reason:r.get(9)?, based_on_plan_revision_id:r.get(10)?, based_on_candidate_revision_id:r.get(11)?
     }))?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
 }
 
+/// Chronological sorting must compare absolute instants (RFC3339 may have offsets),
+/// not the raw text. Unparseable legacy timestamps remain readable last.
 /// Read-only recovery of TRADE decisions that have no associated execution.
 /// Never infer this relationship from Zone or timestamps: two independent
 /// decisions may legitimately be made in the same Zone.
@@ -1035,7 +1044,7 @@ pub fn list_unexecuted_trade_decisions(conn:&Connection,session_id:&str)->Result
          FROM candidate_decisions cd
          WHERE cd.session_id=?1 AND cd.decision_type='TRADE'
            AND NOT EXISTS(SELECT 1 FROM trades t WHERE t.decision_id=cd.decision_id)
-         ORDER BY cd.occurred_at DESC,cd.rowid DESC"
+         ORDER BY (julianday(cd.occurred_at) IS NULL),julianday(cd.occurred_at) DESC,cd.rowid DESC"
     )?;
     let decisions=stmt.query_map([session_id],|r|Ok(CandidateDecisionDto{
         decision_id:r.get(0)?,candidate_id:r.get(1)?,occurred_at:r.get(2)?,
@@ -1287,10 +1296,16 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
     let state=trade_execution_ledger(conn,trade_id,&direction,point_value)?;
     let gross=state.gross_realized;
     let net=if state.unknown_cost_fields==0 {gross.map(|g|g-state.costs)} else {None};
-    let initial_risk:Option<f64>=conn.query_row(
-        "SELECT risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
-        [trade_id], |r| r.get(0)
+    let initial_raw:Option<(String,Option<f64>)>=conn.query_row(
+        "SELECT risk_snapshot_id,risk_dollars FROM risk_snapshots
+         WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
+        [trade_id], |r| Ok((r.get(0)?,r.get(1)?))
     ).optional()?;
+    let initial_risk=match initial_raw{
+        Some((id,original))=>crate::initial_risk_corrections::effective_initial_risk(
+            conn,&id,original)?.0,
+        None=>None
+    };
     let latest_stop:Option<f64>=conn.query_row(
         "SELECT stop_price FROM risk_snapshots WHERE trade_id=?1 AND stop_price IS NOT NULL ORDER BY occurred_at DESC,rowid DESC LIMIT 1",
         [trade_id], |r| r.get(0)
@@ -1392,12 +1407,18 @@ fn trade_risk_history(conn:&Connection,trade_id:&str)->Result<Vec<RiskSnapshotDt
                 change_reason,was_rule_compliant,provenance
          FROM risk_snapshots WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid"
     )?;
-    let items=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
+    let mut items=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
         risk_snapshot_id:r.get(0)?,occurred_at:r.get(1)?,snapshot_type:r.get(2)?,
         stop_price:r.get(3)?,quantity:r.get(4)?,risk_dollars:r.get(5)?,
         change_reason:r.get(6)?,was_rule_compliant:r.get::<_,Option<i64>>(7)?.map(|n|n!=0),
         provenance:r.get(8)?
     }))?.collect::<Result<Vec<_>,_>>()?;
+    // Only the earliest INITIAL record is the R denominator.
+    // Its original SQLite value remains unchanged; display effective audit overlay.
+    if let Some(initial)=items.iter_mut().find(|item|item.snapshot_type=="INITIAL"){
+        initial.risk_dollars=crate::initial_risk_corrections::effective_initial_risk(
+            conn,&initial.risk_snapshot_id,initial.risk_dollars)?.0;
+    }
     Ok(items)
 }
 
@@ -1952,6 +1973,18 @@ pub struct JournalTradeRowDto {
     /// Number of immutable audit events recorded against this Trade's Fills;
     /// counts audit provenance, not corrected/confirmed profitability.
     pub audited_correction_count: i64,
+    /// At-decision Setup version is distinct from retrospective closed-trade attribution.
+    pub setup_version_id: Option<String>,
+    pub setup_version_name: Option<String>,
+    pub setup_version_number: Option<i64>,
+    pub setup_attribution: String,
+    /// Definition context for the saved version; never market conditions observed at execution.
+    pub setup_defined_market_context: Option<String>,
+    /// Only stored observed events with a parsable event timestamp <= original Decision instant.
+    /// Distinct from planned source provenance and setup-defined context.
+    pub evidence_observed_at_decision: Vec<String>,
+    pub evidence_post_decision_count: i64,
+    pub evidence_unknown_timing_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -1988,8 +2021,14 @@ fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<
     // A legacy decision without a revision snapshot stays UNKNOWN (no attribution)
     // rather than acquiring sources added after the trade.
     let Some(revision_id)=decision_candidate_revision_id else{return Ok(Vec::new())};
-    let mut stmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_revision_id=?1 ORDER BY cs.is_primary DESC,lst.label")?;
-    let rows=stmt.query_map([revision_id],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let mut stmt=conn.prepare("SELECT candidate_source_id,source_type_id FROM candidate_sources WHERE candidate_revision_id=?1 ORDER BY is_primary DESC,rowid")?;
+    let originals=stmt.query_map([revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let mut rows=Vec::new();
+    for (source_id,original_id) in originals{
+        let (effective,revision,_)=crate::source_type_corrections::effective_type(conn,&source_id,&original_id)?;
+        let label:String=conn.query_row("SELECT label FROM level_source_types WHERE source_type_id=?1",[&effective],|r|r.get(0))?;
+        rows.push((effective,if revision>0{format!("{label} [corrected historical entry]")}else{label}));
+    }
     Ok(rows)
 }
 
@@ -1997,6 +2036,38 @@ fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppE
     let mut stmt=conn.prepare("SELECT mt.label FROM trade_mistakes tm JOIN mistake_types mt ON mt.mistake_type_id=tm.mistake_type_id WHERE tm.trade_id=?1 ORDER BY mt.label")?;
     let rows = stmt.query_map([trade_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
+}
+
+fn trade_evidence_temporal_snapshot(
+    conn:&Connection,trade_id:&str,candidate_id:&Option<String>,decision_at:Option<&str>
+)->Result<(Vec<String>,i64,i64),AppError>{
+    let mut stmt=conn.prepare(
+      "SELECT et.label,eo.role,eo.occurred_at,
+              CASE WHEN julianday(eo.occurred_at) IS NULL OR ?3 IS NULL OR julianday(?3) IS NULL
+                     THEN 'UNKNOWN'
+                   WHEN julianday(eo.occurred_at)<=julianday(?3) THEN 'AT_DECISION'
+                   ELSE 'AFTER_DECISION' END
+       FROM evidence_observations eo
+       JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
+       WHERE eo.present=1 AND (eo.trade_id=?1 OR (?2 IS NOT NULL AND eo.candidate_id=?2))
+       ORDER BY eo.rowid")?;
+    let events=stmt.query_map(params![trade_id,candidate_id,decision_at],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,
+        r.get::<_,String>(3)?
+    )))?;
+    let mut labels=Vec::new();let mut post=0;let mut unknown=0;
+    for event in events {
+        let (label,role,_timestamp,bucket)=event?;
+        match bucket.as_str(){
+            "AT_DECISION"=>{
+                let combined=format!("{role}: {label}");
+                if !labels.contains(&combined){labels.push(combined);}
+            },
+            "AFTER_DECISION"=>post+=1,
+            _=>unknown+=1,
+        }
+    }
+    Ok((labels,post,unknown))
 }
 
 fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str,
@@ -2138,12 +2209,36 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             let at_decision=matches!(filter.evidence_timing.as_deref(),Some("AT_DECISION"));
             if !trade_has_evidence(conn,&trade_id,&candidate_id,v,decision_at.as_deref(),at_decision)?{continue;}
         }
+        let evidence_temporal=trade_evidence_temporal_snapshot(
+            conn,&trade_id,&candidate_id,decision_at.as_deref()
+        )?;
         let metrics=trade_metrics(conn,&trade_id)?;
         let audited_correction_count:i64=conn.query_row(
           "SELECT COUNT(*) FROM fill_correction_events ce
            JOIN execution_fills f ON f.execution_id=ce.execution_id
            WHERE f.trade_id=?1",
           [&trade_id],|r|r.get(0))?;
+        // This read-only attribution uses the saved version ID snapshotted at
+        // the original entry. Historical closed-trade links are labelled
+        // RETROSPECTIVE, never misrepresented as known at decision time.
+        let setup=conn.query_row(
+          "SELECT COALESCE(t.setup_version_id,stl.version_id),
+                  d.name_snapshot,d.version_number,
+                  CASE WHEN t.setup_version_id IS NOT NULL THEN 'AT_ENTRY'
+                       WHEN stl.version_id IS NOT NULL THEN 'RETROSPECTIVE'
+                       ELSE 'NOT_RECORDED' END,
+                  d.market_context
+           FROM trades t
+           LEFT JOIN setup_trade_links stl ON stl.trade_id=t.trade_id
+           LEFT JOIN setup_playbook_details d
+             ON d.version_id=COALESCE(t.setup_version_id,stl.version_id)
+           WHERE t.trade_id=?1",
+          [&trade_id],|r|Ok((
+            r.get::<_,Option<String>>(0)?,r.get::<_,Option<String>>(1)?,
+            r.get::<_,Option<i64>>(2)?,r.get::<_,String>(3)?,
+            r.get::<_,Option<String>>(4)?
+          ))
+        )?;
         out.push(JournalTradeRowDto{
             trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
@@ -2151,6 +2246,12 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
             realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,
             open_quantity:metrics.open_quantity,audited_correction_count,
+            setup_version_id:setup.0,setup_version_name:setup.1,
+            setup_version_number:setup.2,setup_attribution:setup.3,
+            setup_defined_market_context:setup.4,
+            evidence_observed_at_decision:evidence_temporal.0,
+            evidence_post_decision_count:evidence_temporal.1,
+            evidence_unknown_timing_count:evidence_temporal.2,
         });
     }
     Ok(out)
@@ -2666,6 +2767,51 @@ mod chronological_trade_accounting_tests {
     }
 
     #[test]
+    fn gc_contract_partial_exits_cost_aware_net_r_uses_initial_risk() {
+        // GC: 0.10 price tick, $100 per full price point ($10 per tick).
+        // Two contracts bought 4100.0, initial stop 4099.5 => $100 initial risk.
+        let tick_size=0.10_f64;
+        let point_value=100.0_f64;
+        assert!(price_tick_aligned(4100.0,tick_size));
+        assert!(price_tick_aligned(4100.7,tick_size));
+        assert!(!price_tick_aligned(4100.75,tick_size));
+        let initial_risk=(4100.0-4099.5)*point_value*2.0;
+        assert!((initial_risk-100.0).abs()<1e-8);
+        let fills=events(&[
+            ("ENTRY",4100.0,2.0,4.0,0.0),
+            ("EXIT",4100.7,1.0,2.0,0.0),
+            ("EXIT",4099.8,1.0,2.0,0.0),
+        ]);
+        let before=execution_ledger(&fills[..2],"LONG",point_value).unwrap();
+        assert_eq!(before.open_qty,1.0);
+        assert!((before.gross_realized.unwrap()-70.0).abs()<1e-8);
+        let after=execution_ledger(&fills,"LONG",point_value).unwrap();
+        assert_eq!(after.open_qty,0.0);
+        let gross=after.gross_realized.unwrap();
+        let net=gross-after.costs;
+        assert!((gross-50.0).abs()<1e-8);
+        assert!((after.costs-8.0).abs()<1e-8);
+        assert!((net-42.0).abs()<1e-8);
+        assert!((net/initial_risk-0.42).abs()<1e-8);
+    }
+
+    #[test]
+    fn gc_short_side_and_invalid_exit_quantities_are_not_silently_accepted() {
+        let fills=events(&[
+            ("ENTRY",4100.0,1.0,2.0,0.0),
+            ("EXIT",4099.5,1.0,2.0,0.0),
+        ]);
+        let state=execution_ledger(&fills,"SHORT",100.0).unwrap();
+        assert!((state.gross_realized.unwrap()-50.0).abs()<1e-8);
+        assert!((state.gross_realized.unwrap()-state.costs-46.0).abs()<1e-8);
+        let over_exit=events(&[
+            ("ENTRY",4100.0,1.0,2.0,0.0),
+            ("EXIT",4099.5,2.0,2.0,0.0),
+        ]);
+        assert!(execution_ledger(&over_exit,"SHORT",100.0).is_err());
+    }
+
+    #[test]
     fn open_trade_without_exit_has_no_realized_pnl_even_with_entry_cost() {
         let ledger=execution_ledger(&events(&[("ENTRY",100.0,2.0,4.0,0.0)]),"LONG",50.0).unwrap();
         assert_eq!(ledger.gross_realized,None);
@@ -2949,13 +3095,14 @@ mod journal_level_provenance_snapshot_tests {
         conn.execute_batch("
             CREATE TABLE level_source_types(source_type_id TEXT PRIMARY KEY,label TEXT);
             CREATE TABLE candidate_sources(
+                candidate_source_id TEXT PRIMARY KEY,
                 candidate_revision_id TEXT NOT NULL,source_type_id TEXT NOT NULL,is_primary INTEGER NOT NULL
             );
             INSERT INTO level_source_types VALUES
                 ('prior-high','Prior high'),('later-vwap','VWAP added later');
             INSERT INTO candidate_sources VALUES
-                ('revision-at-decision','prior-high',1),
-                ('revision-added-later','later-vwap',1);
+                ('original-candidate-source','revision-at-decision','prior-high',1),
+                ('later-candidate-source','revision-added-later','later-vwap',1);
         ").unwrap();
 
         let frozen=trade_level_sources(&conn,&Some("revision-at-decision".to_string())).unwrap();
@@ -3100,3 +3247,75 @@ mod exact_decision_trade_recovery_tests {
 #[cfg(test)]
 #[path = "package_b_lifecycle_tests.rs"]
 mod package_b_lifecycle_tests;
+
+#[cfg(test)]
+mod decision_absolute_time_order_tests {
+    use super::*;
+
+    #[test]
+    fn saved_and_unexecuted_trade_decisions_sort_by_utc_instant_not_iso_text() {
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+            CREATE TABLE candidate_decisions(
+                decision_id TEXT PRIMARY KEY,candidate_id TEXT,session_id TEXT,
+                occurred_at TEXT,decision_type TEXT,intended_direction TEXT,
+                reason_code TEXT,reason_note TEXT,decision_quality TEXT,
+                plan_alignment TEXT,plan_mismatch_reason TEXT,
+                based_on_plan_revision_id TEXT,based_on_candidate_revision_id TEXT
+            );
+            CREATE TABLE trades(trade_id TEXT PRIMARY KEY,decision_id TEXT);
+            INSERT INTO candidate_decisions(decision_id,candidate_id,session_id,occurred_at,decision_type)
+            VALUES ('earlier','zone','session','2026-11-22T10:00:00+11:00','TRADE'),
+                   ('later','zone','session','2026-11-22T00:30:00+00:00','TRADE'),
+                   ('legacy','zone','session','time-unverified','TRADE');
+        ").unwrap();
+        let saved=list_candidate_decisions(&db,"zone").unwrap();
+        assert_eq!(saved.iter().map(|r|r.decision_id.as_str()).collect::<Vec<_>>(),
+                   vec!["later","earlier","legacy"]);
+        // Do not normalize/overwrite old raw timestamps while sorting.
+        assert_eq!(saved[1].occurred_at,"2026-11-22T10:00:00+11:00");
+        let unexecuted=list_unexecuted_trade_decisions(&db,"session").unwrap();
+        assert_eq!(unexecuted.iter().map(|r|r.decision_id.as_str()).collect::<Vec<_>>(),
+                   vec!["later","earlier","legacy"]);
+        db.execute("INSERT INTO trades(trade_id,decision_id) VALUES('t','later')",[]).unwrap();
+        let remaining=list_unexecuted_trade_decisions(&db,"session").unwrap();
+        assert_eq!(remaining.iter().map(|r|r.decision_id.as_str()).collect::<Vec<_>>(),
+                   vec!["earlier","legacy"]);
+    }
+}
+
+#[cfg(test)]
+mod observed_evidence_at_decision_tests {
+    use super::*;
+    #[test]
+    fn event_time_and_ownership_exclude_later_unknown_and_other_zone_observations(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+          CREATE TABLE evidence_types(evidence_type_id TEXT PRIMARY KEY,label TEXT NOT NULL);
+          CREATE TABLE evidence_observations(
+            evidence_id TEXT PRIMARY KEY,evidence_type_id TEXT,trade_id TEXT,candidate_id TEXT,
+            occurred_at TEXT,role TEXT,present INTEGER
+          );
+          INSERT INTO evidence_types VALUES('dom','DOM'),('delta','Delta');
+          INSERT INTO evidence_observations VALUES
+           ('old','dom',NULL,'zone-a','2026-11-22T20:00:00+11:00','ENTRY_CONFIRMATION',1),
+           ('old-duplicate','dom',NULL,'zone-a','2026-11-22T09:10:00Z','ENTRY_CONFIRMATION',1),
+           ('after','delta',NULL,'zone-a','2026-11-22T09:30:01Z','SETUP_SUPPORT',1),
+           ('unknown','delta',NULL,'zone-a','not-a-time','SETUP_SUPPORT',1),
+           ('other','delta',NULL,'zone-b','2026-11-22T08:30:00Z','ENTRY_CONFIRMATION',1),
+           ('absent','delta',NULL,'zone-a','2026-11-22T08:10:00Z','ENTRY_CONFIRMATION',0);
+        ").unwrap();
+        let (seen,post,unknown)=trade_evidence_temporal_snapshot(
+           &conn,"trade-a",&Some("zone-a".into()),Some("2026-11-22T09:30:00Z")
+        ).unwrap();
+        assert_eq!(seen,vec!["ENTRY_CONFIRMATION: DOM"]);
+        assert_eq!(post,1);
+        assert_eq!(unknown,1);
+        let (legacy,post,unknown)=trade_evidence_temporal_snapshot(
+            &conn,"trade-a",&Some("zone-a".into()),None
+        ).unwrap();
+        assert!(legacy.is_empty());
+        assert_eq!(post,0);
+        assert_eq!(unknown,4);
+    }
+}

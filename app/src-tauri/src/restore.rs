@@ -94,6 +94,8 @@ pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBu
         return Err(AppError::Validation("restored database foreign key violation".into()));
     }
     crate::fill_corrections::verify_all_correction_chains(&conn)?;
+    crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&conn)?;
+    crate::source_type_corrections::verify_all_source_correction_chains(&conn)?;
     Ok(staging)
 }
 
