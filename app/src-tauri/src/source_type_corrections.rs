@@ -240,3 +240,147 @@ pub fn verify_all_source_correction_chains(conn:&Connection)->Result<i64,AppErro
     }
     Ok(total)
 }
+
+#[cfg(test)]
+mod audited_source_type_tests {
+    use super::*;
+    use crate::{db,repository::{self,JournalFilterInput}};
+    fn fixture()->Connection{
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+        db::migrate(&conn).unwrap();
+        conn.execute_batch("
+          INSERT INTO workspaces(workspace_id,name,created_at)
+            VALUES('w','Synthetic','2026-11-23'),('other','Other','2026-11-23');
+          INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+            VALUES('i','w','ES',0.25,50);
+          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+            VALUES('sess','w','i','2026-11-23','DEMO','2026-11-23','CLOSED','2026-11-23','2026-11-23');
+          INSERT INTO candidates(candidate_id,session_id,instrument_id,label,identified_when,created_at)
+            VALUES('zone1','sess','i','Original Zone','PRE_SESSION','2026-11-23'),
+                  ('zone2','sess','i','Other Zone','PRE_SESSION','2026-11-23');
+          INSERT INTO candidate_revisions(candidate_revision_id,candidate_id,revision_number,created_at,price_mode,change_type)
+            VALUES('rev1','zone1',1,'2026-11-23','RANGE','CREATE'),
+                  ('rev2','zone2',1,'2026-11-23','RANGE','CREATE');
+          INSERT INTO level_source_types(source_type_id,workspace_id,code,label,source_group)
+            VALUES('sourceA','w','TEST_A','Original High','STRUCTURE'),
+                  ('sourceB','w','TEST_B','Actual Level','STRUCTURE'),
+                  ('sourceC','w','TEST_C','Another Level','STRUCTURE'),
+                  ('wrongSpace','other','TEST_X','Unrelated','STRUCTURE');
+          INSERT INTO candidate_sources(candidate_source_id,candidate_id,candidate_revision_id,source_type_id,is_primary)
+            VALUES('cs1','zone1','rev1','sourceA',1),
+                  ('cs2','zone2','rev2','sourceA',1);
+          INSERT INTO candidate_decisions(decision_id,candidate_id,session_id,occurred_at,decision_type,intended_direction,based_on_candidate_revision_id)
+            VALUES('d1','zone1','sess','2026-11-23T10:00:00Z','TRADE','LONG','rev1'),
+                  ('d2','zone2','sess','2026-11-23T10:30:00Z','TRADE','LONG','rev2');
+          INSERT INTO trades(trade_id,decision_id,session_id,candidate_id,direction,status)
+            VALUES('trade1','d1','sess','zone1','LONG','CLOSED'),
+                  ('trade2','d2','sess','zone2','LONG','CLOSED');
+        ").unwrap();
+        conn
+    }
+    #[test]
+    fn source_correction_changes_only_historical_effective_classification_and_keeps_original(){
+        let mut conn=fixture();
+        assert_eq!(db::schema_version(&conn).unwrap(),14);
+        let first=sources_at_decision(&conn,"trade1").unwrap();
+        assert_eq!(first.len(),1);
+        assert_eq!(first[0].original_source_type_id,"sourceA");
+        let req=SourceTypeCorrectionRequest{
+            candidate_source_id:"cs1".into(),expected_effective_type_id:"sourceA".into(),
+            expected_revision:0,replacement_type_id:"sourceB".into(),
+            reason:"Wrong source selected at initial plan".into()
+        };
+        let p=preview(&conn,&req).unwrap();
+        assert_eq!(p.related_decision_count,1);
+        assert_eq!(p.related_trade_count,1);
+        assert!(p.monetary_result_unchanged);
+        assert_eq!(p.current_label,"Original High");
+        assert_eq!(p.replacement_label,"Actual Level");
+        let saved=record(&mut conn,req.clone()).unwrap();
+        assert_eq!(saved.revision,1);
+        assert!(record(&mut conn,req).is_err(),"stale revision or duplicate save must fail");
+        let second=sources_at_decision(&conn,"trade1").unwrap();
+        assert_eq!(second[0].original_source_type_id,"sourceA");
+        assert_eq!(second[0].effective_source_type_id,"sourceB");
+        assert_eq!(second[0].revision,1);
+        assert_eq!(sources_at_decision(&conn,"trade2").unwrap()[0].effective_source_type_id,"sourceA");
+        let stored:String=conn.query_row(
+            "SELECT source_type_id FROM candidate_sources WHERE candidate_source_id='cs1'",[],|r|r.get(0)).unwrap();
+        assert_eq!(stored,"sourceA","original level source event is immutable");
+        let trade1=repository::list_journal_trades(&conn,JournalFilterInput::default()).unwrap();
+        let affected=trade1.iter().find(|row|row.trade_id=="trade1").unwrap();
+        let unaffected=trade1.iter().find(|row|row.trade_id=="trade2").unwrap();
+        assert!(affected.level_sources.iter().any(|s|s.contains("Actual Level")));
+        assert!(affected.level_sources.iter().any(|s|s.contains("corrected historical entry")));
+        assert_eq!(unaffected.level_sources,vec!["Original High"]);
+        assert_eq!(list_source_corrections_for_trade(&conn,"trade1").unwrap().len(),1);
+        assert_eq!(list_source_corrections_for_trade(&conn,"trade2").unwrap().len(),0);
+        assert_eq!(verify_all_source_correction_chains(&conn).unwrap(),1);
+        assert!(conn.execute(
+          "UPDATE candidate_source_type_correction_events SET reason='Changed'",[]).is_err());
+        assert!(conn.execute("DELETE FROM candidate_source_type_correction_events",[]).is_err());
+        assert_eq!(db::integrity_check(&conn).unwrap(),"ok");
+        assert_eq!(db::foreign_key_violation_count(&conn).unwrap(),0);
+        let second_req=SourceTypeCorrectionRequest{
+           candidate_source_id:"cs1".into(),expected_effective_type_id:"sourceB".into(),
+           expected_revision:1,replacement_type_id:"sourceC".into(),
+           reason:"Further verified record classification".into()
+        };
+        assert_eq!(record(&mut conn,second_req).unwrap().revision,2);
+        assert_eq!(verify_all_source_correction_chains(&conn).unwrap(),2);
+        assert_eq!(sources_at_decision(&conn,"trade1").unwrap()[0].effective_source_type_id,"sourceC");
+    }
+    #[test]
+    fn rejects_cross_workspace_wrong_owner_unreferenced_and_mismatched_revision(){
+        let mut conn=fixture();
+        let req=SourceTypeCorrectionRequest{
+            candidate_source_id:"cs1".into(),expected_effective_type_id:"sourceA".into(),
+            expected_revision:0,replacement_type_id:"wrongSpace".into(),
+            reason:"Recorded source was incorrect".into()
+        };
+        assert!(preview(&conn,&req).is_err());
+        assert!(record(&mut conn,req).is_err());
+        assert!(preview(&conn,&SourceTypeCorrectionRequest{
+           candidate_source_id:"cs1".into(),expected_effective_type_id:"sourceB".into(),
+           expected_revision:0,replacement_type_id:"sourceC".into(),
+           reason:"Attempt to use incorrect prior value".into()
+        }).is_err());
+        assert!(preview(&conn,&SourceTypeCorrectionRequest{
+           candidate_source_id:"missing".into(),expected_effective_type_id:"sourceA".into(),
+           expected_revision:0,replacement_type_id:"sourceC".into(),
+           reason:"Missing source record".into()
+        }).is_err());
+        conn.execute_batch(
+          "INSERT INTO candidates(candidate_id,session_id,instrument_id,label,identified_when,created_at)
+             VALUES('unsaved','sess','i','Never traded','DURING_SESSION','2026-11-23');
+           INSERT INTO candidate_revisions(candidate_revision_id,candidate_id,revision_number,created_at,price_mode,change_type)
+             VALUES('unsaved-rev','unsaved',1,'2026-11-23','RANGE','CREATE');
+           INSERT INTO candidate_sources(candidate_source_id,candidate_id,candidate_revision_id,source_type_id)
+             VALUES('unsaved-src','unsaved','unsaved-rev','sourceA');").unwrap();
+        assert!(preview(&conn,&SourceTypeCorrectionRequest{
+           candidate_source_id:"unsaved-src".into(),expected_effective_type_id:"sourceA".into(),
+           expected_revision:0,replacement_type_id:"sourceB".into(),
+           reason:"No historical decision exists".into()
+        }).is_err());
+        assert_eq!(verify_all_source_correction_chains(&conn).unwrap(),0);
+    }
+    #[test]
+    fn tampered_source_correction_chain_fails_read_and_export_integrity(){
+        let mut conn=fixture();
+        let req=SourceTypeCorrectionRequest{
+            candidate_source_id:"cs1".into(),expected_effective_type_id:"sourceA".into(),
+            expected_revision:0,replacement_type_id:"sourceB".into(),
+            reason:"Originally wrong classification".into()
+        };
+        record(&mut conn,req).unwrap();
+        // Tamper is attempted through a deliberately independent, isolated test
+        // database by dropping the protection trigger; the normal app never does this.
+        conn.execute_batch(
+          "DROP TRIGGER source_type_correction_no_update;
+           UPDATE candidate_source_type_correction_events
+             SET previous_source_type_id='sourceC' WHERE candidate_source_id='cs1';").unwrap();
+        assert!(verify_all_source_correction_chains(&conn).is_err());
+        assert!(sources_at_decision(&conn,"trade1").is_err());
+    }
+}
