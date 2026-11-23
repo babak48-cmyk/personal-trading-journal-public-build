@@ -2020,6 +2020,10 @@ pub struct AnalyticsSummaryDto {
     pub win_loss_payoff_r: Option<f64>,
     /// Known closed net P&L divided by the count of closed Trades with known net P&L.
     pub expectancy_pnl: Option<f64>,
+    /// Single confirmed original Session currency for eligible net P&L, if any.
+    pub pnl_currency: Option<String>,
+    /// SINGLE_CURRENCY / MIXED_CURRENCIES / UNKNOWN_CURRENCY / NO_ELIGIBLE.
+    pub pnl_currency_status: String,
     /// Consecutive positive/negative R outcomes in known closing-time order.
     pub max_winning_streak: Option<i64>,
     pub max_losing_streak: Option<i64>,
@@ -2394,6 +2398,29 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     let closed:Vec<&JournalTradeRowDto>=rows.iter().filter(|x|x.status=="CLOSED").collect();
     let mut rs:Vec<f64>=closed.iter().filter_map(|x|x.realized_r).collect();
     let pnls:Vec<f64>=closed.iter().filter_map(|x|x.net_realized_pnl).collect();
+    // R is unitless, but currency totals cannot combine USD/AUD/etc or
+    // fill a missing historical Session currency from today's instrument
+    // settings (which may have changed after the original execution).
+    let mut currencies=std::collections::BTreeSet::new();
+    let mut missing_currency=false;
+    for row in closed.iter().filter(|row|row.net_realized_pnl.is_some()){
+        let saved:Option<String>=conn.query_row(
+            "SELECT instrument_currency_snapshot FROM sessions WHERE session_id=?1",
+            [&row.session_id],|record|record.get(0)
+        )?;
+        match saved{
+            Some(code) if code.len()==3 && code.bytes().all(|ch|ch.is_ascii_uppercase())
+                =>{currencies.insert(code);},
+            _=>missing_currency=true,
+        }
+    }
+    let pnl_currency_status=if pnls.is_empty(){"NO_ELIGIBLE"}
+        else if currencies.len()>1{"MIXED_CURRENCIES"}
+        else if missing_currency||currencies.is_empty(){"UNKNOWN_CURRENCY"}
+        else{"SINGLE_CURRENCY"}.to_string();
+    let pnl_currency=if pnl_currency_status=="SINGLE_CURRENCY"{
+        currencies.into_iter().next()
+    }else{None};
     let wins=rs.iter().filter(|x|**x>1e-9).count() as i64;
     let losses=rs.iter().filter(|x|**x< -1e-9).count() as i64;
     let breakeven=rs.iter().filter(|x|x.abs()<=1e-9).count() as i64;
@@ -2414,7 +2441,9 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     let win_loss_payoff_r=closed_r_payoff(average_winner_r,average_loser_r);
     // Initial risk is NOT required for trustworthy net P&L. Missing costs
     // result in NULL net P&L and those Trades cannot dilute this denominator.
-    let expectancy_pnl=known_pnl_expectancy(&pnls);
+    let expectancy_pnl=if pnl_currency.is_some(){
+        known_pnl_expectancy(&pnls)
+    }else{None};
     // Each CLOSED trade must have a finite R and a complete, unambiguous
     // timestamp for EVERY exit Fill. The final exit defines realized outcome
     // order, never Session date or a guessed Trade-ID ordering.
@@ -2458,11 +2487,11 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
         eligible_net_pnl_count:pnls.len() as i64,eligible_r_count:eligible,
         wins,losses,breakeven,win_rate,average_r,median_r,net_r,
         average_winner_r,average_loser_r,profit_factor_r,expectancy_r:average_r,
-        win_loss_payoff_r,expectancy_pnl,
+        win_loss_payoff_r,expectancy_pnl,pnl_currency,pnl_currency_status,
         max_winning_streak:chronological.map(|v|v.0),
         max_losing_streak:chronological.map(|v|v.1),
         max_realized_r_drawdown:chronological.map(|v|v.2),
-        net_pnl:if pnls.is_empty(){None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
+        net_pnl:if pnls.is_empty()||pnl_currency_status!="SINGLE_CURRENCY"{None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
     })
 }
 
