@@ -36,14 +36,22 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     let mut html=String::from("<!doctype html><html><head><meta charset='utf-8'><title>Trading Journal Report</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#1f2937}h1{margin-bottom:4px}.sub{color:#64748b}.metrics{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}.m{border:1px solid #ddd;border-radius:10px;padding:10px 14px;min-width:120px}.m span{display:block;color:#64748b;font-size:12px}.m b{font-size:20px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;text-align:left;padding:8px;vertical-align:top}th{background:#f8fafc}.warn{padding:10px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px}</style></head><body>");
     html.push_str("<h1>Personal Trading Journal</h1><div class='sub'>Readable local export</div><div class='metrics'>");
     html.push_str(&metric("Trades",a.trade_count.to_string()));
-    html.push_str(&metric("R sample",a.eligible_r_count.to_string()));
+    html.push_str(&metric("Closed trades",a.closed_trade_count.to_string()));
+    html.push_str(&metric("Known Net P&L / closed",format!("{}/{}",a.eligible_net_pnl_count,a.closed_trade_count)));
+    html.push_str(&metric("R sample / closed",format!("{}/{}",a.eligible_r_count,a.closed_trade_count)));
     html.push_str(&metric("Win rate",a.win_rate.map(|v|format!("{:.1}%",v)).unwrap_or("—".into())));
     html.push_str(&metric("Average R",a.average_r.map(|v|format!("{:.2}R",v)).unwrap_or("—".into())));
-    html.push_str(&metric("Net R",a.net_r.map(|v|format!("{:.2}R",v)).unwrap_or("—".into())));
+    html.push_str(&metric("Net R of known-R trades",a.net_r.map(|v|format!("{:.2}R",v)).unwrap_or("—".into())));
     html.push_str(&metric("Expectancy",a.expectancy_r.map(|v|format!("{:.2}R",v)).unwrap_or("—".into())));
-    html.push_str(&metric("Bad decision + win",a.bad_decision_win_count.to_string()));
+    html.push_str(&metric("Bad decision + known net profit",a.bad_decision_win_count.to_string()));
     html.push_str("</div>");
     if a.small_sample {html.push_str("<p class='warn'>Small sample — interpret performance metrics cautiously.</p>");}
+    if a.eligible_net_pnl_count<a.closed_trade_count{
+      html.push_str("<p class='warn'>Net P&amp;L sums only verified net outcomes; missing costs are UNKNOWN, not zero.</p>");
+    }
+    if a.eligible_r_count<a.closed_trade_count{
+      html.push_str("<p class='warn'>R and expectancy are restricted to closed trades with known net result and valid initial risk.</p>");
+    }
     html.push_str("<table><thead><tr><th>Date</th><th>Instrument</th><th>Direction</th><th>Status</th><th>Candidate</th><th>Level sources</th><th>Decision quality</th><th>Rules</th><th>Mistakes</th><th>R</th><th>Net P&amp;L</th></tr></thead><tbody>");
     for r in &rows {
         html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
