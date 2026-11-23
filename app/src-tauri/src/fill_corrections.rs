@@ -404,7 +404,7 @@ mod tests{
         drop(conn);
         let archive=backup::create_backup(&paths).unwrap();
         let info=restore::validate_backup(&archive).unwrap();
-        assert_eq!(info.schema_version,11);
+        assert_eq!(info.schema_version,db::CURRENT_SCHEMA_VERSION);
         let staged=restore::restore_to_staging(&paths,&archive).unwrap();
         let restored=rusqlite::Connection::open(staged.join("database.sqlite")).unwrap();
         assert_eq!(db::schema_version(&restored).unwrap(),12);
