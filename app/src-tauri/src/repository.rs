@@ -3058,6 +3058,16 @@ mod gc_persisted_contract_acceptance_tests {
         assert_eq!(summary.max_winning_streak,Some(1));
         assert_eq!(summary.max_losing_streak,Some(0));
         assert_eq!(summary.max_realized_r_drawdown,Some(0.0));
+        // The C9 clock belongs to the original saved Decision, not to a
+        // later Fill or the user's current machine timezone.
+        let journal=list_journal_trades(&conn,JournalFilterInput{
+            instrument_symbol:Some("GC".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(journal.len(),1);
+        assert_eq!(journal[0].decision_occurred_at.as_deref(),
+          Some("2026-11-23T08:00:00Z"));
+        assert_eq!(journal[0].session_timezone_id.as_deref(),
+          Some("Australia/Sydney"));
         assert_eq!(crate::db::integrity_check(&conn).unwrap(),"ok");
     }
 
