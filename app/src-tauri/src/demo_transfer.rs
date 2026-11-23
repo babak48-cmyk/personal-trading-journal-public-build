@@ -1,6 +1,7 @@
 //! Explicit one-way Package B DEMO backup transfer into an EMPTY, distinct
 //! Package C DEMO profile. Never touches the original Package B app directory.
-use std::path::Path;
+use std::{path::Path,fs::File,io::Read};
+use sha2::{Digest,Sha256};
 use rusqlite::{Connection,OptionalExtension};
 use serde::Serialize;
 use crate::{backup,db,error::AppError,paths::AppPaths,restore};
@@ -10,6 +11,8 @@ pub struct DemoTransferPreview {
     pub source_schema_version:u32,
     pub target_schema_version:u32,
     pub database_sha256:String,
+    /// SHA-256 of the entire source archive, including all attachments.
+    pub archive_sha256:String,
     pub sessions:i64,
     pub trades:i64,
     pub zones:i64,
@@ -26,6 +29,28 @@ pub struct DemoTransferPreview {
     pub weekly_learning_action_events:i64,
     pub attachments:usize,
     pub original_backup_untouched:bool,
+}
+
+fn external_archive_sha256(paths:&AppPaths,archive:&Path)->Result<String,AppError>{
+    // Canonicalize both paths so relative segments and symlink aliases cannot
+    // obscure that a "source" archive lives inside the destination profile.
+    // Restore staging is cleaned before extraction: it must never hold the
+    // user's only source ZIP. Package B backups are external by contract.
+    let target_root=std::fs::canonicalize(&paths.root)?;
+    let source_path=std::fs::canonicalize(archive)?;
+    if source_path.starts_with(&target_root){
+        return Err(AppError::Validation(
+            "Package B source backup must be outside the Package C destination profile".into()));
+    }
+    let mut input=File::open(&source_path)?;
+    let mut sha=Sha256::new();
+    let mut chunk=[0u8;65536];
+    loop{
+        let n=input.read(&mut chunk)?;
+        if n==0{break;}
+        sha.update(&chunk[..n]);
+    }
+    Ok(hex::encode(sha.finalize()))
 }
 
 fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
@@ -117,6 +142,8 @@ fn require_test_sessions(conn:&Connection)->Result<(),AppError>{
     Ok(())
 }
 pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppError>{
+    // Validate source location before any restore-staging directory is cleared.
+    let archive_sha256=external_archive_sha256(paths,archive)?;
     ensure_empty_target(paths)?;
     let info=restore::validate_backup(archive)?;
     if !(10..=db::CURRENT_SCHEMA_VERSION).contains(&info.schema_version){
@@ -140,6 +167,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         source_schema_version:info.schema_version,
         target_schema_version:staged_schema,
         database_sha256:info.database_sha256,
+        archive_sha256,
         sessions:count(&c,"sessions")?,trades:count(&c,"trades")?,
         zones:count(&c,"candidates")?,decisions:count(&c,"candidate_decisions")?,
         plan_revisions:count(&c,"session_plan_revisions")?,
@@ -156,14 +184,16 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
     })
 }
 
-pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
+pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_archive_sha:&str)
  ->Result<restore::RestoreResult,AppError>{
-    if expected_sha.len()!=64 {
-        return Err(AppError::Validation("Full 64-character preflight database hash required".into()));
+    if expected_archive_sha.len()!=64 ||
+       !expected_archive_sha.bytes().all(|c|c.is_ascii_hexdigit()){
+        return Err(AppError::Validation("Full 64-character preflight archive hash required".into()));
     }
     let confirmed=preview(paths,archive)?;
-    if confirmed.database_sha256!=expected_sha{
-        return Err(AppError::Validation("Source backup changed after preview; import cancelled".into()));
+    if confirmed.archive_sha256!=expected_archive_sha{
+        return Err(AppError::Validation(
+            "Source archive or attachments changed after preview; import cancelled".into()));
     }
     // This only changes the separate Package C destination. Existing restore
     // creates its own safety backup, rollback folder, and rechecks staged DB.
@@ -370,7 +400,7 @@ mod isolated_transfer_tests {
         assert_eq!(observed.plan_revisions,0);
         assert_eq!(observed.evidence_events,0);
         assert_eq!(observed.weekly_learning_action_events,0);
-        let receipt=import_into_empty(&new_c,&backup,&observed.database_sha256).unwrap();
+        let receipt=import_into_empty(&new_c,&backup,&observed.archive_sha256).unwrap();
         assert_eq!(receipt.integrity,"ok");
         assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
         assert_eq!(fs::read(&old_path).unwrap(),old_bytes,"old Package B SQLite must stay byte-identical");
@@ -386,7 +416,7 @@ mod isolated_transfer_tests {
         };
         assert_eq!(reviews,vec!["C","A"]);
         assert_eq!(fs::read(new_c.attachments.join("example.txt")).unwrap(),b"saved B attachment");
-        assert!(import_into_empty(&new_c,&backup,&observed.database_sha256).is_err(),
+        assert!(import_into_empty(&new_c,&backup,&observed.archive_sha256).is_err(),
                "a destination with B history cannot be silently overwritten");
         drop(restored);
         fs::remove_dir_all(base).unwrap();
