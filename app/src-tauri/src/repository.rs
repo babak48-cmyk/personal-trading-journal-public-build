@@ -2283,6 +2283,43 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
     Ok(out)
 }
 
+/// Descriptive R payoff only when both winning and losing closed samples exist.
+fn closed_r_payoff(avg_winner_r:Option<f64>,avg_loser_r:Option<f64>)->Option<f64>{
+    match (avg_winner_r,avg_loser_r){
+        (Some(win),Some(loss)) if win.is_finite() && loss.is_finite() && win>0.0 && loss<0.0
+            =>Some(win/loss.abs()),
+        _=>None,
+    }
+}
+
+/// Currency-denominated expectancy uses ONLY closed Trades with known net P&L;
+/// missing-cost outcomes never enter this denominator, even when R is unknown.
+fn known_pnl_expectancy(pnls:&[f64])->Option<f64>{
+    if pnls.is_empty() || pnls.iter().any(|p|!p.is_finite()){return None;}
+    Some(pnls.iter().sum::<f64>()/pnls.len() as f64)
+}
+
+#[cfg(test)]
+mod extra_analytics_metric_tests {
+    use super::{closed_r_payoff,known_pnl_expectancy};
+    #[test]
+    fn win_loss_payoff_requires_both_signed_closed_r_samples(){
+        assert_eq!(closed_r_payoff(Some(2.0),Some(-0.5)),Some(4.0));
+        assert_eq!(closed_r_payoff(Some(1.0),None),None);
+        assert_eq!(closed_r_payoff(None,Some(-1.0)),None);
+        assert_eq!(closed_r_payoff(Some(0.0),Some(-1.0)),None);
+        assert_eq!(closed_r_payoff(Some(2.0),Some(0.0)),None);
+        assert_eq!(closed_r_payoff(Some(f64::NAN),Some(-1.0)),None);
+    }
+    #[test]
+    fn net_pnl_expectancy_uses_known_denominator_not_all_trades(){
+        assert_eq!(known_pnl_expectancy(&[292.0,-104.0]),Some(94.0));
+        assert_eq!(known_pnl_expectancy(&[0.0]),Some(0.0));
+        assert_eq!(known_pnl_expectancy(&[]),None);
+        assert_eq!(known_pnl_expectancy(&[292.0,f64::NAN]),None);
+    }
+}
+
 pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result<AnalyticsSummaryDto,AppError>{
     let rows=list_journal_trades(conn,filter)?;
     let closed:Vec<&JournalTradeRowDto>=rows.iter().filter(|x|x.status=="CLOSED").collect();
@@ -2305,15 +2342,10 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     let profit_factor_r=if gross_loss>0.0{Some(gross_win/gross_loss)}else{None};
     // Keep both operands from the same verified closed-R sample; missing one
     // side is not evidence of a zero win/loss payoff.
-    let win_loss_payoff_r=match (average_winner_r,average_loser_r){
-        (Some(win),Some(loss)) if loss<0.0=>Some(win/loss.abs()),
-        _=>None,
-    };
+    let win_loss_payoff_r=closed_r_payoff(average_winner_r,average_loser_r);
     // Initial risk is NOT required for trustworthy net P&L. Missing costs
     // result in NULL net P&L and those Trades cannot dilute this denominator.
-    let expectancy_pnl=if pnls.is_empty(){None}else{
-        Some(pnls.iter().sum::<f64>()/pnls.len() as f64)
-    };
+    let expectancy_pnl=known_pnl_expectancy(&pnls);
     let rule_violation_trades=rows.iter().filter(|x|x.rule_status=="VIOLATED").count() as i64;
     // A known profitable result does not require a known initial risk.
     // Unknown costs -> UNKNOWN net result and are never counted as wins.
