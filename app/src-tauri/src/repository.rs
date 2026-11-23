@@ -3095,13 +3095,14 @@ mod journal_level_provenance_snapshot_tests {
         conn.execute_batch("
             CREATE TABLE level_source_types(source_type_id TEXT PRIMARY KEY,label TEXT);
             CREATE TABLE candidate_sources(
+                candidate_source_id TEXT PRIMARY KEY,
                 candidate_revision_id TEXT NOT NULL,source_type_id TEXT NOT NULL,is_primary INTEGER NOT NULL
             );
             INSERT INTO level_source_types VALUES
                 ('prior-high','Prior high'),('later-vwap','VWAP added later');
             INSERT INTO candidate_sources VALUES
-                ('revision-at-decision','prior-high',1),
-                ('revision-added-later','later-vwap',1);
+                ('original-candidate-source','revision-at-decision','prior-high',1),
+                ('later-candidate-source','revision-added-later','later-vwap',1);
         ").unwrap();
 
         let frozen=trade_level_sources(&conn,&Some("revision-at-decision".to_string())).unwrap();
