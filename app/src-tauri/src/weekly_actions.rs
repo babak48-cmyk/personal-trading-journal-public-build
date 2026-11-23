@@ -120,7 +120,7 @@ mod tests {
         let mut c=Connection::open_in_memory().unwrap();
         c.execute_batch("PRAGMA foreign_keys=ON").unwrap();
         db::migrate(&c).unwrap();
-        assert_eq!(db::schema_version(&c).unwrap(),12);
+        assert_eq!(db::schema_version(&c).unwrap(),13);
         let request=SaveWeeklyActionInput{
             week_start:"2026-11-23".into(),filter_snapshot_json:"{}".into(),
             action_text:"Follow the pre-entry risk rule".into(),
