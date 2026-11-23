@@ -3076,16 +3076,25 @@ mod gc_persisted_contract_acceptance_tests {
     #[test]
     fn gc_persisted_invalid_over_exit_fails_without_mutating_immutable_events(){
         let (conn,_)=gc_closed_fixture(false);
-        conn.execute("UPDATE execution_fills SET quantity=3.0 WHERE execution_id='gc-exit-2'",[]).unwrap();
+        // Import/legacy corruption is modeled by an extra persisted EXIT;
+        // original Fill history stays immutable and is never UPDATEd.
         let original_count:i64=conn.query_row(
           "SELECT COUNT(*) FROM execution_fills WHERE trade_id='gc-closed'",[],|r|r.get(0)
         ).unwrap();
+        conn.execute("INSERT INTO execution_fills(
+          execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees
+        ) VALUES('gc-corrupt-exit','gc-closed','2026-11-23T08:03:00Z','EXIT','SELL',4099.5,3,0,0)",[]).unwrap();
         assert!(trade_metrics(&conn,"gc-closed").is_err(),
-          "corrupt historical quantity must fail closed rather than calculate false R");
+          "over-exit in legacy journal must fail closed instead of calculating false R");
         let count:i64=conn.query_row(
           "SELECT COUNT(*) FROM execution_fills WHERE trade_id='gc-closed'",[],|r|r.get(0)
         ).unwrap();
-        assert_eq!(count,original_count,"read-only metrics must not rewrite event history");
+        assert_eq!(count,original_count+1,
+          "failed read must neither erase corrupt source events nor change originals");
+        let original_exit_qty:f64=conn.query_row(
+          "SELECT quantity FROM execution_fills WHERE execution_id='gc-exit-2'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(original_exit_qty,1.0);
     }
 }
 
