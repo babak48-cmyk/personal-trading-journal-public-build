@@ -45,7 +45,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2280,6 +2280,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const directionBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'direction'):[];
   const sessionBreakdown=activeWeek?weeklySessionBreakdown(rows,activeWeek):[];
   const weekdayBreakdown=activeWeek?weeklyWeekdayBreakdown(rows,activeWeek):[];
+  const decisionHourBreakdown=activeWeek?weeklyDecisionHourBreakdown(rows,activeWeek):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
   const observedEvidenceBreakdown=activeWeek?weeklyObservedEvidenceBreakdown(rows,activeWeek):[];
   const setupVersionBreakdown=activeWeek?weeklySetupVersionBreakdown(rows,activeWeek):[];
@@ -2322,6 +2323,14 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           {weekdayBreakdown.length===0?<p className="subtle">No executed Trades in this selected week.</p>:<div className="weeklyBreakdown">{weekdayBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
             <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
+            <small>{group.ruleViolationCount} recorded rule violation(s)</small>
+          </div>)}</div>}
+        </details>
+        <details className="guidedMore"><summary>Decision hour · Session timezone (DST-aware)</summary>
+          <p className="subtle">Grouped by the original saved TRADE Decision timestamp in each Session's recorded IANA timezone. This is not Entry, Fill, market opening time or Session phase. Different timezones remain separate. Missing/ambiguous event times are UNKNOWN, never assigned to an hour or treated as zero. No trading edge inferred.</p>
+          {decisionHourBreakdown.length===0?<p className="subtle">No executed Trades in the selected week.</p>:<div className="weeklyBreakdown">{decisionHourBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
+            <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
+            <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown/not attributable':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded rule violation(s)</small>
           </div>)}</div>}
         </details>
