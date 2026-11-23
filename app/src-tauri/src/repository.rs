@@ -3134,6 +3134,9 @@ mod unknown_cost_accounting_integrity_tests {
         assert_eq!(summary.eligible_r_count,1);
         assert_eq!(summary.net_r,Some(1.0));
         assert_eq!(summary.net_pnl,Some(20.0));
+        assert_eq!(summary.max_winning_streak,Some(1));
+        assert_eq!(summary.max_losing_streak,Some(0));
+        assert_eq!(summary.max_realized_r_drawdown,Some(0.0));
     }
 }
 
@@ -3174,6 +3177,11 @@ mod analytics_coverage_truth_tests {
         assert_eq!(summary.eligible_r_count,1);
         assert_eq!(summary.net_pnl,Some(96.0));
         assert_eq!(summary.net_r,Some(0.48));
+        // Two of three CLOSED Trades have unknown initial risk/cost. Their
+        // sequence cannot be skipped as if the filtered sample were complete.
+        assert_eq!(summary.max_winning_streak,None);
+        assert_eq!(summary.max_losing_streak,None);
+        assert_eq!(summary.max_realized_r_drawdown,None);
         assert_eq!(summary.bad_decision_win_count,1,
           "C trade with known net profit belongs in process-quality warning even with unknown risk");
         assert!(summary.small_sample);
