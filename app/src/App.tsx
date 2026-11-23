@@ -33,6 +33,7 @@ import { findClosedReviewTarget } from './reviewBacklogTarget';
 import { AuditedFillCorrectionPanel } from './AuditedFillCorrectionPanel';
 import { AuditedInitialRiskCorrectionPanel } from './AuditedInitialRiskCorrectionPanel';
 import { AuditedSourceCorrectionPanel } from './AuditedSourceCorrectionPanel';
+import { AuditedSourcePriceCorrectionPanel } from './AuditedSourcePriceCorrectionPanel';
 import { LockedTradeReviewSnapshot } from './LockedTradeReviewSnapshot';
 import { SetupPlaybookWorkspace } from './SetupPlaybookWorkspace';
 import { ZoneSetupGuide } from './ZoneSetupGuide';
@@ -2218,6 +2219,14 @@ export function App(){
           {activeTrade.metrics.status==='CLOSED'&&
             <AuditedSourceCorrectionPanel
               key={'source-correction-'+activeTrade.metrics.trade_id}
+              tradeId={activeTrade.metrics.trade_id}
+              readOnly={reviewVerifiedTradeId!==activeTrade.metrics.trade_id||
+                        reviewOwnerTradeId!==activeTrade.metrics.trade_id||
+                        unsavedReviewCapture()}
+              onApplied={()=>{if(active){void localApi.listSessionTrades(active.session_id).then(setSessionTrades).catch(()=>{});}}}/>}
+          {activeTrade.metrics.status==='CLOSED'&&
+            <AuditedSourcePriceCorrectionPanel
+              key={'source-price-correction-'+activeTrade.metrics.trade_id}
               tradeId={activeTrade.metrics.trade_id}
               readOnly={reviewVerifiedTradeId!==activeTrade.metrics.trade_id||
                         reviewOwnerTradeId!==activeTrade.metrics.trade_id||
