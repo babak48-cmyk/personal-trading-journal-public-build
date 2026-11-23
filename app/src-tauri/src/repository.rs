@@ -1289,10 +1289,16 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
     let state=trade_execution_ledger(conn,trade_id,&direction,point_value)?;
     let gross=state.gross_realized;
     let net=if state.unknown_cost_fields==0 {gross.map(|g|g-state.costs)} else {None};
-    let initial_risk:Option<f64>=conn.query_row(
-        "SELECT risk_dollars FROM risk_snapshots WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
-        [trade_id], |r| r.get(0)
+    let initial_raw:Option<(String,Option<f64>)>=conn.query_row(
+        "SELECT risk_snapshot_id,risk_dollars FROM risk_snapshots
+         WHERE trade_id=?1 AND snapshot_type='INITIAL' ORDER BY occurred_at,rowid LIMIT 1",
+        [trade_id], |r| Ok((r.get(0)?,r.get(1)?))
     ).optional()?;
+    let initial_risk=match initial_raw{
+        Some((id,original))=>crate::initial_risk_corrections::effective_initial_risk(
+            conn,&id,original)?.0,
+        None=>None
+    };
     let latest_stop:Option<f64>=conn.query_row(
         "SELECT stop_price FROM risk_snapshots WHERE trade_id=?1 AND stop_price IS NOT NULL ORDER BY occurred_at DESC,rowid DESC LIMIT 1",
         [trade_id], |r| r.get(0)
@@ -1394,12 +1400,18 @@ fn trade_risk_history(conn:&Connection,trade_id:&str)->Result<Vec<RiskSnapshotDt
                 change_reason,was_rule_compliant,provenance
          FROM risk_snapshots WHERE trade_id=?1 ORDER BY COALESCE(occurred_at,''),rowid"
     )?;
-    let items=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
+    let mut items=risk_stmt.query_map([trade_id],|r|Ok(RiskSnapshotDto{
         risk_snapshot_id:r.get(0)?,occurred_at:r.get(1)?,snapshot_type:r.get(2)?,
         stop_price:r.get(3)?,quantity:r.get(4)?,risk_dollars:r.get(5)?,
         change_reason:r.get(6)?,was_rule_compliant:r.get::<_,Option<i64>>(7)?.map(|n|n!=0),
         provenance:r.get(8)?
     }))?.collect::<Result<Vec<_>,_>>()?;
+    // Only the earliest INITIAL record is the R denominator.
+    // Its original SQLite value remains unchanged; display effective audit overlay.
+    if let Some(initial)=items.iter_mut().find(|item|item.snapshot_type=="INITIAL"){
+        initial.risk_dollars=crate::initial_risk_corrections::effective_initial_risk(
+            conn,&initial.risk_snapshot_id,initial.risk_dollars)?.0;
+    }
     Ok(items)
 }
 
