@@ -1,5 +1,16 @@
 import type {JournalTradeRow, MistakeSummary} from './services/localApi';
 
+/** Independent decision-only reads may succeed while executed-Trade analytics
+ * fail. A loaded MISSED row is not evidence that zero Trades existed.
+ * Fail closed on trade-dependent weekly metrics and action commitments. */
+export function weeklyTradeReadiness(
+  loading:boolean,tradeError:string,weekCount:number,
+):'LOADING'|'TRADE_UNAVAILABLE'|'EMPTY'|'READY'{
+  if(loading)return 'LOADING';
+  if(tradeError.trim())return 'TRADE_UNAVAILABLE';
+  return weekCount>0?'READY':'EMPTY';
+}
+
 /** ISO-8601 Monday based on the journal's recorded session DATE, never the OS timezone. */
 export function journalWeekStart(sessionDate:string):string|null{
   if(!/^\d{4}-\d{2}-\d{2}$/.test(sessionDate))return null;
