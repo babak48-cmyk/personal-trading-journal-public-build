@@ -57,6 +57,11 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "custom_field_options"=>"SELECT COUNT(*) FROM custom_field_options",
         "setup_playbook_details"=>"SELECT COUNT(*) FROM setup_playbook_details",
         "setup_evidence_priorities"=>"SELECT COUNT(*) FROM setup_evidence_priorities",
+        // Even a user-defined registry item without any captured journal
+        // event must never be silently replaced by the imported profile.
+        "user_defined_instruments"=>"SELECT COUNT(*) FROM instruments WHERE user_defined=1",
+        "user_defined_setups"=>"SELECT COUNT(*) FROM setups WHERE user_defined=1",
+        "user_defined_level_sources"=>"SELECT COUNT(*) FROM level_source_types WHERE user_defined=1",
         "setup_trade_links"=>"SELECT COUNT(*) FROM setup_trade_links",
         "fill_correction_events"=>"SELECT COUNT(*) FROM fill_correction_events",
         "initial_risk_correction_events"=>"SELECT COUNT(*) FROM initial_risk_correction_events",
@@ -76,6 +81,7 @@ const JOURNAL_EVENT_TABLES:&[&str]=&[
     "custom_field_value_events","custom_field_selection_snapshots",
     "custom_field_definitions","custom_field_options",
     "setup_playbook_details","setup_evidence_priorities",
+    "user_defined_instruments","user_defined_setups","user_defined_level_sources",
     "setup_trade_links","fill_correction_events","initial_risk_correction_events",
     "candidate_source_type_correction_events","candidate_source_price_correction_events",
     "weekly_learning_action_events",
@@ -273,6 +279,31 @@ mod isolated_transfer_tests {
         assert!(ensure_empty_target(&paths).is_err(),
           "a historical playbook definition must block destructive import");
         drop(conn);fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
+    fn destination_user_defined_registries_block_import_even_without_sessions(){
+        for kind in ["instrument","setup","level_source"]{
+            let base=std::env::temp_dir().join(format!("ptj-c-registry-{}-{}",kind,Uuid::new_v4()));
+            let paths=target_paths(&base);
+            let conn=db::open_database(&paths.database()).unwrap();
+            conn.execute(
+              "INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','2026-11-23')",[]
+            ).unwrap();
+            match kind{
+                "instrument"=>{conn.execute(
+                    "INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value,user_defined)
+                     VALUES('i','w','MYMARKET',0.01,10,1)",[]).unwrap();},
+                "setup"=>{conn.execute(
+                    "INSERT INTO setups(setup_id,workspace_id,name,user_defined)
+                     VALUES('custom-setup','w','My setup',1)",[]).unwrap();},
+                _=>{conn.execute(
+                    "INSERT INTO level_source_types(source_type_id,workspace_id,code,label,source_group,user_defined)
+                     VALUES('source-1','w','MY_LEVEL','My custom level','MANUAL',1)",[]).unwrap();},
+            }
+            assert!(ensure_empty_target(&paths).is_err(),
+              "user-defined instrument/setup/level must not be overwritten by import");
+            drop(conn);fs::remove_dir_all(base).unwrap();
+        }
     }
     #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
