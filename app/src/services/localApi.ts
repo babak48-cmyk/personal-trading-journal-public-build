@@ -81,6 +81,30 @@ export type RiskSnapshot = {
 };
 export type SetupAtDecision = {version_id:string;name:string|null;version_number:number|null};
 export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[]; setup_at_decision:SetupAtDecision|null };
+export type HistoricalSourceReadout = {
+  candidate_source_id:string; candidate_revision_id:string;
+  original_source_type_id:string; original_label:string;
+  effective_source_type_id:string; effective_label:string;
+  revision:number; corrected:boolean;
+};
+export type SourceTypeCorrectionRequest = {
+  candidate_source_id:string; expected_effective_type_id:string;
+  expected_revision:number; replacement_type_id:string; reason:string;
+};
+export type SourceTypeCorrectionEvent = {
+  correction_id:string;candidate_source_id:string;revision:number;
+  original_source_type_id:string;previous_source_type_id:string;
+  replacement_source_type_id:string;expected_prior_correction_id:string|null;
+  reason:string;recorded_at_utc:string;actor:string;
+};
+export type SourceTypeCorrectionPreview = {
+  candidate_source_id:string;candidate_revision_id:string;
+  original_source_type_id:string;current_effective_type_id:string;
+  replacement_type_id:string;current_label:string;replacement_label:string;
+  expected_revision:number;related_decision_count:number;
+  related_trade_count:number;reason:string;monetary_result_unchanged:boolean;
+  explicit_confirmation_required:boolean;
+};
 export type InitialRiskCorrectionRequest = {
   risk_snapshot_id:string; expected_effective:number|null; expected_revision:number;
   replacement:number; reason:string;
@@ -286,6 +310,10 @@ export const localApi = {
   linkSetupTrade: (tradeId:string,versionId:string,linkNote:string|null) => invoke<void>('link_setup_trade',{tradeId,versionId,linkNote}),
   setupPlaybookPerformance: () => invoke<SetupPerformance[]>('setup_playbook_performance'),
   listTradeCorrectionHistory: (tradeId:string) => invoke<CorrectionHistoryEvent[]>('list_trade_correction_history',{tradeId}),
+  listTradeHistoricalSources: (tradeId:string) => invoke<HistoricalSourceReadout[]>('list_trade_historical_sources',{tradeId}),
+  previewSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionPreview>('preview_source_type_correction',{input}),
+  recordSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionEvent>('record_source_type_correction',{input}),
+  listTradeSourceTypeCorrections: (tradeId:string) => invoke<SourceTypeCorrectionEvent[]>('list_trade_source_type_corrections',{tradeId}),
   previewInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionPreview>('preview_initial_risk_correction',{input}),
   recordInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionEvent>('record_initial_risk_correction',{input}),
   listInitialRiskCorrections: (tradeId:string) => invoke<InitialRiskCorrectionEvent[]>('list_initial_risk_corrections',{tradeId}),
