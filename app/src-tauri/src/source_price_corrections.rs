@@ -331,6 +331,14 @@ mod tests{
         SET previous_source_price=6000 WHERE candidate_source_id='src';").unwrap();
    assert!(verify_all(&c).is_err(),"corrupted price audit must block backup");
    assert!(source_type_corrections::sources_at_decision(&c,"trade").is_err());
+   // A filtered/exported success receipt must never conceal a broken
+   // historical audit. Ensure failure occurs BEFORE any file is created.
+   assert!(crate::exports::export_csv(&c,&paths,JournalFilterInput::default()).is_err(),
+     "CSV must reject a tampered source-price chain");
+   assert!(crate::exports::export_html(&c,&paths,JournalFilterInput::default()).is_err(),
+     "HTML must reject a tampered source-price chain");
+   assert!(!paths.exports.exists(),
+     "failed audited exports must not leave misleading output files");
  }
 
 }
