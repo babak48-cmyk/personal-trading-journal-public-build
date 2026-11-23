@@ -1014,6 +1014,28 @@ pub fn save_weekly_action(app:AppHandle,input:crate::weekly_actions::SaveWeeklyA
 }
 
 #[tauri::command]
+pub fn preview_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
+ ->Result<crate::initial_risk_corrections::InitialRiskCorrectionPreview,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::initial_risk_corrections::preview(&conn,&input)
+}
+#[tauri::command]
+pub fn record_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
+ ->Result<crate::initial_risk_corrections::InitialRiskCorrectionEvent,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::initial_risk_corrections::record(&mut conn,input)
+}
+#[tauri::command]
+pub fn list_initial_risk_corrections(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::initial_risk_corrections::InitialRiskCorrectionEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::initial_risk_corrections::list_initial_risk_corrections(&conn,&trade_id)
+}
+
+#[tauri::command]
 pub fn is_package_c_demo(app:AppHandle)->bool{
     app.config().identifier=="com.personaltradingjournal.desktop.demo.packagec"
 }
