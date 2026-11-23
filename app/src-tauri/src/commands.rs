@@ -1014,6 +1014,35 @@ pub fn save_weekly_action(app:AppHandle,input:crate::weekly_actions::SaveWeeklyA
 }
 
 #[tauri::command]
+pub fn list_trade_historical_sources(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::source_type_corrections::HistoricalSourceReadout>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::sources_at_decision(&conn,&trade_id)
+}
+#[tauri::command]
+pub fn preview_source_type_correction(app:AppHandle,input:crate::source_type_corrections::SourceTypeCorrectionRequest)
+ ->Result<crate::source_type_corrections::SourceTypeCorrectionPreview,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::preview(&conn,&input)
+}
+#[tauri::command]
+pub fn record_source_type_correction(app:AppHandle,input:crate::source_type_corrections::SourceTypeCorrectionRequest)
+ ->Result<crate::source_type_corrections::SourceTypeCorrectionEvent,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let mut conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::record(&mut conn,input)
+}
+#[tauri::command]
+pub fn list_trade_source_type_corrections(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::source_type_corrections::SourceTypeCorrectionEvent>,AppError>{
+    let paths=AppPaths::from_app(&app)?;
+    let conn=db::open_database(&paths.database())?;
+    crate::source_type_corrections::list_source_corrections_for_trade(&conn,&trade_id)
+}
+
+#[tauri::command]
 pub fn preview_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
  ->Result<crate::initial_risk_corrections::InitialRiskCorrectionPreview,AppError>{
     let paths=AppPaths::from_app(&app)?;
