@@ -1,3 +1,13 @@
+## Latest verified Package C checkpoint — 2026-11-23
+
+The latest independently verified PUBLIC development checkpoint is `PTJ-C8-FILL-CORRECTION-THREE-WAY-PERSISTED-READBACK-2026-11-23`, saved in the existing canonical `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on `feature/ptj-c-transfer-integrity-2026-11-23`. Exact **CI-tested source code SHA** `cb989ffbf00bfd4e3922fae2e05f6f0bd9c0af8e`, followed by **docs-only** checkpoint commit `4b15ae0de4f05dd76e0d53b2ab86fccee3a7bf6d`. The [GitHub workflow 45165570035](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45165570035) completed SUCCESS for both frontend and Rust.
+
+New C8 protection: after an audited historical Fill correction, the app requires matching receipt, exact append-only audit event and independently re-read effective Fill value before declaring a save verified; ambiguous post-commit outcomes remain locked. Source/tests independently read back from GitHub. This is IMPLEMENTED + CI-TESTED, **not Windows-tested or accepted**. The previous manual audited-history recovery and C9 known-cost analytics are retained.
+
+Remaining gates: safe exact authorization for historical timestamp/snapshot/ownership/relationship mutations; complete C9 data-grounded coverage; B26 closed Review A/C Windows readback and GC negative fixtures; controlled B→C backup/rollback/restart integration, isolated Windows DEMO and explicit acceptance. Prior Windows-accepted Package A and B01–B25 remain preserved. No merge, PRIVATE actions, live user database writes or installer. Continue only from live PUBLIC HEAD, never assume an older snapshot is latest.
+
+---
+
 ## Current operational update — 2026-11-23 Package C obstacle removal
 
 **Read this update before the earlier bootstrap snapshot below; bootstrap SHAs are historical.** The **active code branch remains** `feature/ptj-c-transfer-integrity-2026-11-23` (PUBLIC only, draft PR #17 not merged). Newest independently read-back code SHA at this update: `566f81579736d22bfd1c5f1537827164edad0124`; subsequent **docs-only** checkpoint commit on active code branch: `d8a2dad5c31238f0e206f92e78198168ec65fada`. Its detailed canonical checkpoint is `PTJ-C8-C9-OBSTACLE-REMOVAL-2026-11-23` in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the active code branch. Always re-fetch the live HEAD and exact CI; this is an observed historical pointer.
