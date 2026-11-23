@@ -26,7 +26,6 @@ export function AuditedFillCorrectionPanel({
   const [busy,setBusy]=useState(false);
   const requestEpoch=useRef(0);
   const saving=useRef(false);
-  const closed=trade.metrics.status==='CLOSED';
   const editable=auditedFillCorrectionEditable(trade.metrics.status,readOnly,history!==null);
   const selected=trade.fills.find(x=>x.execution_id===executionId);
   const current=selected?(selected[field] as number|null|undefined)??null:null;
