@@ -172,6 +172,18 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     const empty=weeklyThreePartReview(weeklyLearningSnapshot([],'2026-11-09'),[],0,'Investigate');
     expect(empty.setupCandidate).toContain('Do not infer a best setup');
   });
+  it('keeps unavailable decision-only MISSED counts UNKNOWN rather than zero in the three-part review',()=>{
+    const snapshot=weeklyLearningSnapshot([row('only-trade','2026-11-09',{realized_r:1})],'2026-11-09');
+    const notLoaded=weeklyThreePartReview(snapshot,[],null,'Investigate recorded trades');
+    const verifiedZero=weeklyThreePartReview(snapshot,[],0,'Investigate recorded trades');
+    expect(notLoaded.recordedConcern).toContain('MISSED counts unavailable');
+    expect(notLoaded.recordedConcern).toContain('not treat missing decision data as zero');
+    expect(verifiedZero.recordedConcern).toContain('No ranked process issue identified');
+    expect(notLoaded.recordedConcern).not.toBe(verifiedZero.recordedConcern);
+    const higherPriority=weeklyLearningSnapshot([row('violation','2026-11-09',{rule_status:'VIOLATED'})],'2026-11-09');
+    expect(weeklyThreePartReview(higherPriority,[],null,'Check a recorded rule').recordedConcern)
+      .toContain('recorded rule violations');
+  });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
     expect(s.netR).toBeNull();
