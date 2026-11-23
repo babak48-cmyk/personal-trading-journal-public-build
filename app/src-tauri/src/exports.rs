@@ -14,7 +14,21 @@ pub struct ExportResult {
 fn esc_html(s:&str)->String { s.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;").replace('"',"&quot;") }
 fn csv_cell(s:&str)->String { format!("\"{}\"",s.replace('"',"\"\"")) }
 
+/// An export is an evidentiary artifact. Do not write a success-looking CSV
+/// or HTML if even one immutable correction chain in the local journal fails.
+/// Every audit family is checked globally (including rows omitted by filters).
+/// Restore and backup use the same native validators; no historical rewrite.
+fn verify_export_audit_chains(conn:&Connection)->Result<(),AppError>{
+    fill_corrections::verify_all_correction_chains(conn)?;
+    initial_risk_corrections::verify_all_initial_risk_correction_chains(conn)?;
+    source_type_corrections::verify_all_source_correction_chains(conn)?;
+    source_price_corrections::verify_all(conn)?;
+    Ok(())
+}
+
+
 pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)->Result<ExportResult,AppError>{
+    verify_export_audit_chains(conn)?;
     let rows=repository::list_journal_trades(conn,filter.clone())?;
     let a=repository::get_analytics_summary(conn,filter)?;
     // Compute and validate all audit chains before a report is written.
@@ -128,6 +142,7 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
 }
 
 pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)->Result<ExportResult,AppError>{
+    verify_export_audit_chains(conn)?;
     let rows=repository::list_journal_trades(conn,filter)?;
     fs::create_dir_all(&paths.exports)?;
     let created=Utc::now();
