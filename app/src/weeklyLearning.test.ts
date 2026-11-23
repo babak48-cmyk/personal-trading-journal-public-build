@@ -274,6 +274,26 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(weeklyThreePartReview(higherPriority,[],null,'Check a recorded rule').recordedConcern)
       .toContain('recorded rule violations');
   });
+  it('reports largest positive and negative known R only on closed R-eligible trades',()=>{
+    const data=[
+      row('positive','2026-11-09',{realized_r:2.75}),
+      row('positive-small','2026-11-10',{realized_r:0.25}),
+      row('negative','2026-11-11',{realized_r:-1.5}),
+      row('negative-small','2026-11-12',{realized_r:-0.5}),
+      row('breakeven','2026-11-13',{realized_r:0}),
+      row('unknown','2026-11-13',{realized_r:null}),
+      row('open','2026-11-14',{status:'OPEN',realized_r:999}),
+      row('outside','2026-11-02',{realized_r:-999}),
+    ];
+    const snapshot=weeklyLearningSnapshot(data,'2026-11-09');
+    expect(snapshot).toMatchObject({eligibleRCount:5,missingRCount:1,largestWinnerR:2.75,largestLoserR:-1.5});
+    expect(weeklyLearningText(snapshot)).toContain('Largest known closed winner: 2.75R; largest known closed loser: -1.50R');
+    const onlyWins=weeklyLearningSnapshot([row('win','2026-11-09',{realized_r:0.5})],'2026-11-09');
+    expect(onlyWins.largestLoserR).toBeNull();
+    const noEligible=weeklyLearningSnapshot([row('missing','2026-11-09',{realized_r:null})],'2026-11-09');
+    expect(noEligible).toMatchObject({largestWinnerR:null,largestLoserR:null,netR:null});
+    expect(weeklyLearningText(noEligible)).toContain('Largest known closed winner: not recorded; largest known closed loser: not recorded');
+  });
   it('never represents no eligible R or an empty week as zero profit',()=>{
     const s=weeklyLearningSnapshot([row('a','2026-11-10',{realized_r:null})],'2026-11-09');
     expect(s.netR).toBeNull();
