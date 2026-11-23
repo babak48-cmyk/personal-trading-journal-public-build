@@ -3126,6 +3126,62 @@ mod gc_persisted_contract_acceptance_tests {
     }
 
     #[test]
+    fn mixed_or_missing_original_currency_never_produces_a_false_money_total(){
+        let (conn,_)=gc_closed_fixture(false);
+        let initial=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(initial.pnl_currency_status,"SINGLE_CURRENCY");
+        assert_eq!(initial.pnl_currency.as_deref(),Some("USD"));
+        assert!((initial.net_pnl.unwrap()-39.0).abs()<1e-8);
+
+        let other=create_draft_session(&conn,CreateSessionInput{
+            session_date:"2026-11-24".into(),instrument_symbol:"GC".into(),
+            environment:"DEMO".into(),session_label:Some("Isolated synthetic currency test".into()),
+        }).unwrap();
+        conn.execute(
+          "UPDATE sessions SET instrument_currency_snapshot='AUD' WHERE session_id=?1",
+          [&other.session_id]
+        ).unwrap();
+        conn.execute(
+          "INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+           VALUES('second-decision',?1,'2026-11-24T08:00:00Z','TRADE','LONG')",
+          [&other.session_id]
+        ).unwrap();
+        conn.execute(
+          "INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+           VALUES('second-trade','second-decision',?1,'LONG','CLOSED')",
+          [&other.session_id]
+        ).unwrap();
+        conn.execute_batch(
+          "INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+             VALUES('second-entry','second-trade','2026-11-24T08:01:00Z','ENTRY','BUY',4100,1,0,0),
+                   ('second-exit','second-trade','2026-11-24T08:02:00Z','EXIT','SELL',4101,1,0,0);
+           INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,risk_dollars)
+             VALUES('second-risk','second-trade','2026-11-24T08:01:00Z','INITIAL',100);"
+        ).unwrap();
+        let mixed=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(mixed.closed_trade_count,2);
+        assert_eq!(mixed.eligible_net_pnl_count,2);
+        assert_eq!(mixed.pnl_currency_status,"MIXED_CURRENCIES");
+        assert_eq!(mixed.pnl_currency,None);
+        assert_eq!(mixed.net_pnl,None);
+        assert_eq!(mixed.expectancy_pnl,None);
+        assert!(mixed.net_r.is_some(),
+          "unitless eligible net R must remain usable when monetary units differ");
+
+        // A legacy NULL snapshot cannot be silently replaced with the mutable
+        // current instrument currency even if remaining trades are all USD.
+        conn.execute(
+          "UPDATE sessions SET instrument_currency_snapshot=NULL WHERE session_id=?1",
+          [&other.session_id]
+        ).unwrap();
+        let unknown=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(unknown.pnl_currency_status,"UNKNOWN_CURRENCY");
+        assert_eq!(unknown.net_pnl,None);
+        assert_eq!(unknown.expectancy_pnl,None);
+        assert_eq!(crate::db::integrity_check(&conn).unwrap(),"ok");
+    }
+
+    #[test]
     fn gc_persisted_invalid_over_exit_fails_without_mutating_immutable_events(){
         let (conn,_)=gc_closed_fixture(false);
         // Import/legacy corruption is modeled by an extra persisted EXIT;
