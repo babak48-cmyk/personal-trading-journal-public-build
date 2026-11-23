@@ -22,7 +22,7 @@ export function AuditedSourcePriceCorrectionPanel({tradeId,readOnly,onApplied}:{
  const request=():SourcePriceCorrectionRequest|null=>{
    const replacement=Number(price);
    if(readOnly||uncertain||!active||price.trim()===''||
-      !Number.isFinite(replacement)||replacement<=0||reason.trim().length<5)return null;
+      !Number.isFinite(replacement)||reason.trim().length<5)return null;
    return {candidate_source_id:active.candidate_source_id,
       expected_effective_price:active.effective_source_price,
       expected_revision:active.price_correction_revision,
@@ -108,7 +108,7 @@ export function AuditedSourcePriceCorrectionPanel({tradeId,readOnly,onApplied}:{
     {active&&<p className="subtle">Original source price: {active.original_source_price??'Not recorded'}; effective: {active.effective_source_price??'Not recorded'}; historical price correction revision: {active.price_correction_revision}. Zone revision ID: {active.candidate_revision_id}</p>}
     {!readOnly&&!uncertain&&active&&<>
       <label>Historically correct source price
-       <input type="number" step="any" min="0" disabled={busy} value={price}
+       <input type="number" step="any" disabled={busy} value={price}
         onChange={e=>{clear();setPrice(e.target.value);}}/>
       </label>
       <label>Reason for original recording mistake
