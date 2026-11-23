@@ -208,3 +208,52 @@ pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)-
     fs::write(&path,out)?;
     Ok(ExportResult{path:path.to_string_lossy().to_string(),row_count:rows.len(),created_at:created.to_rfc3339()})
 }
+
+
+#[cfg(test)]
+mod decision_only_html_export_tests{
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn html_exports_original_missed_and_no_trade_without_fabricating_trades_r_or_reasons(){
+        let conn=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        conn.execute_batch("
+          INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','now');
+          INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+            VALUES('i-es','w','ES',0.25,50),('i-gc','w','GC',0.1,100);
+          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+            VALUES('s-es','w','i-es','2026-11-23','DEMO','now','CLOSED','now','now'),
+                  ('s-gc','w','i-gc','2026-11-23','DEMO','now','CLOSED','now','now');
+          INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,reason_code,reason_note)
+            VALUES('no','s-es','2026-11-23T10:00:00Z','NO_TRADE','NO_CONFIRMATION',NULL),
+                  ('missed','s-es','2026-11-23T10:01:00Z','MISSED',NULL,'Opportunity needs review'),
+                  ('other','s-gc','2026-11-23T10:02:00Z','MISSED',NULL,NULL);
+        ").unwrap();
+        let root=std::env::temp_dir().join(format!("ptj-decision-export-{}",uuid::Uuid::new_v4()));
+        let paths=AppPaths{
+          data:root.join("data"),attachments:root.join("attachments"),
+          backups:root.join("backups"),exports:root.join("exports"),
+          logs:root.join("logs"),root:root.clone()
+        };
+        let report=export_html(&conn,&paths,JournalFilterInput{
+          instrument_symbol:Some("ES".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(report.row_count,0,"decisions cannot inflate executed trade count");
+        let html=std::fs::read_to_string(&report.path).unwrap();
+        assert!(html.contains("Recorded NO_TRADE / MISSED decisions"));
+        assert!(html.contains("<span>NO_TRADE decisions</span><b>1</b>"));
+        assert!(html.contains("<span>MISSED decisions</span><b>1</b>"));
+        assert!(html.contains("<span>Decision reason not recorded</span><b>0</b>"));
+        assert!(html.contains("NO_CONFIRMATION"));
+        assert!(html.contains("Free-text reason (not classified)"));
+        assert!(!html.contains("Opportunity needs review"),
+          "free-text decision notes must not be rendered as invented structured reason");
+        assert!(!html.contains("<span>MISSED decisions</span><b>2</b>"),
+          "GC decisions cannot enter an ES-only report");
+        assert!(html.contains("<span>R sample / closed</span><b>0/0</b>"));
+        assert!(html.contains("<span>Win rate</span><b>—</b>"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
