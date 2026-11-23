@@ -336,6 +336,20 @@ mod isolated_transfer_tests {
         }
     }
     #[test]
+    fn refuses_source_backup_inside_destination_even_in_restore_staging(){
+        let base=std::env::temp_dir().join(format!("ptj-c-self-source-{}",Uuid::new_v4()));
+        let paths=target_paths(&base);
+        let staging=paths.root.join("restore-staging");
+        fs::create_dir_all(&staging).unwrap();
+        let source=staging.join("original-B-backup.zip");
+        fs::write(&source,b"original user archive bytes").unwrap();
+        assert!(preview(&paths,&source).is_err(),
+          "source inside destination must be rejected before staging cleanup");
+        assert_eq!(fs::read(&source).unwrap(),b"original user archive bytes",
+          "refused source must not be deleted by staging preparation");
+        fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
         let base=std::env::temp_dir().join(format!("ptj-bc-copy-{}",Uuid::new_v4()));
         let source=base.join("old-b");
@@ -400,6 +414,28 @@ mod isolated_transfer_tests {
         assert_eq!(observed.plan_revisions,0);
         assert_eq!(observed.evidence_events,0);
         assert_eq!(observed.weekly_learning_action_events,0);
+        // The database is identical, but the attachment differs. A database-
+        // only preview hash could not distinguish these two valid ZIP files.
+        let changed_archive=source.join("B-TEST-changed-attachment.zip");
+        let mut changed=ZipWriter::new(File::create(&changed_archive).unwrap());
+        changed.start_file("database.sqlite",options).unwrap();
+        changed.write_all(&old_bytes).unwrap();
+        changed.start_file("attachments/example.txt",options).unwrap();
+        changed.write_all(b"different post-preview attachment").unwrap();
+        changed.start_file("backup_info.json",options).unwrap();
+        changed.write_all(serde_json::json!({
+          "backup_version":1,"created_at_utc":"2026-11-22T12:00:00Z",
+          "schema_version":11,"database_sha256":observed.database_sha256,
+          "attachment_count":1
+        }).to_string().as_bytes()).unwrap();
+        changed.finish().unwrap();
+        let changed_preview=preview(&new_c,&changed_archive).unwrap();
+        assert_eq!(changed_preview.database_sha256,observed.database_sha256);
+        assert_ne!(changed_preview.archive_sha256,observed.archive_sha256);
+        assert!(import_into_empty(&new_c,&changed_archive,&observed.archive_sha256).is_err(),
+          "changed attachments must fail against the exact preflight archive hash");
+        assert!(ensure_empty_target(&new_c).is_ok(),
+          "a changed archive cannot mutate the target");
         let receipt=import_into_empty(&new_c,&backup,&observed.archive_sha256).unwrap();
         assert_eq!(receipt.integrity,"ok");
         assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
