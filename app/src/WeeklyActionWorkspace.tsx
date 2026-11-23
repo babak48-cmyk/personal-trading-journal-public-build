@@ -86,7 +86,7 @@ export function WeeklyActionWorkspace({weekStart,appliedFilter,suggestedAction}:
     <summary>Save one weekly improvement and check it next week · optional</summary>
     <p className="subtle">One explicit personal commitment for the selected Monday week and applied filters. Follow-ups append new events; saved decisions are never overwritten. Suggestions are not validated trading edges.</p>
     <p className="subtle">Week {weekStart} · exact applied filter snapshot. Changing filters selects a different review history.</p>
-    {history===null?<p role="status">Reading saved weekly actions…</p>:<>
+    {history===null?<div><p role="status">{uncertain?"Saved weekly actions could not be verified. Writes remain blocked.":"Reading saved weekly actions…"}</p><button type="button" disabled={busy} onClick={()=>void reread()}>Re-read saved history</button></div>:<>
       {history.length>0&&<div className="weeklyBreakdown">{history.map(event=><div className="weeklyBreakdownRow" key={event.action_event_id}>
         <strong>{event.event_kind==='COMMITMENT'?'Committed improvement':'Follow-up'} · {event.recorded_at_utc}</strong>
         <span>{event.action_text}</span>{event.note&&<small>{event.note}</small>}
