@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {auditedFillCorrectionEditable} from './auditedCorrectionReadiness';
+import {verifiedFillCorrectionReadback} from './fillCorrectionReadback';
 import {localApi, type TradeDetail, type FillCorrectionField,
   type FillCorrectionInput, type FillCorrectionPreview,
   type CorrectionHistoryEvent} from './services/localApi';
@@ -56,8 +57,8 @@ export function AuditedFillCorrectionPanel({
       if(fresh.metrics.trade_id!==trade.metrics.trade_id){
         throw new Error('Audit reload returned a different Trade identity.');
       }
-      setHistory(verified);
       onApplied(fresh);
+      setHistory(verified);
       setMessage('Fill audit and effective Trade values independently re-read. Review the refreshed Fill before any new correction.');
     }catch(e){
       if(epoch===requestEpoch.current)
@@ -124,12 +125,11 @@ export function AuditedFillCorrectionPanel({
         localApi.listTradeCorrectionHistory(trade.metrics.trade_id),
       ]);
       if(epoch!==requestEpoch.current)return;
-      if(fresh.metrics.trade_id!==trade.metrics.trade_id||
-         !audit.some(x=>x.correction_id===receipt.correction_id)){
-        throw new Error('Correction response could not be independently read back.');
+      if(!verifiedFillCorrectionReadback(trade.metrics.trade_id,input,receipt,audit,fresh)){
+        throw new Error('Receipt, immutable audit event, and effective Fill disagree; correction remains locked.');
       }
-      setHistory(audit);
       onApplied(fresh);
+      setHistory(audit);
       setPreview(null);setPreviewKey('');setReplacementInput('');
       setReason('');setReplacementUnknown(false);
       setMessage('Saved and verified correction '+receipt.correction_id+'. Original Fill preserved.');
