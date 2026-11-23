@@ -2,7 +2,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension};
 use crate::error::AppError;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 13;
+pub const CURRENT_SCHEMA_VERSION: u32 = 14;
 const MIGRATION_001: &str = include_str!("../migrations/001_initial.sql");
 const MIGRATION_002: &str = include_str!("../migrations/002_decision_workflow.sql");
 const MIGRATION_003: &str = include_str!("../migrations/003_execution_core.sql");
@@ -16,6 +16,7 @@ const MIGRATION_010: &str = include_str!("../migrations/010_audited_fill_correct
 const MIGRATION_011: &str = include_str!("../migrations/011_setup_playbook.sql");
 const MIGRATION_012: &str = include_str!("../migrations/012_weekly_learning_action_events.sql");
 const MIGRATION_013: &str = include_str!("../migrations/013_initial_risk_corrections.sql");
+const MIGRATION_014: &str = include_str!("../migrations/014_candidate_source_type_corrections.sql");
 
 pub fn open_database(path: &Path) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
@@ -120,6 +121,13 @@ pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
         tx.execute("UPDATE schema_meta SET schema_version=13 WHERE id=1", [])?;
         tx.commit()?;
     }
+    let version: u32 = conn.query_row("SELECT schema_version FROM schema_meta WHERE id=1", [], |r| r.get(0))?;
+    if version < 14 {
+        let tx=conn.unchecked_transaction()?;
+        tx.execute_batch(MIGRATION_014).map_err(|_|AppError::Migration(14))?;
+        tx.execute("UPDATE schema_meta SET schema_version=14 WHERE id=1", [])?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -171,7 +179,7 @@ mod custom_field_schema_tests {
         let before_sessions:i64 = conn.query_row("SELECT count(*) FROM sessions",[],|r|r.get(0)).unwrap();
         let before_trades:i64 = conn.query_row("SELECT count(*) FROM trades",[],|r|r.get(0)).unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),13);
+        assert_eq!(schema_version(&conn).unwrap(),14);
         assert_eq!(conn.query_row("SELECT session_date FROM sessions WHERE session_id='s-test'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-10-15");
         assert_eq!(conn.query_row("SELECT direction FROM trades WHERE trade_id='t-test'",[],|r|r.get::<_,String>(0)).unwrap(),"LONG");
         assert_eq!(conn.query_row("SELECT price,commission FROM execution_fills WHERE execution_id='fill-test'",[],|r|Ok((r.get::<_,f64>(0)?,r.get::<_,f64>(1)?))).unwrap(),before_fill);
@@ -180,7 +188,7 @@ mod custom_field_schema_tests {
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),13);
+        assert_eq!(schema_version(&conn).unwrap(),14);
     }
     #[test]
     fn custom_field_schema_v9_transaction_failure_rolls_back_on_disposable_v8() {
@@ -271,7 +279,7 @@ mod audited_correction_migration_gate_tests {
             [],|r|r.get(0)).unwrap();
         assert_eq!(new_tables,0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),13);
+        assert_eq!(schema_version(&conn).unwrap(),14);
         assert_eq!(conn.query_row("SELECT price FROM execution_fills WHERE execution_id='f'",[],|r|r.get::<_,f64>(0)).unwrap(),5000.0);
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
@@ -314,7 +322,7 @@ mod setup_playbook_v11_migration_tests {
            "SELECT COUNT(*) FROM sqlite_master WHERE name='setup_playbook_details'",[],|r|r.get(0)).unwrap();
         assert_eq!(details,0);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(schema_version(&c).unwrap(),14);
         let saved:String=c.query_row("SELECT setup_version_id FROM setup_versions WHERE setup_id='original-setup'",[],
             |r|r.get(0)).unwrap();
         assert_eq!(saved,"original-version");
@@ -358,11 +366,11 @@ mod weekly_action_schema_v12_tests {
     fn v11_package_b_session_survives_v12_migration_idempotently(){
         let c=v11_database();
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(schema_version(&c).unwrap(),14);
         assert_eq!(c.query_row("SELECT session_date FROM sessions WHERE session_id='s'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-11-22");
         assert_eq!(c.query_row("SELECT count(*) FROM weekly_learning_action_events",[],|r|r.get::<_,i64>(0)).unwrap(),0);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(schema_version(&c).unwrap(),14);
         assert_eq!(integrity_check(&c).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
     }
@@ -383,7 +391,7 @@ mod weekly_action_schema_v12_tests {
         assert_eq!(table_count,0);
         assert_eq!(c.query_row("SELECT COUNT(*) FROM sessions",[],|r|r.get::<_,i64>(0)).unwrap(),1);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(schema_version(&c).unwrap(),14);
         assert_eq!(integrity_check(&c).unwrap(),"ok");
     }
 }
@@ -439,9 +447,9 @@ mod initial_risk_schema_v13_tests {
         let original:f64=c.query_row("SELECT risk_dollars FROM risk_snapshots WHERE risk_snapshot_id='r'",[],|r|r.get(0)).unwrap();
         assert_eq!(original,100.0);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(schema_version(&c).unwrap(),14);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(schema_version(&c).unwrap(),14);
         assert_eq!(c.query_row("SELECT risk_dollars FROM risk_snapshots WHERE risk_snapshot_id='r'",[],|r|r.get::<_,f64>(0)).unwrap(),100.0);
         assert_eq!(integrity_check(&c).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
