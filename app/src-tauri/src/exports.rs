@@ -30,7 +30,13 @@ fn verify_export_audit_chains(conn:&Connection)->Result<(),AppError>{
 pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)->Result<ExportResult,AppError>{
     verify_export_audit_chains(conn)?;
     let rows=repository::list_journal_trades(conn,filter.clone())?;
-    let a=repository::get_analytics_summary(conn,filter)?;
+    let a=repository::get_analytics_summary(conn,filter.clone())?;
+    // Decision-only records cannot be inferred from the Trade table.
+    // Reuse the same source and approved filter semantics as Analytics:
+    // only date/instrument apply to NO_TRADE/MISSED, never trade-only
+    // direction, quality, evidence or level source filters.
+    let decision_rows=repository::list_decision_only_analytics(conn,filter.clone())?;
+    let reason_rows=repository::list_decision_reason_analytics(conn,filter)?;
     // Compute and validate all audit chains before a report is written.
     // No correction history may be silently dropped from effective-value reports.
     let mut audits:Vec<(String,Vec<CorrectionHistoryEvent>)>=Vec::new();
@@ -72,6 +78,45 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
             esc_html(&r.session_date),esc_html(&r.instrument_symbol),esc_html(&r.direction),esc_html(&r.status),esc_html(r.candidate_label.as_deref().unwrap_or("—")),
             esc_html(&r.level_sources.join(" · ")),esc_html(r.decision_quality.as_deref().unwrap_or("—")),esc_html(&r.rule_status),esc_html(&r.mistakes.join(" · ")),
             r.realized_r.map(|v|format!("{:.2}R",v)).unwrap_or("—".into()),r.net_realized_pnl.map(|v|format!("${:.2}",v)).unwrap_or("—".into())))
+    }
+    html.push_str("</tbody></table>");
+    // Decision-only events are NOT Trades: no fabricated fills, P&L, R or
+    // validity classification. Preserve separate sample and filter scope.
+    let no_trade_total:i64=decision_rows.iter().map(|d|d.no_trade_count).sum();
+    let missed_total:i64=decision_rows.iter().map(|d|d.missed_count).sum();
+    let reason_unknown_total:i64=decision_rows.iter().map(|d|d.reason_missing_count).sum();
+    html.push_str("<h2>Recorded NO_TRADE / MISSED decisions (not executed trades)</h2>");
+    html.push_str("<p>Counts are original saved Decision events, not hypothetical fills, missed profits or proof of a valid opportunity. Only session date and instrument filters apply here; trade-only filters do not narrow these independent counts. No R or P&amp;L is assigned.</p>");
+    html.push_str("<div class='metrics'>");
+    html.push_str(&metric("NO_TRADE decisions",no_trade_total.to_string()));
+    html.push_str(&metric("MISSED decisions",missed_total.to_string()));
+    html.push_str(&metric("Decision reason not recorded",reason_unknown_total.to_string()));
+    html.push_str("</div>");
+    html.push_str("<table><thead><tr><th>Session date</th><th>Instrument</th><th>NO_TRADE</th><th>MISSED</th><th>Reasons not recorded</th></tr></thead><tbody>");
+    for d in &decision_rows{
+      html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+        esc_html(&d.session_date),esc_html(&d.instrument_symbol),
+        d.no_trade_count,d.missed_count,d.reason_missing_count));
+    }
+    if decision_rows.is_empty(){
+      html.push_str("<tr><td colspan='5'>No recorded NO_TRADE/MISSED decisions under the date/instrument filters.</td></tr>");
+    }
+    html.push_str("</tbody></table>");
+    html.push_str("<h3>Original decision reason categories</h3>");
+    html.push_str("<p>Structured codes are preserved as recorded. Free-text-only explanations are not inferred or assigned a fabricated code.</p>");
+    html.push_str("<table><thead><tr><th>Date</th><th>Instrument</th><th>Decision</th><th>Recorded reason category</th><th>Count</th></tr></thead><tbody>");
+    for d in &reason_rows{
+      let category=match d.reason_code.as_str(){
+        "[FREE_TEXT_ONLY]"=>"Free-text reason (not classified)",
+        "[NO_REASON]"=>"Reason not recorded",
+        other=>other
+      };
+      html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+        esc_html(&d.session_date),esc_html(&d.instrument_symbol),
+        esc_html(&d.decision_type),esc_html(category),d.decision_count));
+    }
+    if reason_rows.is_empty(){
+      html.push_str("<tr><td colspan='5'>No recorded decision reason groups for the selected date/instrument filters.</td></tr>");
     }
     html.push_str("</tbody></table>");
     html.push_str("<h2>Audited corrections</h2><p>Trade results above use effective recorded values. Every correction retains the original immutable execution event, the previous and replacement values, reason and timestamp. Original values are never rewritten.</p>");
