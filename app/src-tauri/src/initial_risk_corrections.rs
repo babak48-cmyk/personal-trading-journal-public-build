@@ -238,5 +238,20 @@ mod tests{
         assert!(c.execute("DELETE FROM initial_risk_correction_events",[]).is_err());
         assert_eq!(db::integrity_check(&c).unwrap(),"ok");
         assert_eq!(db::foreign_key_violation_count(&c).unwrap(),0);
+        let root=std::env::temp_dir().join(format!("ptj-risk-export-{}",Uuid::new_v4()));
+        let paths=crate::paths::AppPaths{
+          data:root.join("data"),attachments:root.join("attachments"),
+          backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs"),
+          root:root.clone()
+        };
+        let csv=crate::exports::export_csv(&c,&paths,crate::repository::JournalFilterInput::default()).unwrap();
+        let html=crate::exports::export_html(&c,&paths,crate::repository::JournalFilterInput::default()).unwrap();
+        let csv_text=std::fs::read_to_string(csv.path).unwrap();
+        let html_text=std::fs::read_to_string(html.path).unwrap();
+        assert!(csv_text.contains("audited_initial_risk_correction_count"));
+        assert!(csv_text.contains("Risk entry was double size"));
+        assert!(html_text.contains("Audited INITIAL risk-dollar corrections"));
+        assert!(html_text.contains("Risk entry was double size"));
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
