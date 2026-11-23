@@ -28,12 +28,13 @@ pub struct DemoTransferPreview {
 }
 
 fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
-    // Only static table names owned by this module. Never compose from UI.
+    // Strict static allowlist; no unchecked table identifier comes from the UI.
     let sql=match table{
         "sessions"=>"SELECT COUNT(*) FROM sessions",
         "trades"=>"SELECT COUNT(*) FROM trades",
         "candidates"=>"SELECT COUNT(*) FROM candidates",
         "candidate_revisions"=>"SELECT COUNT(*) FROM candidate_revisions",
+        "candidate_status_events"=>"SELECT COUNT(*) FROM candidate_status_events",
         "candidate_sources"=>"SELECT COUNT(*) FROM candidate_sources",
         "candidate_decisions"=>"SELECT COUNT(*) FROM candidate_decisions",
         "session_plan_revisions"=>"SELECT COUNT(*) FROM session_plan_revisions",
@@ -41,6 +42,15 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "risk_snapshots"=>"SELECT COUNT(*) FROM risk_snapshots",
         "execution_fills"=>"SELECT COUNT(*) FROM execution_fills",
         "trade_reviews"=>"SELECT COUNT(*) FROM trade_reviews",
+        "session_reviews"=>"SELECT COUNT(*) FROM session_reviews",
+        "attachments"=>"SELECT COUNT(*) FROM attachments",
+        "trade_mistakes"=>"SELECT COUNT(*) FROM trade_mistakes",
+        "session_pre_states"=>"SELECT COUNT(*) FROM session_pre_states",
+        "trade_rule_checks"=>"SELECT COUNT(*) FROM trade_rule_checks",
+        "rule_assessments"=>"SELECT COUNT(*) FROM rule_assessments",
+        "custom_field_value_events"=>"SELECT COUNT(*) FROM custom_field_value_events",
+        "custom_field_selection_snapshots"=>"SELECT COUNT(*) FROM custom_field_selection_snapshots",
+        "setup_trade_links"=>"SELECT COUNT(*) FROM setup_trade_links",
         "fill_correction_events"=>"SELECT COUNT(*) FROM fill_correction_events",
         "initial_risk_correction_events"=>"SELECT COUNT(*) FROM initial_risk_correction_events",
         "candidate_source_type_correction_events"=>"SELECT COUNT(*) FROM candidate_source_type_correction_events",
@@ -49,25 +59,27 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
     };
     Ok(conn.query_row(sql,[],|r|r.get(0))?)
 }
+const JOURNAL_EVENT_TABLES:&[&str]=&[
+    "sessions","trades","candidates","candidate_revisions",
+    "candidate_status_events","candidate_sources","candidate_decisions",
+    "session_plan_revisions","evidence_observations","risk_snapshots",
+    "execution_fills","trade_reviews","session_reviews","attachments",
+    "trade_mistakes","session_pre_states","trade_rule_checks","rule_assessments",
+    "custom_field_value_events","custom_field_selection_snapshots",
+    "setup_trade_links","fill_correction_events","initial_risk_correction_events",
+    "candidate_source_type_correction_events","weekly_learning_action_events",
+];
 fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     let conn=db::open_database(&paths.database())?;
-    // A partially populated profile is NOT empty even if it has no Trade.
-    // Check all workflow-owned records: replacing a draft Zone, Decision or
-    // evidence history would also be destructive. Registry/settings rows
-    // deliberately do not count as journal events.
-    if count(&conn,"sessions")?>0||count(&conn,"trades")?>0||
-       count(&conn,"candidates")?>0||count(&conn,"candidate_revisions")?>0||
-       count(&conn,"candidate_sources")?>0||count(&conn,"candidate_decisions")?>0||
-       count(&conn,"session_plan_revisions")?>0||
-       count(&conn,"evidence_observations")?>0||
-       count(&conn,"risk_snapshots")?>0||
-       count(&conn,"execution_fills")?>0||count(&conn,"trade_reviews")?>0||
-       count(&conn,"fill_correction_events")?>0||
-       count(&conn,"initial_risk_correction_events")?>0||
-       count(&conn,"candidate_source_type_correction_events")?>0||
-       count(&conn,"weekly_learning_action_events")?>0 {
-       return Err(AppError::Validation(
-         "Package C destination has journal data. Transfer only to an empty, separate DEMO profile; no overwrite permitted.".into()));
+    // Refuse ALL previously captured journal history, including draft-only
+    // records, unattached metadata and per-trade action events. An empty Trade
+    // list alone does not establish an empty destination. Static registries
+    // and default Settings are not treated as events.
+    for table in JOURNAL_EVENT_TABLES{
+        if count(&conn,table)?>0{
+            return Err(AppError::Validation(format!(
+              "Package C destination already contains journal data in {table}; transfer requires an empty, separate DEMO profile. No overwrite permitted.")));
+        }
     }
     if paths.attachments.exists()&&
        std::fs::read_dir(&paths.attachments)?.next().is_some(){
@@ -193,6 +205,20 @@ mod isolated_transfer_tests {
             c.execute("DELETE FROM sessions WHERE environment=?1",[unknown]).unwrap();
         }
         assert!(require_test_sessions(&c).is_ok());
+    }
+    #[test]
+    fn destination_with_attachment_metadata_but_no_sessions_is_not_empty(){
+        let base=std::env::temp_dir().join(format!("ptj-c-nonempty-{}",Uuid::new_v4()));
+        let paths=target_paths(&base);
+        let conn=db::open_database(&paths.database()).unwrap();
+        conn.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','2026-11-23')",[]).unwrap();
+        conn.execute(
+          "INSERT INTO attachments(attachment_id,workspace_id,owner_type,owner_id,stage,storage_key,created_at)
+           VALUES('a','w','SESSION','historical-owner','OTHER','test-key','2026-11-23')",[]
+        ).unwrap();
+        assert!(ensure_empty_target(&paths).is_err(),
+          "metadata-only history must block destructive import");
+        drop(conn);fs::remove_dir_all(base).unwrap();
     }
     #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
