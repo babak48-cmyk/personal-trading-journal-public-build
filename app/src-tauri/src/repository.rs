@@ -2997,6 +2997,99 @@ mod chronological_trade_accounting_tests {
 }
 
 #[cfg(test)]
+mod gc_persisted_contract_acceptance_tests {
+    use super::*;
+
+    fn gc_closed_fixture(unknown_entry_fee:bool)->(Connection,String) {
+        let conn=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        let session=create_draft_session(&conn,CreateSessionInput{
+            session_date:"2026-11-23".into(),instrument_symbol:"GC".into(),
+            environment:"DEMO".into(),session_label:Some("GC isolated cost acceptance".into()),
+        }).unwrap();
+        conn.execute("INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+          VALUES('gc-decision',?1,'2026-11-23T08:00:00Z','TRADE','LONG')",[&session.session_id]).unwrap();
+        conn.execute("INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+          VALUES('gc-closed','gc-decision',?1,'LONG','CLOSED')",[&session.session_id]).unwrap();
+        let fees=if unknown_entry_fee{"NULL"}else{"1.0"};
+        conn.execute_batch(&format!(
+          "INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+           VALUES ('gc-entry','gc-closed','2026-11-23T08:00:01Z','ENTRY','BUY',4100.0,2,4.0,{fees}),
+                  ('gc-exit-1','gc-closed','2026-11-23T08:01:00Z','EXIT','SELL',4100.7,1,2.0,1.0),
+                  ('gc-exit-2','gc-closed','2026-11-23T08:02:00Z','EXIT','SELL',4099.8,1,2.0,1.0);
+           INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars)
+           VALUES('gc-risk','gc-closed','2026-11-23T08:00:01Z','INITIAL',4099.5,2,100.0);"
+        )).unwrap();
+        (conn,session.session_id)
+    }
+
+    #[test]
+    fn gc_persisted_partial_exits_have_correct_contract_ticks_net_cost_and_r(){
+        let (conn,session_id)=gc_closed_fixture(false);
+        let spec=instrument_spec_for_session(&conn,&session_id).unwrap();
+        assert_eq!(spec,(0.1,100.0));
+        let metrics=trade_metrics(&conn,"gc-closed").unwrap();
+        assert_eq!(metrics.status,"CLOSED");
+        assert_eq!(metrics.open_quantity,0.0);
+        assert_eq!(metrics.total_entry_quantity,2.0);
+        assert_eq!(metrics.total_exit_quantity,2.0);
+        assert!((metrics.gross_realized_pnl.unwrap()-50.0).abs()<1e-8);
+        // Total known commissions: 4+2+2 = 8; fees: 1+1+1 = 3.
+        assert!((metrics.net_realized_pnl.unwrap()-39.0).abs()<1e-8);
+        assert!((metrics.realized_r.unwrap()-0.39).abs()<1e-8);
+        let summary=get_analytics_summary(&conn,JournalFilterInput{
+            instrument_symbol:Some("GC".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(summary.closed_trade_count,1);
+        assert_eq!(summary.eligible_net_pnl_count,1);
+        assert_eq!(summary.eligible_r_count,1);
+        assert!((summary.net_pnl.unwrap()-39.0).abs()<1e-8);
+        assert!((summary.net_r.unwrap()-0.39).abs()<1e-8);
+        assert_eq!(summary.max_winning_streak,Some(1));
+        assert_eq!(summary.max_losing_streak,Some(0));
+        assert_eq!(summary.max_realized_r_drawdown,Some(0.0));
+        assert_eq!(crate::db::integrity_check(&conn).unwrap(),"ok");
+    }
+
+    #[test]
+    fn gc_unknown_fee_remains_unknown_in_net_pnl_r_and_chronological_analytics(){
+        let (conn,_)=gc_closed_fixture(true);
+        let metrics=trade_metrics(&conn,"gc-closed").unwrap();
+        assert!((metrics.gross_realized_pnl.unwrap()-50.0).abs()<1e-8);
+        assert_eq!(metrics.net_realized_pnl,None);
+        assert_eq!(metrics.realized_r,None);
+        let summary=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(summary.closed_trade_count,1);
+        assert_eq!(summary.eligible_net_pnl_count,0);
+        assert_eq!(summary.eligible_r_count,0);
+        assert_eq!(summary.net_pnl,None);
+        assert_eq!(summary.net_r,None);
+        assert_eq!(summary.max_winning_streak,None);
+        assert_eq!(summary.max_losing_streak,None);
+        assert_eq!(summary.max_realized_r_drawdown,None);
+        let stored_fees:Option<f64>=conn.query_row(
+          "SELECT fees FROM execution_fills WHERE execution_id='gc-entry'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(stored_fees,None,"UNKNOWN fee was not silently stored as zero");
+    }
+
+    #[test]
+    fn gc_persisted_invalid_over_exit_fails_without_mutating_immutable_events(){
+        let (conn,_)=gc_closed_fixture(false);
+        conn.execute("UPDATE execution_fills SET quantity=3.0 WHERE execution_id='gc-exit-2'",[]).unwrap();
+        let original_count:i64=conn.query_row(
+          "SELECT COUNT(*) FROM execution_fills WHERE trade_id='gc-closed'",[],|r|r.get(0)
+        ).unwrap();
+        assert!(trade_metrics(&conn,"gc-closed").is_err(),
+          "corrupt historical quantity must fail closed rather than calculate false R");
+        let count:i64=conn.query_row(
+          "SELECT COUNT(*) FROM execution_fills WHERE trade_id='gc-closed'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(count,original_count,"read-only metrics must not rewrite event history");
+    }
+}
+
+#[cfg(test)]
 mod execution_sqlite_reconciliation_tests {
     use super::*;
 
