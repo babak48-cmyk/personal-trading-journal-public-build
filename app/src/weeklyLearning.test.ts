@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -17,6 +17,32 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(weeklyTradeReadiness(true,'Trade read failed',1)).toBe('LOADING');
     expect(weeklyTradeReadiness(false,'',1)).toBe('READY');
     expect(weeklyTradeReadiness(false,'',0)).toBe('EMPTY');
+  });
+
+  it('groups only explicit zoned Decision timestamps, preserving DST and timezone identity',()=>{
+    expect(localDecisionHour('2026-11-09T00:30:00Z','Australia/Sydney')).toBe('11');
+    expect(localDecisionHour('2026-06-09T00:30:00Z','Australia/Sydney')).toBe('10');
+    expect(localDecisionHour('2026-11-09T00:30:00Z','UTC')).toBe('00');
+    expect(localDecisionHour('2026-11-09T11:30:00+11:00','Australia/Sydney')).toBe('11');
+    expect(localDecisionHour('2026-11-09T00:30:00','Australia/Sydney')).toBeNull();
+    expect(localDecisionHour('2026-11-09','Australia/Sydney')).toBeNull();
+    expect(localDecisionHour('unknown','Australia/Sydney')).toBeNull();
+    expect(localDecisionHour('2026-11-09T00:30:00Z','Invalid/Zone')).toBeNull();
+    expect(localDecisionHour('2026-11-09T00:30:00Z',null)).toBeNull();
+
+    const records=[
+      row('sydney','2026-11-09',{decision_occurred_at:'2026-11-09T00:30:00Z',session_timezone_id:'Australia/Sydney',realized_r:2}),
+      row('sydney-loss','2026-11-09',{decision_occurred_at:'2026-11-09T00:45:00Z',session_timezone_id:'Australia/Sydney',realized_r:-1}),
+      row('utc','2026-11-09',{decision_occurred_at:'2026-11-09T00:30:00Z',session_timezone_id:'UTC',realized_r:null}),
+      row('missing','2026-11-09',{decision_occurred_at:null,session_timezone_id:'Australia/Sydney',realized_r:99,rule_status:'VIOLATED'}),
+      row('legacy-unknown-zone','2026-11-09',{decision_occurred_at:'2026-11-09T00:30:00Z',session_timezone_id:null,realized_r:100}),
+      row('outside','2026-11-02',{decision_occurred_at:'2026-11-09T00:30:00Z',session_timezone_id:'UTC',realized_r:999}),
+    ];
+    expect(weeklyDecisionHourBreakdown(records,'2026-11-09')).toEqual([
+      {label:'Australia/Sydney · 11:00–11:59',tradeCount:2,closedCount:2,eligibleRCount:2,netR:1,ruleViolationCount:0},
+      {label:'UTC · 00:00–00:59',tradeCount:1,closedCount:1,eligibleRCount:0,netR:null,ruleViolationCount:0},
+      {label:'Unknown recorded Decision time / Session zone',tradeCount:2,closedCount:2,eligibleRCount:0,netR:null,ruleViolationCount:1},
+    ]);
   });
 
   it('derives weekday only from valid recorded Session dates across Monday-Sunday',()=>{
