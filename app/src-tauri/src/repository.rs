@@ -3324,12 +3324,17 @@ mod analytics_coverage_truth_tests {
                       ('f32','t3','2026-11-23T10:02:00Z','EXIT','SELL',7001,1,1,0);
             INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,risk_dollars)
                 VALUES('r1','t1','2026-11-23T08:01:00Z','INITIAL',100);").unwrap();
+        // Explicit historical currency snapshot: P&L is in original USD,
+        // never inferred from a mutable current instrument registry.
+        db.execute("UPDATE sessions SET instrument_currency_snapshot='USD' WHERE session_id='s'",[]).unwrap();
         let summary=get_analytics_summary(&db,JournalFilterInput::default()).unwrap();
         assert_eq!(summary.trade_count,3);
         assert_eq!(summary.closed_trade_count,3);
         assert_eq!(summary.eligible_net_pnl_count,2);
         assert_eq!(summary.eligible_r_count,1);
         assert_eq!(summary.net_pnl,Some(96.0));
+        assert_eq!(summary.pnl_currency.as_deref(),Some("USD"));
+        assert_eq!(summary.pnl_currency_status,"SINGLE_CURRENCY");
         assert_eq!(summary.net_r,Some(0.48));
         // Two of three CLOSED Trades have unknown initial risk/cost. Their
         // sequence cannot be skipped as if the filtered sample were complete.
