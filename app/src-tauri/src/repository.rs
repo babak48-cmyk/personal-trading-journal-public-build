@@ -3018,7 +3018,7 @@ mod analytics_coverage_truth_tests {
         assert_eq!(summary.bad_decision_win_count,1,
           "C trade with known net profit belongs in process-quality warning even with unknown risk");
         assert!(summary.small_sample);
-        assert_eq!(db::integrity_check(&db).unwrap(),"ok");
+        assert_eq!(crate::db::integrity_check(&db).unwrap(),"ok");
     }
 }
 
