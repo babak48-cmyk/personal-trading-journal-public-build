@@ -1,3 +1,13 @@
+## Current installed-DEMO delivery gate — 2026-11-24
+
+Package C isolated Windows NSIS installer **BUILT / CI PASS**, **NOT YET WINDOWS-INSTALLED OR USER ACCEPTED**. Exact PUBLIC development code branch `feature/ptj-c-transfer-integrity-2026-11-23` source unchanged from C9 last tested code SHA `6937032470bd6a6afa5128c2807c08b7e193936b`; installer-enabled PR HEAD `45a22f829ca31e29e4558d77a7190c0336e960be`, followed by **docs-only checkpoint commit `3efb4716dd4366c730480a1dce1de821eeec498b`**. The canonical evidence is checkpoint `PTJ-C-ISOLATED-WINDOWS-INSTALLER-CI-SUCCESS-2026-11-24` in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on PUBLIC development branch.
+
+GitHub Actions [45209484158](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45209484158) **frontend SUCCESS / Rust SUCCESS / isolated Package C NSIS SUCCESS**. EXE `Personal Trading Journal Package C DEMO_1.9.6-beta.1_x64-setup.exe` SHA256 `28C4DF47C5A99282A6A07A0240C68764C7AAFF884E02FF889D95264787DED1AA`. Artifact ZIP [14835568245](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45209484158/artifacts/14835568245), ZIP SHA256 `303b5c19576bed1ac7e69bd08e27b3f1662ed5395d49998985114c2be9ce7242` (7-day retention). The ZIP SHA differs from EXE SHA. Independently readback-verified GitHub checkpoint; check newer live SHA before resuming.
+
+NEXT **no new feature scope**: download/isolate Windows Package C DEMO then targeted installed B26 A/C Review readback, B→C backed-up ZIP import/rollback/restart, GC cost/R and C9 usability; preserve accepted A and B01–B25. Package C PARTIAL until Windows and user acceptance; higher-risk C8 timestamp/ownership/link corrections separately authorization-gated. No merge, PRIVATE writes or user real SQLite operations.
+
+---
+
 ## Current validated Package C milestone — 2026-11-24 C9 historic clocks and currency
 
 Authorized PUBLIC code branch `feature/ptj-c-transfer-integrity-2026-11-23`, Draft PR #17 UNMERGED. Last exact CI-tested **CODE SHA `6937032470bd6a6afa5128c2807c08b7e193936b`**, canonical milestone `PTJ-C9-DECISION-HOUR-TIMEZONE-AND-CURRENCY-INTEGRITY-2026-11-24` in existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the code branch, appended by **docs-only checkpoint `b5fd4078036878420afa5f5bca07b091630f1c48`**. [GitHub Actions 45194565705](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45194565705) independently confirmed frontend SUCCESS and Rust SUCCESS after resolving real fixture failures. These pointers are historical; verify current GitHub head and workflow on recovery.
