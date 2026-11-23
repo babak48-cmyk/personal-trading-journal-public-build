@@ -88,7 +88,7 @@ export function weeklyWeekdayBreakdown(
 export function localDecisionHour(
   recorded:string|null|undefined,zone:string|null|undefined,
 ):string|null{
-  if(!recorded||!zone||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(recorded))return null;
+  if(!recorded||!zone||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(recorded))return null;
   const at=new Date(recorded);
   if(!Number.isFinite(at.getTime()))return null;
   try{
