@@ -34,12 +34,12 @@ export type WeeklyTradeBreakdown=Readonly<{
 export function weeklyTradeBreakdown(
   rows:readonly JournalTradeRow[],
   weekStart:string,
-  groupBy:'instrument_symbol'|'decision_quality',
+  groupBy:'instrument_symbol'|'decision_quality'|'direction',
 ):WeeklyTradeBreakdown[]{
   const weekly=rows.filter(row=>journalWeekStart(row.session_date)===weekStart);
   const groups=new Map<string,JournalTradeRow[]>();
   for(const row of weekly){
-    const raw=groupBy==='instrument_symbol'?row.instrument_symbol:row.decision_quality;
+    const raw=groupBy==='instrument_symbol'?row.instrument_symbol:groupBy==='direction'?row.direction:row.decision_quality;
     const label=raw?.trim()||'Not recorded';
     const group=groups.get(label)||[];
     group.push(row);
