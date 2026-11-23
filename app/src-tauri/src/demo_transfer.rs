@@ -12,6 +12,11 @@ pub struct DemoTransferPreview {
     pub database_sha256:String,
     pub sessions:i64,
     pub trades:i64,
+    pub zones:i64,
+    pub decisions:i64,
+    pub plan_revisions:i64,
+    pub evidence_events:i64,
+    pub risk_snapshots:i64,
     pub fills:i64,
     pub reviews:i64,
     pub correction_events:i64,
@@ -24,6 +29,11 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
     let sql=match table{
         "sessions"=>"SELECT COUNT(*) FROM sessions",
         "trades"=>"SELECT COUNT(*) FROM trades",
+        "candidates"=>"SELECT COUNT(*) FROM candidates",
+        "candidate_decisions"=>"SELECT COUNT(*) FROM candidate_decisions",
+        "session_plan_revisions"=>"SELECT COUNT(*) FROM session_plan_revisions",
+        "evidence_observations"=>"SELECT COUNT(*) FROM evidence_observations",
+        "risk_snapshots"=>"SELECT COUNT(*) FROM risk_snapshots",
         "execution_fills"=>"SELECT COUNT(*) FROM execution_fills",
         "trade_reviews"=>"SELECT COUNT(*) FROM trade_reviews",
         "fill_correction_events"=>"SELECT COUNT(*) FROM fill_correction_events",
@@ -78,6 +88,10 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         target_schema_version:staged_schema,
         database_sha256:info.database_sha256,
         sessions:count(&c,"sessions")?,trades:count(&c,"trades")?,
+        zones:count(&c,"candidates")?,decisions:count(&c,"candidate_decisions")?,
+        plan_revisions:count(&c,"session_plan_revisions")?,
+        evidence_events:count(&c,"evidence_observations")?,
+        risk_snapshots:count(&c,"risk_snapshots")?,
         fills:count(&c,"execution_fills")?,reviews:count(&c,"trade_reviews")?,
         correction_events:count(&c,"fill_correction_events")?,
         attachments:info.attachment_count,
@@ -101,6 +115,11 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
     if db::integrity_check(&c)?!="ok"||db::foreign_key_violation_count(&c)?>0||
        count(&c,"sessions")?!=confirmed.sessions||
        count(&c,"trades")?!=confirmed.trades||
+       count(&c,"candidates")?!=confirmed.zones||
+       count(&c,"candidate_decisions")?!=confirmed.decisions||
+       count(&c,"session_plan_revisions")?!=confirmed.plan_revisions||
+       count(&c,"evidence_observations")?!=confirmed.evidence_events||
+       count(&c,"risk_snapshots")?!=confirmed.risk_snapshots||
        count(&c,"execution_fills")?!=confirmed.fills||
        count(&c,"trade_reviews")?!=confirmed.reviews||
        count(&c,"fill_correction_events")?!=confirmed.correction_events {
