@@ -19,6 +19,20 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(weeklyTradeReadiness(false,'',0)).toBe('EMPTY');
   });
 
+  it('groups LONG and SHORT independently without imputing missing R or crossing weeks',()=>{
+    const data=[
+      row('long-known','2026-11-09',{direction:'LONG',realized_r:1.25}),
+      row('long-unknown','2026-11-10',{direction:'LONG',realized_r:null,rule_status:'VIOLATED'}),
+      row('short-known','2026-11-11',{direction:'SHORT',realized_r:-0.5}),
+      row('short-open','2026-11-12',{direction:'SHORT',status:'OPEN',realized_r:null}),
+      row('outside','2026-11-02',{direction:'SHORT',realized_r:80})
+    ];
+    expect(weeklyTradeBreakdown(data,'2026-11-09','direction')).toEqual([
+      {label:'LONG',tradeCount:2,closedCount:2,eligibleRCount:1,netR:1.25,ruleViolationCount:1},
+      {label:'SHORT',tradeCount:2,closedCount:1,eligibleRCount:1,netR:-0.5,ruleViolationCount:0},
+    ]);
+    expect(weeklyTradeBreakdown([row('unknown','2026-11-09',{direction:'LONG',realized_r:null})],'2026-11-09','direction')[0].netR).toBeNull();
+  });
   it('groups ISO Monday weeks independent of local clock and rejects invalid calendar dates',()=>{
     expect(journalWeekStart('2026-11-09')).toBe('2026-11-09');
     expect(journalWeekStart('2026-11-15')).toBe('2026-11-09');
