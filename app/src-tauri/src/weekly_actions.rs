@@ -47,18 +47,30 @@ fn validate_filter(json:&str)->Result<(),AppError>{
     Ok(())
 }
 fn load_actions(conn:&Connection,week:&str,filter:&str)->Result<Vec<WeeklyActionEvent>,AppError>{
+    // JSON key order and insignificant whitespace must not create a SECOND
+    // "one weekly improvement" commitment for the same analytic filter.
+    // Preserve each original filter_snapshot_json byte-for-byte for history.
+    let wanted:serde_json::Value=serde_json::from_str(filter)?;
     let mut stmt=conn.prepare(
       "SELECT action_event_id,week_start,filter_snapshot_json,action_text,event_kind,
               note,based_on_event_id,recorded_at_utc,actor
        FROM weekly_learning_action_events
-       WHERE week_start=?1 AND filter_snapshot_json=?2
-       ORDER BY rowid ASC")?;
-    let rows=stmt.query_map(params![week,filter],|r|Ok(WeeklyActionEvent{
+       WHERE week_start=?1 ORDER BY rowid ASC")?;
+    let rows=stmt.query_map([week],|r|Ok(WeeklyActionEvent{
         action_event_id:r.get(0)?,week_start:r.get(1)?,filter_snapshot_json:r.get(2)?,
         action_text:r.get(3)?,event_kind:r.get(4)?,note:r.get(5)?,
         based_on_event_id:r.get(6)?,recorded_at_utc:r.get(7)?,actor:r.get(8)?
     }))?.collect::<Result<Vec<_>,_>>()?;
-    Ok(rows)
+    let mut related=Vec::new();
+    for row in rows{
+        let stored:serde_json::Value=serde_json::from_str(&row.filter_snapshot_json)?;
+        if !stored.is_object(){
+            return Err(AppError::Validation(
+              "saved weekly filter snapshot is invalid; history cannot be verified".into()));
+        }
+        if stored==wanted{related.push(row);}
+    }
+    Ok(related)
 }
 pub fn list_weekly_actions(conn:&Connection,week_start:&str,filter_snapshot_json:&str)
  ->Result<Vec<WeeklyActionEvent>,AppError>{
@@ -142,6 +154,41 @@ mod tests {
         assert_eq!(rows[1].based_on_event_id,Some(first.action_event_id));
         assert_eq!(db::integrity_check(&c).unwrap(),"ok");
         assert_eq!(db::foreign_key_violation_count(&c).unwrap(),0);
+    }
+    #[test]
+    fn semantically_equal_filter_json_cannot_create_two_commitments_or_hide_followups(){
+        let mut c=Connection::open_in_memory().unwrap();db::migrate(&c).unwrap();
+        let first=SaveWeeklyActionInput{
+          week_start:"2026-11-23".into(),
+          filter_snapshot_json:r#"{"instrument_symbol":"ES","date_from":"2026-11-16"}"#.into(),
+          action_text:"One concrete improvement".into(),event_kind:"COMMITMENT".into(),
+          note:None,based_on_event_id:None
+        };
+        let saved=save_weekly_action(&mut c,first.clone()).unwrap();
+        let reorder=r#"{ "date_from": "2026-11-16", "instrument_symbol":"ES" }"#;
+        let duplicate=SaveWeeklyActionInput{filter_snapshot_json:reorder.into(),..first.clone()};
+        assert!(save_weekly_action(&mut c,duplicate).is_err(),
+          "key order/whitespace must not bypass one commitment per filter/week");
+        let rows=list_weekly_actions(&c,"2026-11-23",reorder).unwrap();
+        assert_eq!(rows.len(),1);
+        assert_eq!(rows[0].action_event_id,saved.action_event_id);
+        assert_eq!(rows[0].filter_snapshot_json,first.filter_snapshot_json,
+          "historical JSON snapshot must never be silently rewritten");
+        let followup=SaveWeeklyActionInput{
+          filter_snapshot_json:reorder.into(),
+          action_text:"Review original weekly commitment".into(),event_kind:"FOLLOW_UP".into(),
+          based_on_event_id:Some(saved.action_event_id),..first.clone()
+        };
+        save_weekly_action(&mut c,followup).unwrap();
+        assert_eq!(list_weekly_actions(&c,"2026-11-23",&first.filter_snapshot_json).unwrap().len(),2);
+        let separate=SaveWeeklyActionInput{
+          filter_snapshot_json:r#"{"date_from":"2026-11-16","instrument_symbol":"GC"}"#.into(),
+          ..first
+        };
+        save_weekly_action(&mut c,separate).unwrap();
+        let count:i64=c.query_row("SELECT COUNT(*) FROM weekly_learning_action_events",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,3);
+        assert_eq!(db::integrity_check(&c).unwrap(),"ok");
     }
     #[test]
     fn rejects_cross_week_follow_up_and_invalid_week_or_filter(){
