@@ -22,6 +22,7 @@ pub struct DemoTransferPreview {
     pub correction_events:i64,
     pub initial_risk_correction_events:i64,
     pub source_type_correction_events:i64,
+    pub source_price_correction_events:i64,
     pub weekly_learning_action_events:i64,
     pub attachments:usize,
     pub original_backup_untouched:bool,
@@ -54,6 +55,7 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "fill_correction_events"=>"SELECT COUNT(*) FROM fill_correction_events",
         "initial_risk_correction_events"=>"SELECT COUNT(*) FROM initial_risk_correction_events",
         "candidate_source_type_correction_events"=>"SELECT COUNT(*) FROM candidate_source_type_correction_events",
+        "candidate_source_price_correction_events"=>"SELECT COUNT(*) FROM candidate_source_price_correction_events",
         "weekly_learning_action_events"=>"SELECT COUNT(*) FROM weekly_learning_action_events",
         _=>return Err(AppError::Validation("invalid transfer inventory table".into())),
     };
@@ -67,7 +69,8 @@ const JOURNAL_EVENT_TABLES:&[&str]=&[
     "trade_mistakes","session_pre_states","trade_rule_checks","rule_assessments",
     "custom_field_value_events","custom_field_selection_snapshots",
     "setup_trade_links","fill_correction_events","initial_risk_correction_events",
-    "candidate_source_type_correction_events","weekly_learning_action_events",
+    "candidate_source_type_correction_events","candidate_source_price_correction_events",
+    "weekly_learning_action_events",
 ];
 fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     let conn=db::open_database(&paths.database())?;
@@ -118,6 +121,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
     crate::fill_corrections::verify_all_correction_chains(&c)?;
     crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&c)?;
     crate::source_type_corrections::verify_all_source_correction_chains(&c)?;
+    crate::source_price_corrections::verify_all(&c)?;
     Ok(DemoTransferPreview{
         source_schema_version:info.schema_version,
         target_schema_version:staged_schema,
@@ -131,6 +135,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         correction_events:count(&c,"fill_correction_events")?,
         initial_risk_correction_events:count(&c,"initial_risk_correction_events")?,
         source_type_correction_events:count(&c,"candidate_source_type_correction_events")?,
+        source_price_correction_events:count(&c,"candidate_source_price_correction_events")?,
         weekly_learning_action_events:count(&c,"weekly_learning_action_events")?,
         attachments:info.attachment_count,
         original_backup_untouched:true,
@@ -163,6 +168,7 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
        count(&c,"fill_correction_events")?!=confirmed.correction_events||
        count(&c,"initial_risk_correction_events")?!=confirmed.initial_risk_correction_events||
        count(&c,"candidate_source_type_correction_events")?!=confirmed.source_type_correction_events||
+       count(&c,"candidate_source_price_correction_events")?!=confirmed.source_price_correction_events||
        count(&c,"weekly_learning_action_events")?!=confirmed.weekly_learning_action_events {
          return Err(AppError::Validation("Destination record counts could not be reconciled after import; inspect safety backup before retrying".into()));
     }
@@ -254,6 +260,7 @@ mod isolated_transfer_tests {
            DROP TABLE weekly_learning_action_events;
            DROP TABLE initial_risk_correction_events;
            DROP TABLE candidate_source_type_correction_events;
+           DROP TABLE candidate_source_price_correction_events;
            UPDATE schema_meta SET schema_version=11;
            PRAGMA wal_checkpoint(TRUNCATE);"
         ).unwrap();
@@ -276,7 +283,7 @@ mod isolated_transfer_tests {
         let backup_bytes=fs::read(&backup).unwrap();
         let observed=preview(&new_c,&backup).unwrap();
         assert_eq!(observed.source_schema_version,11);
-        assert_eq!(observed.target_schema_version,14);
+        assert_eq!(observed.target_schema_version,15);
         assert_eq!((observed.sessions,observed.trades,observed.fills,observed.reviews,observed.attachments),(1,2,5,2,1));
         assert_eq!(observed.decisions,2);
         assert_eq!(observed.risk_snapshots,2);
@@ -289,7 +296,7 @@ mod isolated_transfer_tests {
         assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
         assert_eq!(fs::read(&old_path).unwrap(),old_bytes,"old Package B SQLite must stay byte-identical");
         let restored=db::open_database(&new_c.database()).unwrap();
-        assert_eq!(db::schema_version(&restored).unwrap(),14);
+        assert_eq!(db::schema_version(&restored).unwrap(),15);
         let first=crate::repository::get_trade_detail(&restored,"t1").unwrap();
         let second=crate::repository::get_trade_detail(&restored,"t2").unwrap();
         assert!((first.metrics.realized_r.unwrap()-1.46).abs()<0.00001);
