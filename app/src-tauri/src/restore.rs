@@ -123,6 +123,16 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
 }
 
 pub fn replace_live_from_backup(paths: &AppPaths, backup_path: &Path) -> Result<RestoreResult, AppError> {
+    replace_live_from_backup_with_postcheck(paths,backup_path,|_|Ok(()))
+}
+
+/// The postcheck runs *before* success is committed and before the rollback
+/// snapshot is removed. Package C transfer can therefore reject a post-copy
+/// inventory mismatch without leaving a half-accepted destination.
+pub fn replace_live_from_backup_with_postcheck<F>(
+    paths: &AppPaths, backup_path: &Path, postcheck:F
+) -> Result<RestoreResult,AppError>
+where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
     // 1) Validate and unpack before touching live data.
     let staging = restore_to_staging(paths, backup_path)?;
     let staged_db = staging.join("database.sqlite");
@@ -152,6 +162,17 @@ pub fn replace_live_from_backup(paths: &AppPaths, backup_path: &Path) -> Result<
         let conn = db::open_database(&live_db)?;
         let integrity = db::integrity_check(&conn)?;
         if integrity != "ok" { return Err(AppError::Validation(format!("live database integrity after restore: {integrity}"))); }
+        if db::foreign_key_violation_count(&conn)?>0 {
+            return Err(AppError::Validation("live database foreign keys failed after restore".into()));
+        }
+        // Validate again on the ACTUAL installed copy, not just on staging.
+        // Errors here trigger the existing rollback, instead of returning a
+        // misleading successful Restore result.
+        crate::fill_corrections::verify_all_correction_chains(&conn)?;
+        crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&conn)?;
+        crate::source_type_corrections::verify_all_source_correction_chains(&conn)?;
+        crate::source_price_corrections::verify_all(&conn)?;
+        postcheck(&conn)?;
         Ok(integrity)
     })();
 
