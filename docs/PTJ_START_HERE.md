@@ -1,3 +1,13 @@
+## Latest independently CI-verified Package C — C9 chronological R (2026-11-23)
+
+Active authorized PUBLIC branch `feature/ptj-c-transfer-integrity-2026-11-23`, Draft PR #17 UNMERGED. Latest CI-tested **CODE SHA `6ff60ba6ce81762b4cdda59f318172efa34bcb7e`** (C9 true exit-timestamp-qualified streaks and realized-R peak/trough, fail-closed UNKNOWN), followed by canonical docs-only checkpoint commit **`98450cf388048735ee40bb2ddaf7a187db7297cf`**. Source of full scope/evidence: existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on PUBLIC development branch, milestone `PTJ-C9-CHRONOLOGICAL-CLOSED-R-STREAK-AND-DRAWDOWN-2026-11-23`. [Run 45180077242](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45180077242) completed **frontend SUCCESS + Rust SUCCESS** on exact code. User/installed Windows acceptance NOT established.
+
+Earlier `PTJ-C-COHESIVE-TRANSFER-BASELINE-AND-USER-PREFLIGHT-2026-11-23` is preserved: built-in edited catalog/Workspace overwrite preflight guard plus nonprogrammer isolated Package C DEMO backup preview and explicit full-archive-hash import UI, exact code SHA `250314229813ce22440123732f8fab6e56079a48`, run 45178848710 both jobs SUCCESS. No merge, PRIVATE change, live database access, installer or Windows data restore.
+
+**Package C PARTIAL**: still need isolated Windows Package B→C transfer/rollback/restart, B26 completed Review A/C readback, GC negative accounting, C8 high-risk corrections separate authorization, full C9 requirements acceptance, Windows package and explicit user acceptance. Do not lose full All-Inputs Field Manager or any of 12 roadmap categories. The current branch HEAD may now be later docs-only: independently check live SHA, PR and CI each new chat.
+
+---
+
 ## Current Package C recovery pointer — 2026-11-23 cohesive transfer preflight
 
 Active authorized PUBLIC code branch `feature/ptj-c-transfer-integrity-2026-11-23`, Draft PR #17 UNMERGED. Newest exact **CI-tested source SHA** `250314229813ce22440123732f8fab6e56079a48`; canonical milestone `PTJ-C-COHESIVE-TRANSFER-BASELINE-AND-USER-PREFLIGHT-2026-11-23` saved in existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the code branch by **docs-only commit `206b28c025654cbb665114e9ba2f89cb1a888272`**. GitHub Actions [45178848710](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45178848710) completed SUCCESS for frontend AND Rust on this exact unchanged source.
