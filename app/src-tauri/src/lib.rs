@@ -143,6 +143,7 @@ pub fn run() {
             commands::create_backup,
             commands::validate_backup,
             commands::restore_backup_to_staging,
+            commands::is_package_c_demo,
             commands::preview_package_c_demo_import,
             commands::import_package_b_demo_backup,
             commands::replace_live_from_backup,
