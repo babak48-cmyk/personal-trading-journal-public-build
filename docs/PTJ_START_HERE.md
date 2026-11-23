@@ -1,3 +1,13 @@
+## Latest PUBLIC checkpoint — Strategy/Settings destination preflight (2026-11-23)
+
+The latest independently persisted source on active PUBLIC branch `feature/ptj-c-transfer-integrity-2026-11-23` is **`e6bcf4db37771ba186a89a5f326084acdd69c3db`**, followed by docs-only checkpoint commit **`9390b4cf98fc77a7b7663b60833ce307aa1150c3`**. Canonical milestone in existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md`: `PTJ-C-TRANSFER-STRATEGY-SETTINGS-PREFLIGHT-2026-11-23`. Inspect current live HEAD/PR #17/CI before any next action: these are historical pointers.
+
+**Source change:** B→C empty-destination check now protects user-created Strategy/Version and Settings Profile/Version even if zero Session/Trade records exist, in addition to previously protected Custom Field, Setup Playbook, user-instrument and Level Source records. Native isolated regression fixture added; no migrations or user/live database changes. Source + checkpoint independently read back from GitHub. New source-equivalent CI [run 45175773609](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45175773609) had frontend PASS, Rust in progress at checkpoint; inspect successor run if superseded by docs-only commit. Prior full ZIP-source protection is CI PASS run 45174739312, frontend and Rust.
+
+**Open gates:** full C8/C9 approvals and acceptance, B26 completed Review Windows, GC negative-case accounting, additional destination baseline/settings protection, isolated installed Windows DEMO backup/transfer/rollback/restart, and user acceptance. No merge, PRIVATE modifications, original data changes, or approval of conditional features. Preserve previously accepted A and B01–B25 without unnecessary retest.
+
+---
+
 ## Latest transfer-integrity development checkpoint — 2026-11-23
 
 Authoritative PUBLIC product branch remains `feature/ptj-c-transfer-integrity-2026-11-23` (Draft PR #17, UNMERGED). Latest independently fetched CODE SHA `b529d1a3fb1ef8c6c9095191be64c4ffb3b556e5`, followed by canonical docs-only checkpoint `4ac0801eba25541eb7b860f0bec86dac67f937cd`, **`PTJ-C-TRANSFER-FULL-ARCHIVE-HASH-AND-SOURCE-ISOLATION-2026-11-23`** in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the product branch. Reverify live HEAD and CI before acting; these are historical exact anchors.
