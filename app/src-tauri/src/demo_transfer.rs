@@ -153,28 +153,36 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
     }
     // This only changes the separate Package C destination. Existing restore
     // creates its own safety backup, rollback folder, and rechecks staged DB.
-    let receipt=restore::replace_live_from_backup(paths,archive)?;
-    let c=db::open_database(&paths.database())?;
-    if db::integrity_check(&c)?!="ok"||db::foreign_key_violation_count(&c)?>0||
-       count(&c,"sessions")?!=confirmed.sessions||
-       count(&c,"trades")?!=confirmed.trades||
-       count(&c,"candidates")?!=confirmed.zones||
-       count(&c,"candidate_decisions")?!=confirmed.decisions||
-       count(&c,"session_plan_revisions")?!=confirmed.plan_revisions||
-       count(&c,"evidence_observations")?!=confirmed.evidence_events||
-       count(&c,"risk_snapshots")?!=confirmed.risk_snapshots||
-       count(&c,"execution_fills")?!=confirmed.fills||
-       count(&c,"trade_reviews")?!=confirmed.reviews||
-       count(&c,"fill_correction_events")?!=confirmed.correction_events||
-       count(&c,"initial_risk_correction_events")?!=confirmed.initial_risk_correction_events||
-       count(&c,"candidate_source_type_correction_events")?!=confirmed.source_type_correction_events||
-       count(&c,"candidate_source_price_correction_events")?!=confirmed.source_price_correction_events||
-       count(&c,"weekly_learning_action_events")?!=confirmed.weekly_learning_action_events {
-         return Err(AppError::Validation("Destination record counts could not be reconciled after import; inspect safety backup before retrying".into()));
-    }
-    crate::fill_corrections::verify_all_correction_chains(&c)?;
-    crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&c)?;
-    crate::source_type_corrections::verify_all_source_correction_chains(&c)?;
+    let receipt=restore::replace_live_from_backup_with_postcheck(paths,archive,|c|{
+        // This executes BEFORE Restore deletes the rollback snapshot or reports
+        // success. A count mismatch must not leave replaced data with an error
+        // that falsely suggests the original destination is still intact.
+        if db::integrity_check(c)?!="ok"||db::foreign_key_violation_count(c)?>0||
+           count(c,"sessions")?!=confirmed.sessions||
+           count(c,"trades")?!=confirmed.trades||
+           count(c,"candidates")?!=confirmed.zones||
+           count(c,"candidate_decisions")?!=confirmed.decisions||
+           count(c,"session_plan_revisions")?!=confirmed.plan_revisions||
+           count(c,"evidence_observations")?!=confirmed.evidence_events||
+           count(c,"risk_snapshots")?!=confirmed.risk_snapshots||
+           count(c,"execution_fills")?!=confirmed.fills||
+           count(c,"trade_reviews")?!=confirmed.reviews||
+           count(c,"fill_correction_events")?!=confirmed.correction_events||
+           count(c,"initial_risk_correction_events")?!=confirmed.initial_risk_correction_events||
+           count(c,"candidate_source_type_correction_events")?!=confirmed.source_type_correction_events||
+           count(c,"candidate_source_price_correction_events")?!=confirmed.source_price_correction_events||
+           count(c,"weekly_learning_action_events")?!=confirmed.weekly_learning_action_events{
+            return Err(AppError::Validation(
+              "Package C post-install record counts disagree with verified B preview; rollback required".into()));
+        }
+        // Redundant by design: mandatory Restore checks and transfer-specific
+        // checks both fail closed on every supported audited correction chain.
+        crate::fill_corrections::verify_all_correction_chains(c)?;
+        crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(c)?;
+        crate::source_type_corrections::verify_all_source_correction_chains(c)?;
+        crate::source_price_corrections::verify_all(c)?;
+        Ok(())
+    })?;
     Ok(receipt)
 }
 
