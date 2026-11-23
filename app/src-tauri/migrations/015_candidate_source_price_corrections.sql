@@ -6,7 +6,7 @@ CREATE TABLE candidate_source_price_correction_events (
   revision INTEGER NOT NULL CHECK(revision>0),
   original_source_price REAL,
   previous_source_price REAL,
-  replacement_source_price REAL NOT NULL CHECK(replacement_source_price>0),
+  replacement_source_price REAL NOT NULL,
   expected_prior_correction_id TEXT REFERENCES candidate_source_price_correction_events(correction_id),
   reason TEXT NOT NULL CHECK(length(trim(reason)) BETWEEN 5 AND 500),
   recorded_at_utc TEXT NOT NULL,
