@@ -8,6 +8,7 @@ mod diagnostics;
 mod error;
 mod exports;
 mod fill_corrections;
+mod initial_risk_corrections;
 mod import_readiness;
 mod setup_playbook;
 mod paths;
@@ -189,6 +190,9 @@ pub fn run() {
             commands::inspect_ninjatrader_csv_headers,
             commands::list_trade_correction_history,
             commands::preview_fill_correction,
+            commands::preview_initial_risk_correction,
+            commands::record_initial_risk_correction,
+            commands::list_initial_risk_corrections,
             commands::record_fill_correction,
             commands::get_trade_for_decision,
             commands::list_unexecuted_trade_decisions,
