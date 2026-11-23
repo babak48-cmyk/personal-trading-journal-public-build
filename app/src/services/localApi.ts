@@ -81,6 +81,23 @@ export type RiskSnapshot = {
 };
 export type SetupAtDecision = {version_id:string;name:string|null;version_number:number|null};
 export type TradeDetail = { metrics:TradeMetrics; fills:ExecutionFill[]; risk_snapshots:RiskSnapshot[]; setup_at_decision:SetupAtDecision|null };
+export type InitialRiskCorrectionRequest = {
+  risk_snapshot_id:string; expected_effective:number|null; expected_revision:number;
+  replacement:number; reason:string;
+};
+export type InitialRiskCorrectionEvent = {
+  correction_id:string; risk_snapshot_id:string; revision:number;
+  original_risk_dollars:number|null; previous_risk_dollars:number|null;
+  replacement_risk_dollars:number; expected_prior_correction_id:string|null;
+  reason:string; recorded_at_utc:string; actor:string;
+};
+export type InitialRiskCorrectionPreview = {
+  risk_snapshot_id:string; trade_id:string; original:number|null;
+  current_effective:number|null; replacement:number; expected_revision:number;
+  before_net_r:number|null; after_net_r:number|null;
+  net_realized_pnl:number|null; gross_realized_pnl:number|null;
+  reason:string; explicit_confirmation_required:boolean;
+};
 export type FillCorrectionField = 'price'|'quantity'|'commission'|'fees';
 export type FillCorrectionInput = {
   execution_id:string; field:FillCorrectionField; expected_effective:number|null;
@@ -269,6 +286,9 @@ export const localApi = {
   linkSetupTrade: (tradeId:string,versionId:string,linkNote:string|null) => invoke<void>('link_setup_trade',{tradeId,versionId,linkNote}),
   setupPlaybookPerformance: () => invoke<SetupPerformance[]>('setup_playbook_performance'),
   listTradeCorrectionHistory: (tradeId:string) => invoke<CorrectionHistoryEvent[]>('list_trade_correction_history',{tradeId}),
+  previewInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionPreview>('preview_initial_risk_correction',{input}),
+  recordInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionEvent>('record_initial_risk_correction',{input}),
+  listInitialRiskCorrections: (tradeId:string) => invoke<InitialRiskCorrectionEvent[]>('list_initial_risk_corrections',{tradeId}),
   previewFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionPreview>('preview_fill_correction',{input}),
   recordFillCorrection: (input:FillCorrectionInput) => invoke<FillCorrectionReceipt>('record_fill_correction',{input}),
   getTradeForDecision: (sessionId:string,decisionId:string) => invoke<TradeDetail|null>('get_trade_for_decision',{sessionId,decisionId}),
