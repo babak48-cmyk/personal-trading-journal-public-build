@@ -77,6 +77,33 @@ export function weeklyLevelSourceBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** Count only observed records whose event time is at or before the
+ * original persisted Decision. Missing/invalid/post-Decision events are not
+ * automatically treated as confirmations. Groups can overlap on one Trade.
+ */
+export function weeklyObservedEvidenceBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const groups=new Map<string,JournalTradeRow[]>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const observed=[...new Set((row.evidence_observed_at_decision??[])
+      .map(x=>x.trim()).filter(Boolean))];
+    const labels=observed.length?observed:['No timestamp-verified evidence at Decision'];
+    for(const label of labels){
+      const group=groups.get(label)||[];group.push(row);groups.set(label,group);
+    }
+  }
+  return [...groups].map(([label,items])=>{
+    const closed=items.filter(row=>row.status==='CLOSED');
+    const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
+    return {label,tradeCount:items.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((total,row)=>total+(row.realized_r as number),0):null,
+      ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length};
+  }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
 /** A saved Setup definition is not proof that its market context actually
  * occurred. At-entry and retrospectively linked trades remain distinct.
  * Group identity uses immutable version ID, not potentially reused labels.
