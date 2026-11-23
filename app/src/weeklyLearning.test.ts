@@ -68,8 +68,37 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(snap.eligibleRCount).toBe(2);
     expect(snap.missingRCount).toBe(1);
     expect(snap.netR).toBeCloseTo(.25);
-    expect(weeklyLearningText(snap)).toContain('Audited-correction affected trades: 2');
+    expect(weeklyLearningText(snap)).toContain('Audited-correction affected trades (all four families; each Trade counted once): 2');
     expect(weeklyLearningText(snap)).toContain('original event records');
+  });
+  it('counts all four historical correction families by trade and immutable event without duplicate trades',()=>{
+    const data=[
+      row('all','2026-11-09',{
+        audited_correction_count:4,audited_initial_risk_correction_count:2,
+        audited_source_type_correction_count:3,audited_source_price_correction_count:2,realized_r:1
+      }),
+      row('risk-only','2026-11-10',{audited_correction_count:0,audited_initial_risk_correction_count:1,realized_r:null}),
+      row('source-only','2026-11-11',{audited_source_price_correction_count:1,realized_r:-1}),
+      row('uncorrected','2026-11-12',{audited_correction_count:0,realized_r:0}),
+      row('outside','2026-11-02',{audited_correction_count:99,audited_source_type_correction_count:50})
+    ];
+    const w=weeklyLearningSnapshot(data,'2026-11-09');
+    expect(w).toMatchObject({
+      tradeCount:4,closedCount:4,correctedTradeCount:3,
+      fillCorrectedTradeCount:1,initialRiskCorrectedTradeCount:2,
+      sourceTypeCorrectedTradeCount:1,sourcePriceCorrectedTradeCount:2,
+      fillCorrectionEventCount:4,initialRiskCorrectionEventCount:3,
+      sourceTypeCorrectionEventCount:3,sourcePriceCorrectionEventCount:3,
+      eligibleRCount:3,missingRCount:1,netR:0,
+    });
+    const report=weeklyLearningText(w);
+    expect(report).toContain('Audited-correction affected trades (all four families; each Trade counted once): 3');
+    expect(report).toContain('Initial Risk: 2 trade(s) / 3 event(s)');
+    expect(report).toContain('Level Source price: 2 trade(s) / 3 event(s)');
+    expect(report).toContain('Category-specific trade counts may overlap');
+    const old=weeklyLearningSnapshot([row('legacy','2026-11-09',{audited_correction_count:1})],'2026-11-09');
+    expect(old.correctedTradeCount).toBe(1);
+    expect(old.sourcePriceCorrectionEventCount).toBe(0);
   });
   it('reports overlapping level provenance without inventing missing snapshots or double counting within one group',()=>{
     const records=[
