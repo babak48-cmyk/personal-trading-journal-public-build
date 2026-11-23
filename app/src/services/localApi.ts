@@ -221,6 +221,7 @@ export const localApi = {
   setBackupDestination: (destination:string|null) => invoke<void>('set_backup_destination',{destination}),
   createBackup: () => invoke<string>('create_backup'),
   validateBackup: (backupPath:string) => invoke<BackupInfo>('validate_backup',{backupPath}),
+  isPackageCDemo: () => invoke<boolean>('is_package_c_demo'),
   previewPackageCDemoImport: (backupPath:string) => invoke<DemoTransferPreview>('preview_package_c_demo_import',{backupPath}),
   importPackageBDemoBackup: (backupPath:string,expectedDatabaseSha256:string) => invoke<RestoreResult>('import_package_b_demo_backup',{backupPath,expectedDatabaseSha256}),
   restoreBackupToStaging: (backupPath:string) => invoke<string>('restore_backup_to_staging',{backupPath}),
