@@ -46,7 +46,7 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     if a.small_sample {html.push_str("<p class='warn'>Small sample — interpret performance metrics cautiously.</p>");}
     html.push_str("<table><thead><tr><th>Date</th><th>Instrument</th><th>Direction</th><th>Status</th><th>Candidate</th><th>Level sources</th><th>Decision quality</th><th>Rules</th><th>Mistakes</th><th>R</th><th>Net P&amp;L</th></tr></thead><tbody>");
     for r in &rows {
-        html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+        html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>,
             esc_html(&r.session_date),esc_html(&r.instrument_symbol),esc_html(&r.direction),esc_html(&r.status),esc_html(r.candidate_label.as_deref().unwrap_or("—")),
             esc_html(&r.level_sources.join(" · ")),esc_html(r.decision_quality.as_deref().unwrap_or("—")),esc_html(&r.rule_status),esc_html(&r.mistakes.join(" · ")),
             r.realized_r.map(|v|format!("{:.2}R",v)).unwrap_or("—".into()),r.net_realized_pnl.map(|v|format!("${:.2}",v)).unwrap_or("—".into())))
@@ -105,7 +105,7 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     for (trade_id,events) in &price_audits {
       for event in events {
         any_source_price=true;
-        html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+        html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>,
           esc_html(trade_id),esc_html(&event.candidate_source_id),event.revision,
           event.original_source_price.map(|p|p.to_string()).unwrap_or("Unknown".into()),
           event.previous_source_price.map(|p|p.to_string()).unwrap_or("Unknown".into()),
