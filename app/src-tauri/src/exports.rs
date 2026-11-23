@@ -1,4 +1,5 @@
-use std::{fs, path::PathBuf};
+use std::{fs, io::Write, path::{Path, PathBuf}};
+use uuid::Uuid;
 use chrono::Utc;
 use rusqlite::Connection;
 use serde::Serialize;
@@ -13,6 +14,17 @@ pub struct ExportResult {
 
 fn esc_html(s:&str)->String { s.replace('&',"&amp;").replace('<',"&lt;").replace('>',"&gt;").replace('"',"&quot;") }
 fn csv_cell(s:&str)->String { format!("\"{}\"",s.replace('"',"\"\"")) }
+
+/// Reports are evidence: never silently replace an earlier export.
+fn write_new_report(path:&Path,bytes:&[u8])->Result<(),AppError>{
+    let mut file=fs::OpenOptions::new().write(true).create_new(true).open(path)?;
+    if let Err(err)=file.write_all(bytes).and_then(|_|file.sync_all()){
+        drop(file);
+        let _=fs::remove_file(path);
+        return Err(err.into());
+    }
+    Ok(())
+}
 
 /// An export is an evidentiary artifact. Do not write a success-looking CSV
 /// or HTML if even one immutable correction chain in the local journal fails.
@@ -51,7 +63,7 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     }
     fs::create_dir_all(&paths.exports)?;
     let created=Utc::now();
-    let path:PathBuf=paths.exports.join(format!("TradingJournal_Report_{}.html",created.format("%Y%m%d_%H%M%S")));
+    let path:PathBuf=paths.exports.join(format!("TradingJournal_Report_{}_{}.html",created.format("%Y%m%d_%H%M%S"),Uuid::new_v4()));
     let metric=|label:&str,value:String|format!("<div class='m'><span>{}</span><b>{}</b></div>",esc_html(label),esc_html(&value));
     let mut html=String::from("<!doctype html><html><head><meta charset='utf-8'><title>Trading Journal Report</title><style>body{font-family:Arial,sans-serif;margin:32px;color:#1f2937}h1{margin-bottom:4px}.sub{color:#64748b}.metrics{display:flex;flex-wrap:wrap;gap:10px;margin:20px 0}.m{border:1px solid #ddd;border-radius:10px;padding:10px 14px;min-width:120px}.m span{display:block;color:#64748b;font-size:12px}.m b{font-size:20px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #e5e7eb;text-align:left;padding:8px;vertical-align:top}th{background:#f8fafc}.warn{padding:10px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px}</style></head><body>");
     html.push_str("<h1>Personal Trading Journal</h1><div class='sub'>Readable local export</div><div class='metrics'>");
@@ -182,7 +194,7 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     }
     if !any_source_price{html.push_str("<tr><td colspan='10'>No historical source price correction events for these Trades.</td></tr>");}
     html.push_str("</tbody></table></body></html>");
-    fs::write(&path,html)?;
+    write_new_report(&path,html.as_bytes())?;
     Ok(ExportResult{path:path.to_string_lossy().to_string(),row_count:rows.len(),created_at:created.to_rfc3339()})
 }
 
@@ -191,7 +203,7 @@ pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)-
     let rows=repository::list_journal_trades(conn,filter)?;
     fs::create_dir_all(&paths.exports)?;
     let created=Utc::now();
-    let path=paths.exports.join(format!("TradingJournal_Trades_{}.csv",created.format("%Y%m%d_%H%M%S")));
+    let path=paths.exports.join(format!("TradingJournal_Trades_{}_{}.csv",created.format("%Y%m%d_%H%M%S"),Uuid::new_v4()));
     let mut out=String::from("session_date,instrument,direction,status,candidate,level_sources,decision_quality,rule_status,mistakes,realized_r_effective,net_pnl_effective,trade_id,audited_correction_count,audited_corrections_json,audited_initial_risk_correction_count,audited_initial_risk_corrections_json,audited_source_type_correction_count,audited_source_type_corrections_json,audited_source_price_correction_count,audited_source_price_corrections_json\n");
     for r in &rows {
         let events=fill_corrections::list_trade_correction_history(conn,&r.trade_id)?;
@@ -205,7 +217,7 @@ pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)-
         let vals=[csv_cell(&r.session_date),csv_cell(&r.instrument_symbol),csv_cell(&r.direction),csv_cell(&r.status),csv_cell(r.candidate_label.as_deref().unwrap_or("")),csv_cell(&r.level_sources.join(" | ")),csv_cell(r.decision_quality.as_deref().unwrap_or("")),csv_cell(&r.rule_status),csv_cell(&r.mistakes.join(" | ")),r.realized_r.map(|v|v.to_string()).unwrap_or_default(),r.net_realized_pnl.map(|v|v.to_string()).unwrap_or_default(),csv_cell(&r.trade_id),events.len().to_string(),csv_cell(&history_json),risk_events.len().to_string(),csv_cell(&risk_history_json),source_events.len().to_string(),csv_cell(&source_history_json),source_price_events.len().to_string(),csv_cell(&source_price_history_json)];
         out.push_str(&vals.join(","));out.push('\n');
     }
-    fs::write(&path,out)?;
+    write_new_report(&path,out.as_bytes())?;
     Ok(ExportResult{path:path.to_string_lossy().to_string(),row_count:rows.len(),created_at:created.to_rfc3339()})
 }
 
