@@ -56,6 +56,32 @@ export function weeklyTradeBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** Session-date weekday, never inferred from a trade's exit or current clock.
+ * Same-week multiple sessions remain independent in the Session breakdown. */
+export function weeklyWeekdayBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const names=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const grouped=new Map<number,JournalTradeRow[]>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const day=new Date(row.session_date+'T00:00:00Z').getUTCDay();
+    const group=grouped.get(day)||[];
+    group.push(row);grouped.set(day,group);
+  }
+  return [...grouped.entries()].sort(([a],[b])=>((a+6)%7)-((b+6)%7))
+    .map(([day,items])=>{
+      const closed=items.filter(item=>item.status==='CLOSED');
+      const eligible=closed.filter(item=>item.realized_r!=null&&Number.isFinite(item.realized_r));
+      return {
+        label:names[day],tradeCount:items.length,closedCount:closed.length,
+        eligibleRCount:eligible.length,
+        netR:eligible.length?eligible.reduce((sum,item)=>sum+(item.realized_r as number),0):null,
+        ruleViolationCount:items.filter(item=>item.rule_status==='VIOLATED').length,
+      };
+    });
+}
+
 /** Session identity is retained independently of the calendar date: multiple
  * sessions on one day must never be merged into a single sample. */
 export function weeklySessionBreakdown(
