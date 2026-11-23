@@ -1,3 +1,13 @@
+## Current Package C recovery pointer — 2026-11-23 cohesive transfer preflight
+
+Active authorized PUBLIC code branch `feature/ptj-c-transfer-integrity-2026-11-23`, Draft PR #17 UNMERGED. Newest exact **CI-tested source SHA** `250314229813ce22440123732f8fab6e56079a48`; canonical milestone `PTJ-C-COHESIVE-TRANSFER-BASELINE-AND-USER-PREFLIGHT-2026-11-23` saved in existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the code branch by **docs-only commit `206b28c025654cbb665114e9ba2f89cb1a888272`**. GitHub Actions [45178848710](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45178848710) completed SUCCESS for frontend AND Rust on this exact unchanged source.
+
+Package C transfer now rejects edited **built-in** instruments/Level Source/evidence catalogs and renamed/extraneous workspaces as well as user-defined settings, using an exact seed-generated baseline and native tests. An isolated Package C DEMO-only UI lets a nonprogrammer pick a Package B ZIP, preview immutable inventories/full ZIP hash, explicitly confirm and import; the native app-identifier/backup/rollback gates remain. No live user data, PRIVATE repo, merge, migration, installer or Windows test occurred.
+
+**Delivery still PARTIAL.** Next: exact-source isolated Windows install + B26 Review A/C, GC negative calculations, B→C history transfer/restart/rollback/readback with user acceptance; reconcile full C8/C9 gaps. Separate explicit approval still needed for new high-risk historical timestamp/ownership/link corrections. Preserve all accepted A and B01–B25 evidence, full 12 roadmap categories, and full All-Inputs Field Manager. Re-check live branch/CI; this pointer is historical.
+
+---
+
 ## Latest PUBLIC checkpoint — Strategy/Settings destination preflight (2026-11-23)
 
 The latest independently persisted source on active PUBLIC branch `feature/ptj-c-transfer-integrity-2026-11-23` is **`e6bcf4db37771ba186a89a5f326084acdd69c3db`**, followed by docs-only checkpoint commit **`9390b4cf98fc77a7b7663b60833ce307aa1150c3`**. Canonical milestone in existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md`: `PTJ-C-TRANSFER-STRATEGY-SETTINGS-PREFLIGHT-2026-11-23`. Inspect current live HEAD/PR #17/CI before any next action: these are historical pointers.
