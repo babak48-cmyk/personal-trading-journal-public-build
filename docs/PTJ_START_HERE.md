@@ -1,3 +1,13 @@
+## Latest Package C verified regression checkpoint — 2026-11-24
+
+PUBLIC active development branch `feature/ptj-c-transfer-integrity-2026-11-23`, Draft PR #17 UNMERGED. Last independently CI-tested **CODE SHA `1415e378a477dd9aeb6926e80b2b9292af1879ac`**, followed by docs-only checkpoint **`23a6cd07d36a3ca033c56c00f2bc96918c4ee696`**. Canonical checkpoint ID: `PTJ-C-GC-PERSISTED-ACCOUNTING-NEGATIVE-GATE-2026-11-24` in existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on PUBLIC development branch. [Run 45191376624](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45191376624) completed **frontend SUCCESS + Rust SUCCESS**. These are verified historical anchors; always refresh live branch SHA and CI.
+
+New targeted native SQLite GC fixture tests persisted contract snapshots, 2-contract partial exits, cost and initial-risk R calculation, independent Analytics readback, unknown fee remains NULL and excludes net/R, and corrupt excess exit is read-only fail-closed. No runtime schema or user data changed. This is CI-TESTED only, NOT installed Windows-tested or accepted.
+
+Prior C9 chronological realized-R drawdown/streak regression, Package C isolated DEMO user backup preview/import panel, full source ZIP checksum/rollback and destination authored-config protection remain verified as recorded in prior checkpoints. Completion blockers: B26 completed Review A/C Windows installed readback, isolated B→C rollback/restart, exact-source Windows installer acceptance, final C9 event-time/context requirement coverage, and separate authorization for newly high-risk C8 timestamp/ownership/link changes. Package C remains PARTIAL, preserve all approved requirements, 12 roadmap categories and full All-Inputs Field Manager, no merge/PRIVATE write/unsafe restore.
+
+---
+
 ## Latest independently CI-verified Package C — C9 chronological R (2026-11-23)
 
 Active authorized PUBLIC branch `feature/ptj-c-transfer-integrity-2026-11-23`, Draft PR #17 UNMERGED. Latest CI-tested **CODE SHA `6ff60ba6ce81762b4cdda59f318172efa34bcb7e`** (C9 true exit-timestamp-qualified streaks and realized-R peak/trough, fail-closed UNKNOWN), followed by canonical docs-only checkpoint commit **`98450cf388048735ee40bb2ddaf7a187db7297cf`**. Source of full scope/evidence: existing `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on PUBLIC development branch, milestone `PTJ-C9-CHRONOLOGICAL-CLOSED-R-STREAK-AND-DRAWDOWN-2026-11-23`. [Run 45180077242](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45180077242) completed **frontend SUCCESS + Rust SUCCESS** on exact code. User/installed Windows acceptance NOT established.
