@@ -47,10 +47,17 @@ export function AuditedFillCorrectionPanel({
     setHistory(null);setPreview(null);setPreviewKey('');
     setBusy(true);setMessage('Re-reading the complete immutable Fill audit history…');
     try{
-      const verified=await localApi.listTradeCorrectionHistory(trade.metrics.trade_id);
+      const [verified,fresh]=await Promise.all([
+        localApi.listTradeCorrectionHistory(trade.metrics.trade_id),
+        localApi.getTradeDetail(trade.metrics.trade_id),
+      ]);
       if(epoch!==requestEpoch.current)return;
+      if(fresh.metrics.trade_id!==trade.metrics.trade_id){
+        throw new Error('Audit reload returned a different Trade identity.');
+      }
       setHistory(verified);
-      setMessage('Fill audit history independently re-read; review the effective values before any new correction.');
+      onApplied(fresh);
+      setMessage('Fill audit and effective Trade values independently re-read. Review the refreshed Fill before any new correction.');
     }catch(e){
       if(epoch===requestEpoch.current)
         setMessage('Audit history still unavailable; correction locked: '+String(e));
