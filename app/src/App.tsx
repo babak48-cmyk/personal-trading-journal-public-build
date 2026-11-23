@@ -31,6 +31,7 @@ import { isCompletedReviewForTrade } from './reviewIdentity';
 import { filterCrossSessionPendingReviews } from './crossSessionReviewQueue';
 import { findClosedReviewTarget } from './reviewBacklogTarget';
 import { AuditedFillCorrectionPanel } from './AuditedFillCorrectionPanel';
+import { PackageCTransferPanel } from './PackageCTransferPanel';
 import { AuditedInitialRiskCorrectionPanel } from './AuditedInitialRiskCorrectionPanel';
 import { AuditedSourceCorrectionPanel } from './AuditedSourceCorrectionPanel';
 import { AuditedSourcePriceCorrectionPanel } from './AuditedSourcePriceCorrectionPanel';
@@ -2050,7 +2051,7 @@ export function App(){
         {backupLocationFeedback&&<p role="status" aria-live="polite">{backupLocationFeedback}</p>}
         {backupResult&&<p role="status" aria-live="polite" style={{overflowWrap:'anywhere'}}>{backupResult}</p>}
         <p className="subtle">Folder selection is saved for future backups. No existing backup file will be overwritten. If a selected drive becomes unavailable, the app reports the failure and keeps its verified internal copy.</p>
-      </div>}{runtimeReadiness ? <SafetyPanel readiness={runtimeReadiness} selfTest={betaSelfTest} selfTestBusy={betaSelfTestBusy} onSelfTest={runBetaSelfTest} onRefresh={refreshSafety} onBackup={createBackupWithFeedback} backupBusy={backupBusy}/> : <div className="panel"><h2><JournalIcon name="safety"/>Local Safety Check</h2><p>Loading safety status…</p></div>}</>) : <>
+      </div>}{runtimeReadiness ? <SafetyPanel readiness={runtimeReadiness} selfTest={betaSelfTest} selfTestBusy={betaSelfTestBusy} onSelfTest={runBetaSelfTest} onRefresh={refreshSafety} onBackup={createBackupWithFeedback} backupBusy={backupBusy}/> : <div className="panel"><h2><JournalIcon name="safety"/>Local Safety Check</h2><p>Loading safety status…</p></div>}<PackageCTransferPanel/></>) : <>
         {backupResult&&<div role="status" aria-live="polite" className={backupResult.startsWith('Backup failed')?'warningBox':'okBox'} style={{position:'fixed',right:24,top:72,zIndex:1000,maxWidth:480,boxShadow:'0 8px 28px #0008'}}><strong>{backupResult.startsWith('Backup failed')?'Backup failed':'Backup created successfully'}</strong><p style={{overflowWrap:'anywhere'}}>{backupResult}</p><button onClick={()=>setBackupResult('')}>Dismiss</button></div>}
         {!active && runtimeReadiness && !runtimeReadiness.ready_for_live_data && <div className="warningBox"><strong>Local safety check needs attention.</strong> {runtimeReadiness.warnings[0]||'Create a verified backup before recording real-money data.'} <button onClick={()=>setShowSafety(true)}>Review</button></div>}
         {!active && <div className="panel"><h2><JournalIcon name="session"/>Start session</h2><div className="formGrid"><label>Date <FieldHelp id="session.date"/><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Instrument <FieldHelp id="session.instrument" value={instrument}/><select value={instrument} onChange={e=>setInstrument(e.target.value)}>{['FUTURES','STOCK','OTHER'].map(group=>{
