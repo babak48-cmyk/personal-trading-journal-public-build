@@ -212,7 +212,7 @@ mod isolated_transfer_tests {
         let backup_bytes=fs::read(&backup).unwrap();
         let observed=preview(&new_c,&backup).unwrap();
         assert_eq!(observed.source_schema_version,11);
-        assert_eq!(observed.target_schema_version,12);
+        assert_eq!(observed.target_schema_version,13);
         assert_eq!((observed.sessions,observed.trades,observed.fills,observed.reviews,observed.attachments),(1,2,5,2,1));
         assert_eq!(observed.decisions,2);
         assert_eq!(observed.risk_snapshots,2);
@@ -224,7 +224,7 @@ mod isolated_transfer_tests {
         assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
         assert_eq!(fs::read(&old_path).unwrap(),old_bytes,"old Package B SQLite must stay byte-identical");
         let restored=db::open_database(&new_c.database()).unwrap();
-        assert_eq!(db::schema_version(&restored).unwrap(),12);
+        assert_eq!(db::schema_version(&restored).unwrap(),13);
         let first=crate::repository::get_trade_detail(&restored,"t1").unwrap();
         let second=crate::repository::get_trade_detail(&restored,"t2").unwrap();
         assert!((first.metrics.realized_r.unwrap()-1.46).abs()<0.00001);
