@@ -2,7 +2,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension};
 use crate::error::AppError;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 14;
+pub const CURRENT_SCHEMA_VERSION: u32 = 15;
 const MIGRATION_001: &str = include_str!("../migrations/001_initial.sql");
 const MIGRATION_002: &str = include_str!("../migrations/002_decision_workflow.sql");
 const MIGRATION_003: &str = include_str!("../migrations/003_execution_core.sql");
@@ -17,6 +17,7 @@ const MIGRATION_011: &str = include_str!("../migrations/011_setup_playbook.sql")
 const MIGRATION_012: &str = include_str!("../migrations/012_weekly_learning_action_events.sql");
 const MIGRATION_013: &str = include_str!("../migrations/013_initial_risk_corrections.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_candidate_source_type_corrections.sql");
+const MIGRATION_015: &str = include_str!("../migrations/015_candidate_source_price_corrections.sql");
 
 pub fn open_database(path: &Path) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
@@ -126,6 +127,13 @@ pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
         let tx=conn.unchecked_transaction()?;
         tx.execute_batch(MIGRATION_014).map_err(|_|AppError::Migration(14))?;
         tx.execute("UPDATE schema_meta SET schema_version=14 WHERE id=1", [])?;
+        tx.commit()?;
+    }
+    let version: u32 = conn.query_row("SELECT schema_version FROM schema_meta WHERE id=1", [], |r| r.get(0))?;
+    if version < 15 {
+        let tx=conn.unchecked_transaction()?;
+        tx.execute_batch(MIGRATION_015).map_err(|_|AppError::Migration(15))?;
+        tx.execute("UPDATE schema_meta SET schema_version=15 WHERE id=1", [])?;
         tx.commit()?;
     }
     Ok(())
