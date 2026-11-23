@@ -321,7 +321,10 @@ mod tests{
    assert!(html_data.contains("Audited historical Level Source price corrections"));
    assert!(html_data.contains("7000.25"));
    std::fs::remove_dir_all(root).unwrap();
-   assert_eq!(repository::list_journal_trades(&c,JournalFilterInput::default()).unwrap().len(),1);
+   let journal=repository::list_journal_trades(&c,JournalFilterInput::default()).unwrap();
+   assert_eq!(journal.len(),1);
+   assert_eq!(journal[0].audited_source_price_correction_count,2);
+   assert_eq!(journal[0].audited_source_type_correction_count,0);
    c.execute_batch(
      "DROP TRIGGER source_price_correction_no_update;
       UPDATE candidate_source_price_correction_events
