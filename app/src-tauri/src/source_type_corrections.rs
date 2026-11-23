@@ -317,6 +317,20 @@ mod audited_source_type_tests {
         assert_eq!(list_source_corrections_for_trade(&conn,"trade1").unwrap().len(),1);
         assert_eq!(list_source_corrections_for_trade(&conn,"trade2").unwrap().len(),0);
         assert_eq!(verify_all_source_correction_chains(&conn).unwrap(),1);
+        let root=std::env::temp_dir().join(format!("ptj-source-export-{}",Uuid::new_v4()));
+        let paths=crate::paths::AppPaths{
+          root:root.clone(),data:root.join("data"),attachments:root.join("attachments"),
+          backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs")
+        };
+        let csv=crate::exports::export_csv(&conn,&paths,JournalFilterInput::default()).unwrap();
+        let html=crate::exports::export_html(&conn,&paths,JournalFilterInput::default()).unwrap();
+        let csv_data=std::fs::read_to_string(csv.path).unwrap();
+        let html_data=std::fs::read_to_string(html.path).unwrap();
+        assert!(csv_data.contains("audited_source_type_correction_count"));
+        assert!(csv_data.contains("Wrong source selected at initial plan"));
+        assert!(html_data.contains("Audited historical Level Source type corrections"));
+        assert!(html_data.contains("Wrong source selected at initial plan"));
+        std::fs::remove_dir_all(root).unwrap();
         assert!(conn.execute(
           "UPDATE candidate_source_type_correction_events SET reason='Changed'",[]).is_err());
         assert!(conn.execute("DELETE FROM candidate_source_type_correction_events",[]).is_err());
