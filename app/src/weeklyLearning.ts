@@ -56,6 +56,30 @@ export function weeklyTradeBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** Session identity is retained independently of the calendar date: multiple
+ * sessions on one day must never be merged into a single sample. */
+export function weeklySessionBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const grouped=new Map<string,JournalTradeRow[]>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const group=grouped.get(row.session_id)||[];
+    group.push(row);grouped.set(row.session_id,group);
+  }
+  return [...grouped.entries()].map(([sessionId,items])=>{
+    const closed=items.filter(item=>item.status==='CLOSED');
+    const eligible=closed.filter(item=>item.realized_r!=null&&Number.isFinite(item.realized_r));
+    const date=items[0].session_date;
+    return {
+      label:date+' · Session ID '+sessionId,
+      tradeCount:items.length,closedCount:closed.length,eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((total,item)=>total+(item.realized_r as number),0):null,
+      ruleViolationCount:items.filter(item=>item.rule_status==='VIOLATED').length,
+    };
+  }).sort((a,b)=>b.label.localeCompare(a.label));
+}
+
 /** A trade may have multiple saved decision-time level sources. Group counts
  * overlap by design and MUST NOT be added together as distinct trades.
  * Missing historical provenance snapshots cannot be interpreted as "none".
