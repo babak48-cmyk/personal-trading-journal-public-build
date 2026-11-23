@@ -51,6 +51,12 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "rule_assessments"=>"SELECT COUNT(*) FROM rule_assessments",
         "custom_field_value_events"=>"SELECT COUNT(*) FROM custom_field_value_events",
         "custom_field_selection_snapshots"=>"SELECT COUNT(*) FROM custom_field_selection_snapshots",
+        // User-created definitions and playbook knowledge are valuable
+        // destination state even if no Sessions or Trades exist yet.
+        "custom_field_definitions"=>"SELECT COUNT(*) FROM custom_field_definitions",
+        "custom_field_options"=>"SELECT COUNT(*) FROM custom_field_options",
+        "setup_playbook_details"=>"SELECT COUNT(*) FROM setup_playbook_details",
+        "setup_evidence_priorities"=>"SELECT COUNT(*) FROM setup_evidence_priorities",
         "setup_trade_links"=>"SELECT COUNT(*) FROM setup_trade_links",
         "fill_correction_events"=>"SELECT COUNT(*) FROM fill_correction_events",
         "initial_risk_correction_events"=>"SELECT COUNT(*) FROM initial_risk_correction_events",
@@ -68,6 +74,8 @@ const JOURNAL_EVENT_TABLES:&[&str]=&[
     "execution_fills","trade_reviews","session_reviews","attachments",
     "trade_mistakes","session_pre_states","trade_rule_checks","rule_assessments",
     "custom_field_value_events","custom_field_selection_snapshots",
+    "custom_field_definitions","custom_field_options",
+    "setup_playbook_details","setup_evidence_priorities",
     "setup_trade_links","fill_correction_events","initial_risk_correction_events",
     "candidate_source_type_correction_events","candidate_source_price_correction_events",
     "weekly_learning_action_events",
@@ -232,6 +240,38 @@ mod isolated_transfer_tests {
         ).unwrap();
         assert!(ensure_empty_target(&paths).is_err(),
           "metadata-only history must block destructive import");
+        drop(conn);fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
+    fn destination_custom_field_definition_without_session_is_not_empty(){
+        let base=std::env::temp_dir().join(format!("ptj-c-custom-field-{}",Uuid::new_v4()));
+        let paths=target_paths(&base);
+        let conn=db::open_database(&paths.database()).unwrap();
+        conn.execute(
+          "INSERT INTO custom_field_definitions(field_id,stage,field_type,label)
+           VALUES('user-field','session-review','TEXT','My private review field')",[]
+        ).unwrap();
+        assert!(ensure_empty_target(&paths).is_err(),
+          "custom Field Manager definitions are user data even without trades");
+        drop(conn);fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
+    fn destination_playbook_detail_without_trade_is_not_empty(){
+        let base=std::env::temp_dir().join(format!("ptj-c-playbook-{}",Uuid::new_v4()));
+        let paths=target_paths(&base);
+        let conn=db::open_database(&paths.database()).unwrap();
+        conn.execute_batch(
+          "INSERT INTO workspaces(workspace_id,name,created_at)
+             VALUES('w','Synthetic','2026-11-23');
+           INSERT INTO setups(setup_id,workspace_id,name,user_defined)
+             VALUES('setup-1','w','User playbook',1);
+           INSERT INTO setup_versions(setup_version_id,setup_id,version_label,status)
+             VALUES('v1','setup-1','v1','DRAFT');
+           INSERT INTO setup_playbook_details(version_id,version_number,created_at,name_snapshot,is_approved)
+             VALUES('v1',1,'2026-11-23','User playbook',0);"
+        ).unwrap();
+        assert!(ensure_empty_target(&paths).is_err(),
+          "a historical playbook definition must block destructive import");
         drop(conn);fs::remove_dir_all(base).unwrap();
     }
     #[test]
