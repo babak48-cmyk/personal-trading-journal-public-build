@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 use chrono::Utc;
 use rusqlite::Connection;
 use serde::Serialize;
-use crate::{error::AppError, paths::AppPaths, repository::{self, JournalFilterInput}, fill_corrections::{self, CorrectionHistoryEvent}, initial_risk_corrections::{self,InitialRiskCorrectionEvent}};
+use crate::{error::AppError, paths::AppPaths, repository::{self, JournalFilterInput}, fill_corrections::{self, CorrectionHistoryEvent}, initial_risk_corrections::{self,InitialRiskCorrectionEvent},source_type_corrections::{self,SourceTypeCorrectionEvent}};
 
 #[derive(Debug, Serialize)]
 pub struct ExportResult {
@@ -21,9 +21,11 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     // No correction history may be silently dropped from effective-value reports.
     let mut audits:Vec<(String,Vec<CorrectionHistoryEvent>)>=Vec::new();
     let mut risk_audits:Vec<(String,Vec<InitialRiskCorrectionEvent>)>=Vec::new();
+    let mut source_audits:Vec<(String,Vec<SourceTypeCorrectionEvent>)>=Vec::new();
     for row in &rows {
         audits.push((row.trade_id.clone(),fill_corrections::list_trade_correction_history(conn,&row.trade_id)?));
         risk_audits.push((row.trade_id.clone(),initial_risk_corrections::list_initial_risk_corrections(conn,&row.trade_id)?));
+        source_audits.push((row.trade_id.clone(),source_type_corrections::list_source_corrections_for_trade(conn,&row.trade_id)?));
     }
     fs::create_dir_all(&paths.exports)?;
     let created=Utc::now();
@@ -79,6 +81,21 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
       }
     }
     if !any_risk {html.push_str("<tr><td colspan='10'>No initial-risk corrections for selected Trades.</td></tr>");}
+    html.push_str("</tbody></table>");
+    html.push_str("<h2>Audited historical Level Source type corrections</h2><p>The original Zone revision and candidate source ID are preserved. Effective historical classification is shown with a correction flag in the level-source summary; this is not an observed confirmation or actual later market revision.</p>");
+    html.push_str("<table><thead><tr><th>Trade ID</th><th>Candidate source ID</th><th>Revision</th><th>Original source type ID</th><th>Previous source type ID</th><th>Replacement source type ID</th><th>Reason</th><th>UTC timestamp</th><th>Actor</th><th>Audit ID</th></tr></thead><tbody>");
+    let mut any_source=false;
+    for (trade_id,events) in &source_audits {
+      for event in events {
+        any_source=true;
+        html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+          esc_html(trade_id),esc_html(&event.candidate_source_id),event.revision,
+          esc_html(&event.original_source_type_id),esc_html(&event.previous_source_type_id),
+          esc_html(&event.replacement_source_type_id),esc_html(&event.reason),
+          esc_html(&event.recorded_at_utc),esc_html(&event.actor),esc_html(&event.correction_id)));
+      }
+    }
+    if !any_source{html.push_str("<tr><td colspan='10'>No source type correction events for these Trades.</td></tr>");}
     html.push_str("</tbody></table></body></html>");
     fs::write(&path,html)?;
     Ok(ExportResult{path:path.to_string_lossy().to_string(),row_count:rows.len(),created_at:created.to_rfc3339()})
@@ -89,13 +106,15 @@ pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)-
     fs::create_dir_all(&paths.exports)?;
     let created=Utc::now();
     let path=paths.exports.join(format!("TradingJournal_Trades_{}.csv",created.format("%Y%m%d_%H%M%S")));
-    let mut out=String::from("session_date,instrument,direction,status,candidate,level_sources,decision_quality,rule_status,mistakes,realized_r_effective,net_pnl_effective,trade_id,audited_correction_count,audited_corrections_json,audited_initial_risk_correction_count,audited_initial_risk_corrections_json\n");
+    let mut out=String::from("session_date,instrument,direction,status,candidate,level_sources,decision_quality,rule_status,mistakes,realized_r_effective,net_pnl_effective,trade_id,audited_correction_count,audited_corrections_json,audited_initial_risk_correction_count,audited_initial_risk_corrections_json,audited_source_type_correction_count,audited_source_type_corrections_json\n");
     for r in &rows {
         let events=fill_corrections::list_trade_correction_history(conn,&r.trade_id)?;
         let history_json=serde_json::to_string(&events)?;
         let risk_events=initial_risk_corrections::list_initial_risk_corrections(conn,&r.trade_id)?;
         let risk_history_json=serde_json::to_string(&risk_events)?;
-        let vals=[csv_cell(&r.session_date),csv_cell(&r.instrument_symbol),csv_cell(&r.direction),csv_cell(&r.status),csv_cell(r.candidate_label.as_deref().unwrap_or("")),csv_cell(&r.level_sources.join(" | ")),csv_cell(r.decision_quality.as_deref().unwrap_or("")),csv_cell(&r.rule_status),csv_cell(&r.mistakes.join(" | ")),r.realized_r.map(|v|v.to_string()).unwrap_or_default(),r.net_realized_pnl.map(|v|v.to_string()).unwrap_or_default(),csv_cell(&r.trade_id),events.len().to_string(),csv_cell(&history_json),risk_events.len().to_string(),csv_cell(&risk_history_json)];
+        let source_events=source_type_corrections::list_source_corrections_for_trade(conn,&r.trade_id)?;
+        let source_history_json=serde_json::to_string(&source_events)?;
+        let vals=[csv_cell(&r.session_date),csv_cell(&r.instrument_symbol),csv_cell(&r.direction),csv_cell(&r.status),csv_cell(r.candidate_label.as_deref().unwrap_or("")),csv_cell(&r.level_sources.join(" | ")),csv_cell(r.decision_quality.as_deref().unwrap_or("")),csv_cell(&r.rule_status),csv_cell(&r.mistakes.join(" | ")),r.realized_r.map(|v|v.to_string()).unwrap_or_default(),r.net_realized_pnl.map(|v|v.to_string()).unwrap_or_default(),csv_cell(&r.trade_id),events.len().to_string(),csv_cell(&history_json),risk_events.len().to_string(),csv_cell(&risk_history_json),source_events.len().to_string(),csv_cell(&source_history_json)];
         out.push_str(&vals.join(","));out.push('\n');
     }
     fs::write(&path,out)?;
