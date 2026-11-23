@@ -39,6 +39,26 @@ export function AuditedFillCorrectionPanel({
     return ()=>{cancelled=true;requestEpoch.current++;};
   },[trade.metrics.trade_id]);
 
+  /** Manual recovery after a failed history read or an uncertain write.
+   * Never treat an unreadable ledger as an empty audit chain. */
+  async function reloadAuditHistory(){
+    if(busy||saving.current)return;
+    const epoch=++requestEpoch.current;
+    setHistory(null);setPreview(null);setPreviewKey('');
+    setBusy(true);setMessage('Re-reading the complete immutable Fill audit history…');
+    try{
+      const verified=await localApi.listTradeCorrectionHistory(trade.metrics.trade_id);
+      if(epoch!==requestEpoch.current)return;
+      setHistory(verified);
+      setMessage('Fill audit history independently re-read; review the effective values before any new correction.');
+    }catch(e){
+      if(epoch===requestEpoch.current)
+        setMessage('Audit history still unavailable; correction locked: '+String(e));
+    }finally{
+      if(epoch===requestEpoch.current)setBusy(false);
+    }
+  }
+
   function invalidate(){
     requestEpoch.current++;
     setPreview(null);setPreviewKey('');
@@ -84,6 +104,9 @@ export function AuditedFillCorrectionPanel({
     if(!preview.explicit_confirmation_required){setMessage('Explicit confirmation was not verified.');return;}
     const epoch=++requestEpoch.current;
     saving.current=true;setBusy(true);
+    // Write outcome may be uncertain if a post-commit read fails. Keep the
+    // editor locked until the complete ledger is independently re-read.
+    setHistory(null);
     try{
       const receipt=await localApi.recordFillCorrection(input);
       // A committed response is not enough: verify persisted trade and audit
@@ -112,6 +135,7 @@ export function AuditedFillCorrectionPanel({
     <summary>Correct a recorded Fill / immutable audit history{history?.length?' · '+history.length+' correction(s)':''}</summary>
     <p className="subtle">Historical entry mistake only — not a new market event, stop move or Plan revision. Original Fill and every past correction remain recorded. This section never changes a Fill in place.</p>
     {history===null&&<p role="status">Audit history not verified yet. Historical corrections are disabled until the history can be read successfully.</p>}
+    <button type="button" disabled={busy||saving.current} onClick={()=>void reloadAuditHistory()}>Re-read immutable Fill audit history</button>
     {history!==null&&history.length===0&&<p className="subtle">No historical corrections recorded for this Trade.</p>}
     {history?.map(h=><div className="decisionHistory" key={h.correction_id}>
       <time>{h.recorded_at_utc}</time>
