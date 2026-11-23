@@ -2303,6 +2303,8 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <span><b><JournalIcon name="ratio"/>R eligible</b>{weekly.eligibleRCount} / {weekly.closedCount}</span>
           <span><b><JournalIcon name="help"/>Unknown R</b>{weekly.missingRCount}</span>
           <span><b><JournalIcon name="ratio"/>Eligible net R</b>{weekly.netR==null?'—':weekly.netR.toFixed(2)+'R'}</span>
+          <span title="Largest positive net R among R-eligible closed Trades only; unknown outcomes excluded."><b>Largest known winner</b>{weekly.largestWinnerR==null?'—':weekly.largestWinnerR.toFixed(2)+'R'}</span>
+          <span title="Largest negative net R among R-eligible closed Trades only; unknown outcomes excluded."><b>Largest known loser</b>{weekly.largestLoserR==null?'—':weekly.largestLoserR.toFixed(2)+'R'}</span>
           <span><b><JournalIcon name="safety"/>Rule violations</b>{weekly.ruleViolationCount}</span>
           <span><b><JournalIcon name="checklist"/>Unchecked rules</b>{weekly.uncheckedRuleCount}</span>
         </div>
