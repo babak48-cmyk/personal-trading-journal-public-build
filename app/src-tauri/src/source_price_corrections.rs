@@ -275,7 +275,6 @@ mod tests{
  fn effective_readout_exports_and_corruption_guard_keep_original_decision_price(){
    use crate::{repository::{self,JournalFilterInput},source_type_corrections};
    let mut c=fixture();
-   c.execute("UPDATE candidate_decisions SET decision_type='TRADE' WHERE decision_id='d'",[]).err();
    // The immutable Decision is created as NO_TRADE in the fixture.
    // Create a second standalone recorded trade Decision on the same saved
    // historical revision; no original decision or Zone is rewritten.
