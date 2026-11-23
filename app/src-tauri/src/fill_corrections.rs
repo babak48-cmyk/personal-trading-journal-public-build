@@ -444,8 +444,8 @@ mod tests{
         db.execute_batch("
           INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','test','2026-11-15');
           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value) VALUES('i','w','ES',0.25,50);
-          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
-            VALUES('s','w','i','2026-11-15','DEMO','now','ACTIVE','now','now');
+          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at,instrument_currency_snapshot)
+            VALUES('s','w','i','2026-11-15','DEMO','now','ACTIVE','now','now','USD');
           INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
             VALUES('d','s','now','TRADE','LONG');
           INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
@@ -523,6 +523,8 @@ mod tests{
             }).unwrap();
         assert_eq!(analytics.trade_count,1);
         assert_eq!(analytics.net_pnl,Some(605.0));
+        assert_eq!(analytics.pnl_currency.as_deref(),Some("USD"));
+        assert_eq!(analytics.pnl_currency_status,"SINGLE_CURRENCY");
         assert_eq!(analytics.eligible_r_count,0);
         assert_eq!(analytics.net_r,None);
         assert!(analytics.small_sample);
