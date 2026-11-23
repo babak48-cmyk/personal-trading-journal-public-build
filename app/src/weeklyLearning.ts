@@ -82,6 +82,55 @@ export function weeklyWeekdayBreakdown(
     });
 }
 
+/** Recorded Decision-time hour in its originating Session's saved IANA
+ * timezone. Never use device timezone, guessed exchange open, planned time
+ * or an unzoned legacy timestamp. A missing event/zone remains UNKNOWN. */
+export function localDecisionHour(
+  recorded:string|null|undefined,zone:string|null|undefined,
+):string|null{
+  if(!recorded||!zone||!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/i.test(recorded))return null;
+  const at=new Date(recorded);
+  if(!Number.isFinite(at.getTime()))return null;
+  try{
+    const formatter=new Intl.DateTimeFormat('en-GB',{
+      timeZone:zone,hour:'2-digit',hourCycle:'h23',
+    });
+    const text=formatter.formatToParts(at).find(part=>part.type==='hour')?.value;
+    const hour=Number(text);
+    if(!text||!Number.isInteger(hour)||hour<0||hour>23)return null;
+    return String(hour).padStart(2,'0');
+  }catch{return null;}
+}
+
+/** Decision-time distribution; NOT fill/entry time and NOT a session phase.
+ * Different saved timezones remain separate. Unknown clocks are listed as
+ * unknown counts, not assigned to a manufactured 00:00 hour or a net R. */
+export function weeklyDecisionHourBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const groups=new Map<string,JournalTradeRow[]>();
+  for(const trade of rows){
+    if(journalWeekStart(trade.session_date)!==weekStart)continue;
+    const hour=localDecisionHour(trade.decision_occurred_at,trade.session_timezone_id);
+    const label=hour&&trade.session_timezone_id
+      ?trade.session_timezone_id+' · '+hour+':00–'+hour+':59'
+      :'Unknown recorded Decision time / Session zone';
+    const existing=groups.get(label)||[];
+    existing.push(trade);groups.set(label,existing);
+  }
+  return [...groups.entries()].sort(([left],[right])=>left.localeCompare(right)).map(([label,items])=>{
+    const closed=items.filter(item=>item.status==='CLOSED');
+    const unknown=label.startsWith('Unknown recorded');
+    const eligible=unknown?[]:closed.filter(item=>item.realized_r!=null&&Number.isFinite(item.realized_r));
+    return {
+      label,tradeCount:items.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,
+      netR:eligible.length?eligible.reduce((sum,item)=>sum+(item.realized_r as number),0):null,
+      ruleViolationCount:items.filter(item=>item.rule_status==='VIOLATED').length,
+    };
+  });
+}
+
 /** Session identity is retained independently of the calendar date: multiple
  * sessions on one day must never be merged into a single sample. */
 export function weeklySessionBreakdown(
