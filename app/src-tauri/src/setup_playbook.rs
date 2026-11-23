@@ -370,7 +370,7 @@ mod tests {
  fn versions_are_immutable_and_group_metrics_do_not_invent_r(){
     let mut c=Connection::open_in_memory().unwrap();
     c.execute_batch("PRAGMA foreign_keys=ON").unwrap();db::migrate(&c).unwrap();
-    assert_eq!(db::schema_version(&c).unwrap(),13);
+    assert_eq!(db::schema_version(&c).unwrap(),14);
     repository::ensure_default_workspace(&c).unwrap();
     c.execute_batch("INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at) VALUES ('s','default-workspace','instrument-ES','2026-11-16','DEMO','now','ACTIVE','now','now');
        INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction) VALUES('d','s','now','TRADE','LONG');
