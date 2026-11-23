@@ -1043,6 +1043,27 @@ pub fn list_trade_source_type_corrections(app:AppHandle,trade_id:String)
 }
 
 #[tauri::command]
+pub fn preview_source_price_correction(app:AppHandle,input:crate::source_price_corrections::SourcePriceCorrectionRequest)
+ ->Result<crate::source_price_corrections::SourcePriceCorrectionPreview,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let conn=db::open_database(&paths.database())?;
+ crate::source_price_corrections::preview(&conn,&input)
+}
+#[tauri::command]
+pub fn record_source_price_correction(app:AppHandle,input:crate::source_price_corrections::SourcePriceCorrectionRequest)
+ ->Result<crate::source_price_corrections::SourcePriceCorrectionEvent,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let mut conn=db::open_database(&paths.database())?;
+ crate::source_price_corrections::record(&mut conn,input)
+}
+#[tauri::command]
+pub fn list_trade_source_price_corrections(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::source_price_corrections::SourcePriceCorrectionEvent>,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let conn=db::open_database(&paths.database())?;
+ crate::source_price_corrections::list_for_trade(&conn,&trade_id)
+}
+#[tauri::command]
 pub fn preview_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
  ->Result<crate::initial_risk_corrections::InitialRiskCorrectionPreview,AppError>{
     let paths=AppPaths::from_app(&app)?;
