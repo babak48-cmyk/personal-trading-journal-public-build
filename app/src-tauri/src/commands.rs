@@ -1106,9 +1106,9 @@ pub fn preview_package_c_demo_import(app:AppHandle,backup_path:String)
 }
 
 #[tauri::command]
-pub fn import_package_b_demo_backup(app:AppHandle,backup_path:String,expected_database_sha256:String)
+pub fn import_package_b_demo_backup(app:AppHandle,backup_path:String,expected_archive_sha256:String)
  ->Result<restore::RestoreResult,AppError>{
     require_isolated_package_c_demo(&app)?;
     let paths=AppPaths::from_app(&app)?;
-    crate::demo_transfer::import_into_empty(&paths,&PathBuf::from(backup_path),&expected_database_sha256)
+    crate::demo_transfer::import_into_empty(&paths,&PathBuf::from(backup_path),&expected_archive_sha256)
 }
