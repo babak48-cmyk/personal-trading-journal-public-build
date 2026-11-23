@@ -2330,7 +2330,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <div className="weeklyBreakdownRow"><strong>3 · One actionable next-week experiment</strong><span>{weeklyThreePart.nextAction}</span></div>
         </div>}
         <WeeklyActionWorkspace weekStart={activeWeek} appliedFilter={appliedFilter} suggestedAction={weeklyAction}/>
-        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown})} readOnly/></label>
+        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
     </>}
