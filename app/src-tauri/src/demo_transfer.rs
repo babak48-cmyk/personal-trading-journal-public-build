@@ -83,6 +83,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         return Err(AppError::Validation("Migrated staged journal failed integrity verification".into()));
     }
     crate::fill_corrections::verify_all_correction_chains(&c)?;
+    crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&c)?;
     Ok(DemoTransferPreview{
         source_schema_version:info.schema_version,
         target_schema_version:staged_schema,
@@ -126,6 +127,7 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
          return Err(AppError::Validation("Destination record counts could not be reconciled after import; inspect safety backup before retrying".into()));
     }
     crate::fill_corrections::verify_all_correction_chains(&c)?;
+    crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&c)?;
     Ok(receipt)
 }
 
