@@ -20,6 +20,8 @@ pub struct DemoTransferPreview {
     pub fills:i64,
     pub reviews:i64,
     pub correction_events:i64,
+    pub initial_risk_correction_events:i64,
+    pub source_type_correction_events:i64,
     pub attachments:usize,
     pub original_backup_untouched:bool,
 }
@@ -37,6 +39,8 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "execution_fills"=>"SELECT COUNT(*) FROM execution_fills",
         "trade_reviews"=>"SELECT COUNT(*) FROM trade_reviews",
         "fill_correction_events"=>"SELECT COUNT(*) FROM fill_correction_events",
+        "initial_risk_correction_events"=>"SELECT COUNT(*) FROM initial_risk_correction_events",
+        "candidate_source_type_correction_events"=>"SELECT COUNT(*) FROM candidate_source_type_correction_events",
         "weekly_learning_action_events"=>"SELECT COUNT(*) FROM weekly_learning_action_events",
         _=>return Err(AppError::Validation("invalid transfer inventory table".into())),
     };
@@ -47,6 +51,8 @@ fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     if count(&conn,"sessions")?>0||count(&conn,"trades")?>0||
        count(&conn,"execution_fills")?>0||count(&conn,"trade_reviews")?>0||
        count(&conn,"fill_correction_events")?>0||
+       count(&conn,"initial_risk_correction_events")?>0||
+       count(&conn,"candidate_source_type_correction_events")?>0||
        count(&conn,"weekly_learning_action_events")?>0 {
        return Err(AppError::Validation(
          "Package C destination has journal data. Transfer only to an empty, separate DEMO profile; no overwrite permitted.".into()));
@@ -96,6 +102,8 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         risk_snapshots:count(&c,"risk_snapshots")?,
         fills:count(&c,"execution_fills")?,reviews:count(&c,"trade_reviews")?,
         correction_events:count(&c,"fill_correction_events")?,
+        initial_risk_correction_events:count(&c,"initial_risk_correction_events")?,
+        source_type_correction_events:count(&c,"candidate_source_type_correction_events")?,
         attachments:info.attachment_count,
         original_backup_untouched:true,
     })
@@ -124,7 +132,9 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
        count(&c,"risk_snapshots")?!=confirmed.risk_snapshots||
        count(&c,"execution_fills")?!=confirmed.fills||
        count(&c,"trade_reviews")?!=confirmed.reviews||
-       count(&c,"fill_correction_events")?!=confirmed.correction_events {
+       count(&c,"fill_correction_events")?!=confirmed.correction_events||
+       count(&c,"initial_risk_correction_events")?!=confirmed.initial_risk_correction_events||
+       count(&c,"candidate_source_type_correction_events")?!=confirmed.source_type_correction_events {
          return Err(AppError::Validation("Destination record counts could not be reconciled after import; inspect safety backup before retrying".into()));
     }
     crate::fill_corrections::verify_all_correction_chains(&c)?;
