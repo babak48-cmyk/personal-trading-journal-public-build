@@ -116,6 +116,59 @@ const JOURNAL_EVENT_TABLES:&[&str]=&[
     "candidate_source_type_correction_events","candidate_source_price_correction_events",
     "weekly_learning_action_events",
 ];
+/// Refuse replacement of a destination whose built-in registries were
+/// edited, even when their user_defined flag remains false. Compare against
+/// the SAME reference seeding code as the installed app, not a duplicated
+/// list of hard-coded instrument prices or level names.
+fn ensure_pristine_reference_catalog(conn:&Connection)->Result<(),AppError>{
+    use rusqlite::types::Value;
+    use std::collections::HashMap;
+    let baseline=Connection::open_in_memory()?;
+    db::migrate(&baseline)?;
+    crate::repository::ensure_default_workspace(&baseline)?;
+    // Explicit source columns: exclude generated timestamps; include every
+    // user-editable reference attribute, disabled state and presentation order.
+    for (table,sql) in [
+      ("instruments","SELECT instrument_id,symbol,display_name,tick_size,point_value,currency,active,market_type,display_order,user_defined,workspace_id FROM instruments"),
+      ("level_source_types","SELECT source_type_id,code,label,source_group,active,user_defined,description,display_order,manager_group,workspace_id FROM level_source_types"),
+      ("evidence_types","SELECT evidence_type_id,code,label,family,active,research_status,user_defined,workspace_id FROM evidence_types"),
+    ]{
+        let collect=|c:&Connection|->Result<HashMap<String,Vec<Value>>,AppError>{
+            let mut statement=c.prepare(sql)?;
+            let values=statement.query_map([],|row|{
+                let key:String=row.get(0)?;
+                let mut cells=Vec::with_capacity(row.as_ref().column_count());
+                for index in 0..row.as_ref().column_count(){
+                    cells.push(row.get::<_,Value>(index)?);
+                }
+                Ok((key,cells))
+            })?.collect::<Result<HashMap<_,_>,_>>()?;
+            Ok(values)
+        };
+        let references=collect(&baseline)?;
+        for (id,record) in collect(conn)?{
+            if references.get(&id)!=Some(&record){
+                return Err(AppError::Validation(format!(
+                    "Package C destination contains altered or nonbaseline {table} registry entry {id}; transfer is blocked to preserve settings"
+                )));
+            }
+        }
+    }
+    // The default Workspace is a user-visible entity; extra workspaces
+    // or a renamed default must not silently vanish with a new ZIP.
+    let mut workspaces=conn.prepare("SELECT workspace_id,name FROM workspaces")?;
+    let rows=workspaces.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?;
+    for row in rows{
+        let (id,name)=row?;
+        if id!="default-workspace" || name!="Personal Trading Journal"{
+            return Err(AppError::Validation(
+                "Package C destination contains customized Workspace identity/name; no overwrite permitted".into()
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     let conn=db::open_database(&paths.database())?;
     // Refuse ALL previously captured journal history, including draft-only
@@ -128,6 +181,7 @@ fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
               "Package C destination already contains journal data in {table}; transfer requires an empty, separate DEMO profile. No overwrite permitted.")));
         }
     }
+    ensure_pristine_reference_catalog(&conn)?;
     if paths.attachments.exists()&&
        std::fs::read_dir(&paths.attachments)?.next().is_some(){
        return Err(AppError::Validation("Package C destination already has attachments; transfer refused".into()));
