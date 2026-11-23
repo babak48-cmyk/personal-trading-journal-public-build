@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {auditedFillCorrectionEditable} from './auditedCorrectionReadiness';
 import {localApi, type TradeDetail, type FillCorrectionField,
   type FillCorrectionInput, type FillCorrectionPreview,
   type CorrectionHistoryEvent} from './services/localApi';
@@ -26,7 +27,7 @@ export function AuditedFillCorrectionPanel({
   const requestEpoch=useRef(0);
   const saving=useRef(false);
   const closed=trade.metrics.status==='CLOSED';
-  const editable=closed&&!readOnly;
+  const editable=auditedFillCorrectionEditable(trade.metrics.status,readOnly,history!==null);
   const selected=trade.fills.find(x=>x.execution_id===executionId);
   const current=selected?(selected[field] as number|null|undefined)??null:null;
 
@@ -111,7 +112,7 @@ export function AuditedFillCorrectionPanel({
   return <details className="guidedMore">
     <summary>Correct a recorded Fill / immutable audit history{history?.length?' · '+history.length+' correction(s)':''}</summary>
     <p className="subtle">Historical entry mistake only — not a new market event, stop move or Plan revision. Original Fill and every past correction remain recorded. This section never changes a Fill in place.</p>
-    {history===null&&<p role="status">Loading correction history…</p>}
+    {history===null&&<p role="status">Audit history not verified yet. Historical corrections are disabled until the history can be read successfully.</p>}
     {history!==null&&history.length===0&&<p className="subtle">No historical corrections recorded for this Trade.</p>}
     {history?.map(h=><div className="decisionHistory" key={h.correction_id}>
       <time>{h.recorded_at_utc}</time>
