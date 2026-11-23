@@ -1956,6 +1956,10 @@ pub struct JournalTradeRowDto {
     pub trade_id: String,
     pub session_id: String,
     pub session_date: String,
+    /// Original Decision instant; not entry/exit time or planned event.
+    pub decision_occurred_at: Option<String>,
+    /// IANA timezone stored for the Session; never use device timezone.
+    pub session_timezone_id: Option<String>,
     pub instrument_symbol: String,
     pub direction: String,
     pub status: String,
@@ -2232,6 +2236,10 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         let evidence_temporal=trade_evidence_temporal_snapshot(
             conn,&trade_id,&candidate_id,decision_at.as_deref()
         )?;
+        let session_timezone_id:Option<String>=conn.query_row(
+            "SELECT timezone_id FROM sessions WHERE session_id=?1",
+            [&session_id],|r|r.get(0)
+        )?;
         let metrics=trade_metrics(conn,&trade_id)?;
         let audited_correction_count:i64=conn.query_row(
           "SELECT COUNT(*) FROM fill_correction_events ce
@@ -2270,7 +2278,9 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
           ))
         )?;
         out.push(JournalTradeRowDto{
-            trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
+            trade_id,session_id,session_date,
+            decision_occurred_at:decision_at,session_timezone_id,
+            instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
             mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
