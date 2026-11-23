@@ -2482,6 +2482,9 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
         matches!(x.decision_quality.as_deref(),Some("C")|Some("INVALID")) &&
         x.net_realized_pnl.is_some_and(|net|net>1e-9)
     ).count() as i64;
+    let currency_safe_net_pnl=if pnl_currency_status=="SINGLE_CURRENCY"{
+        Some(pnls.iter().sum::<f64>())
+    }else{None};
     Ok(AnalyticsSummaryDto{
         trade_count:rows.len() as i64,closed_trade_count:closed.len() as i64,
         eligible_net_pnl_count:pnls.len() as i64,eligible_r_count:eligible,
@@ -2491,7 +2494,7 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
         max_winning_streak:chronological.map(|v|v.0),
         max_losing_streak:chronological.map(|v|v.1),
         max_realized_r_drawdown:chronological.map(|v|v.2),
-        net_pnl:if pnls.is_empty()||pnl_currency_status!="SINGLE_CURRENCY"{None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
+        net_pnl:currency_safe_net_pnl,rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
     })
 }
 
