@@ -9,6 +9,7 @@ mod error;
 mod exports;
 mod fill_corrections;
 mod initial_risk_corrections;
+mod source_type_corrections;
 mod import_readiness;
 mod setup_playbook;
 mod paths;
