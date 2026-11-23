@@ -288,7 +288,7 @@ mod audited_source_type_tests {
     #[test]
     fn source_correction_changes_only_historical_effective_classification_and_keeps_original(){
         let mut conn=fixture();
-        assert_eq!(db::schema_version(&conn).unwrap(),14);
+        assert_eq!(db::schema_version(&conn).unwrap(),15);
         let first=sources_at_decision(&conn,"trade1").unwrap();
         assert_eq!(first.len(),1);
         assert_eq!(first[0].original_source_type_id,"sourceA");
