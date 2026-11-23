@@ -212,7 +212,7 @@ mod custom_field_schema_tests {
     fn custom_field_schema_v9_preserves_immutable_option_snapshots() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
         conn.execute("INSERT INTO custom_field_definitions(field_id,stage,field_type,label) VALUES('context','session-review','SINGLE_SELECT','Context')",[]).unwrap();
         conn.execute("INSERT INTO custom_field_options(option_id,field_id,label) VALUES('trend','context','Trending')",[]).unwrap();
         conn.execute("INSERT INTO custom_field_value_events(event_id,field_id,owner_stage,owner_id,value_type) VALUES('e1','context','session-review','demo-session','SINGLE_SELECT')",[]).unwrap();
