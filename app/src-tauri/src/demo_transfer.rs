@@ -212,6 +212,11 @@ mod isolated_transfer_tests {
         assert_eq!(observed.source_schema_version,11);
         assert_eq!(observed.target_schema_version,12);
         assert_eq!((observed.sessions,observed.trades,observed.fills,observed.reviews,observed.attachments),(1,2,5,2,1));
+        assert_eq!(observed.decisions,2);
+        assert_eq!(observed.risk_snapshots,2);
+        assert_eq!(observed.zones,0);
+        assert_eq!(observed.plan_revisions,0);
+        assert_eq!(observed.evidence_events,0);
         let receipt=import_into_empty(&new_c,&backup,&observed.database_sha256).unwrap();
         assert_eq!(receipt.integrity,"ok");
         assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
