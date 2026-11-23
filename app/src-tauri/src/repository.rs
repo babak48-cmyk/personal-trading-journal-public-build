@@ -2012,6 +2012,10 @@ pub struct AnalyticsSummaryDto {
     pub average_loser_r: Option<f64>,
     pub profit_factor_r: Option<f64>,
     pub expectancy_r: Option<f64>,
+    /// Mean winning R divided by absolute mean losing R (payoff, not win/loss count).
+    pub win_loss_payoff_r: Option<f64>,
+    /// Known closed net P&L divided by the count of closed Trades with known net P&L.
+    pub expectancy_pnl: Option<f64>,
     pub net_pnl: Option<f64>,
     pub rule_violation_trades: i64,
     pub bad_decision_win_count: i64,
@@ -2299,6 +2303,17 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     let average_loser_r=if losers.is_empty(){None}else{Some(losers.iter().sum::<f64>()/losers.len() as f64)};
     let gross_win:f64=winners.iter().sum(); let gross_loss:f64=losers.iter().map(|x|x.abs()).sum();
     let profit_factor_r=if gross_loss>0.0{Some(gross_win/gross_loss)}else{None};
+    // Keep both operands from the same verified closed-R sample; missing one
+    // side is not evidence of a zero win/loss payoff.
+    let win_loss_payoff_r=match (average_winner_r,average_loser_r){
+        (Some(win),Some(loss)) if loss<0.0=>Some(win/loss.abs()),
+        _=>None,
+    };
+    // Initial risk is NOT required for trustworthy net P&L. Missing costs
+    // result in NULL net P&L and those Trades cannot dilute this denominator.
+    let expectancy_pnl=if pnls.is_empty(){None}else{
+        Some(pnls.iter().sum::<f64>()/pnls.len() as f64)
+    };
     let rule_violation_trades=rows.iter().filter(|x|x.rule_status=="VIOLATED").count() as i64;
     // A known profitable result does not require a known initial risk.
     // Unknown costs -> UNKNOWN net result and are never counted as wins.
@@ -2311,6 +2326,7 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
         eligible_net_pnl_count:pnls.len() as i64,eligible_r_count:eligible,
         wins,losses,breakeven,win_rate,average_r,median_r,net_r,
         average_winner_r,average_loser_r,profit_factor_r,expectancy_r:average_r,
+        win_loss_payoff_r,expectancy_pnl,
         net_pnl:if pnls.is_empty(){None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
     })
 }
