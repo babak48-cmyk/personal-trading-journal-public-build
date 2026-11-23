@@ -252,7 +252,7 @@ export function weeklyDecisionAwareAction(
  * repeatability, or rate strategy profitability from a sparse sample.
  */
 export function weeklyThreePartReview(snapshot:WeeklyLearningSnapshot,
-  setupGroups:readonly WeeklyTradeBreakdown[],missedCount:number,action:string,
+  setupGroups:readonly WeeklyTradeBreakdown[],missedCount:number|null,action:string,
 ):{setupCandidate:string;recordedConcern:string;nextAction:string}{
   const atEntry=[...setupGroups].filter(g=>g.label.includes(' · At entry · ID '));
   atEntry.sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
@@ -268,9 +268,11 @@ export function weeklyThreePartReview(snapshot:WeeklyLearningSnapshot,
       ? snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' recorded trades); inspect individual cases.'
       : snapshot.missingRCount>0
         ? snapshot.missingRCount+' closed trade(s) lack eligible R; verify costs and initial risk.'
-        : missedCount>0
-          ? missedCount+' recorded MISSED decision(s); confirm opportunity validity before classifying a mistake.'
-          : 'No ranked process issue identified from recorded rows; blank fields are not proof of flawless execution.';
+        : missedCount===null
+          ? 'Decision-only MISSED counts unavailable; do not treat missing decision data as zero or claim no process issues.'
+          : missedCount>0
+            ? missedCount+' recorded MISSED decision(s); confirm opportunity validity before classifying a mistake.'
+            : 'No ranked process issue identified from recorded rows; blank fields are not proof of flawless execution.';
   return {setupCandidate,recordedConcern,nextAction:action};
 }
 
