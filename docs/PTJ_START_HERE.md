@@ -1,3 +1,13 @@
+## Latest transfer-integrity development checkpoint — 2026-11-23
+
+Authoritative PUBLIC product branch remains `feature/ptj-c-transfer-integrity-2026-11-23` (Draft PR #17, UNMERGED). Latest independently fetched CODE SHA `b529d1a3fb1ef8c6c9095191be64c4ffb3b556e5`, followed by canonical docs-only checkpoint `4ac0801eba25541eb7b860f0bec86dac67f937cd`, **`PTJ-C-TRANSFER-FULL-ARCHIVE-HASH-AND-SOURCE-ISOLATION-2026-11-23`** in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the product branch. Reverify live HEAD and CI before acting; these are historical exact anchors.
+
+Package C B→C import now requires full SHA-256 of original ZIP (including attachments and manifest), not merely database SHA, and rejects sources located within the Package C destination root. Final installed-copy postcheck rehashes the ZIP within rollback-capable Restore. Added Rust negative fixtures for changed attachment with identical DB hash, and self-staging source location. Source files and checkpoint independently GitHub-read-back. **Latest CI [45174440098](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45174440098) was not yet independently verified completed at checkpoint**; check final frontend and Rust job conclusions or successor workflow before claiming CI PASS. Incoming previous transfer UI/registry safeguard [45166699677](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45166699677) completed SUCCESS frontend+Rust.
+
+No Windows DEMO, installer, user SQLite, PRIVATE repo changes or merge. Package C remains PARTIAL: full B→C installed Windows/rollback + B26 Review readback + GC negative cases + C8 high-risk correction separate authorization + C9 complete coverage + user acceptance still OPEN; 12 roadmap categories and accepted A/B B01–B25 evidence preserved.
+
+---
+
 ## Latest operational transfer safety checkpoint — 2026-11-23
 
 Canonical active PUBLIC development branch: `feature/ptj-c-transfer-integrity-2026-11-23` (Draft PR #17, UNMERGED). The most recent independently GitHub-read-back code change is **`2d41ff13e9810dd6ca6815bbada612f695473584`** in `app/src-tauri/src/demo_transfer.rs`; its canonical `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` entry is **`PTJ-C-TRANSFER-NONEMPTY-USER-CONFIG-PREFLIGHT-2026-11-23`**, recorded by docs-only commit **`8ee1e38a39f05ffab69f5e5423b4823e34c8f767`**. This is a historical verified pointer; re-check live HEAD and exact CI in each new chat.
