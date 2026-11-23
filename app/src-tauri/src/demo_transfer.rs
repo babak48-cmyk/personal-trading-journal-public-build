@@ -193,6 +193,7 @@ mod isolated_transfer_tests {
                     ('review2','t2','COMPLETED','2026-11-22','2026-11-22','2026-11-22','A');
            DROP TABLE weekly_learning_action_events;
            DROP TABLE initial_risk_correction_events;
+           DROP TABLE candidate_source_type_correction_events;
            UPDATE schema_meta SET schema_version=11;
            PRAGMA wal_checkpoint(TRUNCATE);"
         ).unwrap();
