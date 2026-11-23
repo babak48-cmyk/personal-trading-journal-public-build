@@ -1961,6 +1961,11 @@ pub struct JournalTradeRowDto {
     pub setup_attribution: String,
     /// Definition context for the saved version; never market conditions observed at execution.
     pub setup_defined_market_context: Option<String>,
+    /// Only stored observed events with a parsable event timestamp <= original Decision instant.
+    /// Distinct from planned source provenance and setup-defined context.
+    pub evidence_observed_at_decision: Vec<String>,
+    pub evidence_post_decision_count: i64,
+    pub evidence_unknown_timing_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -2006,6 +2011,38 @@ fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppE
     let mut stmt=conn.prepare("SELECT mt.label FROM trade_mistakes tm JOIN mistake_types mt ON mt.mistake_type_id=tm.mistake_type_id WHERE tm.trade_id=?1 ORDER BY mt.label")?;
     let rows = stmt.query_map([trade_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
+}
+
+fn trade_evidence_temporal_snapshot(
+    conn:&Connection,trade_id:&str,candidate_id:&Option<String>,decision_at:Option<&str>
+)->Result<(Vec<String>,i64,i64),AppError>{
+    let mut stmt=conn.prepare(
+      "SELECT et.label,eo.role,eo.occurred_at,
+              CASE WHEN julianday(eo.occurred_at) IS NULL OR ?3 IS NULL OR julianday(?3) IS NULL
+                     THEN 'UNKNOWN'
+                   WHEN julianday(eo.occurred_at)<=julianday(?3) THEN 'AT_DECISION'
+                   ELSE 'AFTER_DECISION' END
+       FROM evidence_observations eo
+       JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
+       WHERE eo.present=1 AND (eo.trade_id=?1 OR (?2 IS NOT NULL AND eo.candidate_id=?2))
+       ORDER BY eo.rowid")?;
+    let events=stmt.query_map(params![trade_id,candidate_id,decision_at],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,
+        r.get::<_,String>(3)?
+    )))?;
+    let mut labels=Vec::new();let mut post=0;let mut unknown=0;
+    for event in events {
+        let (label,role,_timestamp,bucket)=event?;
+        match bucket.as_str(){
+            "AT_DECISION"=>{
+                let combined=format!("{role}: {label}");
+                if !labels.contains(&combined){labels.push(combined);}
+            },
+            "AFTER_DECISION"=>post+=1,
+            _=>unknown+=1,
+        }
+    }
+    Ok((labels,post,unknown))
 }
 
 fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str,
@@ -2147,6 +2184,9 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             let at_decision=matches!(filter.evidence_timing.as_deref(),Some("AT_DECISION"));
             if !trade_has_evidence(conn,&trade_id,&candidate_id,v,decision_at.as_deref(),at_decision)?{continue;}
         }
+        let evidence_temporal=trade_evidence_temporal_snapshot(
+            conn,&trade_id,&candidate_id,decision_at.as_deref()
+        )?;
         let metrics=trade_metrics(conn,&trade_id)?;
         let audited_correction_count:i64=conn.query_row(
           "SELECT COUNT(*) FROM fill_correction_events ce
@@ -2184,6 +2224,9 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             setup_version_id:setup.0,setup_version_name:setup.1,
             setup_version_number:setup.2,setup_attribution:setup.3,
             setup_defined_market_context:setup.4,
+            evidence_observed_at_decision:evidence_temporal.0,
+            evidence_post_decision_count:evidence_temporal.1,
+            evidence_unknown_timing_count:evidence_temporal.2,
         });
     }
     Ok(out)
