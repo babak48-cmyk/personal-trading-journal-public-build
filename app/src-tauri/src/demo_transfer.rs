@@ -434,6 +434,52 @@ mod isolated_transfer_tests {
         }
     }
     #[test]
+    fn pristine_seeded_reference_catalog_allows_empty_destination(){
+        let base=std::env::temp_dir().join(format!("ptj-c-pristine-{}",Uuid::new_v4()));
+        let paths=target_paths(&base);
+        let conn=db::open_database(&paths.database()).unwrap();
+        crate::repository::ensure_default_workspace(&conn).unwrap();
+        assert!(ensure_empty_target(&paths).is_ok(),
+          "fresh Package C reference defaults must not block a safe B transfer");
+        drop(conn);fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
+    fn existing_builtin_registry_edits_cannot_be_overwritten_by_import(){
+        for kind in ["instrument_price","instrument_disabled","instrument_order",
+                     "level_label","level_disabled","evidence_status","workspace_name"]{
+            let base=std::env::temp_dir().join(format!("ptj-c-edited-{}-{}",kind,Uuid::new_v4()));
+            let paths=target_paths(&base);
+            let conn=db::open_database(&paths.database()).unwrap();
+            crate::repository::ensure_default_workspace(&conn).unwrap();
+            match kind{
+                "instrument_price"=>{conn.execute(
+                    "UPDATE instruments SET tick_size=0.50 WHERE instrument_id='instrument-ES'",[]
+                ).unwrap();},
+                "instrument_disabled"=>{conn.execute(
+                    "UPDATE instruments SET active=0 WHERE instrument_id='instrument-GC'",[]
+                ).unwrap();},
+                "instrument_order"=>{conn.execute(
+                    "UPDATE instruments SET display_order=3000 WHERE instrument_id='instrument-ES'",[]
+                ).unwrap();},
+                "level_label"=>{conn.execute(
+                    "UPDATE level_source_types SET label='My personal high' WHERE source_type_id='source-PRIOR_DAY_HIGH'",[]
+                ).unwrap();},
+                "level_disabled"=>{conn.execute(
+                    "UPDATE level_source_types SET active=0 WHERE source_type_id='source-VAH'",[]
+                ).unwrap();},
+                "evidence_status"=>{conn.execute(
+                    "UPDATE evidence_types SET research_status='CORE' WHERE evidence_type_id='evidence-ATS'",[]
+                ).unwrap();},
+                _=>{conn.execute(
+                    "UPDATE workspaces SET name='My analysis workspace' WHERE workspace_id='default-workspace'",[]
+                ).unwrap();},
+            }
+            assert!(ensure_empty_target(&paths).is_err(),
+                "customized built-in catalog must block B-to-C transfer: {kind}");
+            drop(conn);fs::remove_dir_all(base).unwrap();
+        }
+    }
+    #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
         let base=std::env::temp_dir().join(format!("ptj-bc-copy-{}",Uuid::new_v4()));
         let source=base.join("old-b");
