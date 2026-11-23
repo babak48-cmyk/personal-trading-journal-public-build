@@ -271,4 +271,49 @@ mod tests{
    ").unwrap();
    assert!(preview(&c,&SourcePriceCorrectionRequest{candidate_source_id:"unreferenced".into(),expected_effective_price:Some(7005.0),..req(0,None,7005.25)}).is_err());
  }
+ #[test]
+ fn effective_readout_exports_and_corruption_guard_keep_original_decision_price(){
+   use crate::{repository::{self,JournalFilterInput},source_type_corrections};
+   let mut c=fixture();
+   c.execute("UPDATE candidate_decisions SET decision_type='TRADE' WHERE decision_id='d'",[]).err();
+   // The immutable Decision is created as NO_TRADE in the fixture.
+   // Create a second standalone recorded trade Decision on the same saved
+   // historical revision; no original decision or Zone is rewritten.
+   c.execute_batch("
+     INSERT INTO candidate_decisions(decision_id,candidate_id,session_id,occurred_at,decision_type,based_on_candidate_revision_id)
+       VALUES('dtrade','zone','s','2026-11-23T10:00:00Z','TRADE','rev');
+     INSERT INTO trades(trade_id,decision_id,session_id,candidate_id,direction,status)
+       VALUES('trade','dtrade','s','zone','LONG','CLOSED');").unwrap();
+   let before=source_type_corrections::sources_at_decision(&c,"trade").unwrap();
+   assert_eq!(before[0].original_source_price,Some(7000.0));
+   assert_eq!(before[0].effective_source_price,Some(7000.0));
+   record(&mut c,req(0,Some(7000.0),7000.25)).unwrap();
+   let after=source_type_corrections::sources_at_decision(&c,"trade").unwrap();
+   assert_eq!(after[0].original_source_price,Some(7000.0));
+   assert_eq!(after[0].effective_source_price,Some(7000.25));
+   assert_eq!(after[0].price_correction_revision,1);
+   assert_eq!(list_for_trade(&c,"trade").unwrap().len(),1);
+   let root=std::env::temp_dir().join(format!("ptj-source-price-export-{}",Uuid::new_v4()));
+   let paths=crate::paths::AppPaths{
+     root:root.clone(),data:root.join("data"),attachments:root.join("attachments"),
+     backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs")
+   };
+   let csv=crate::exports::export_csv(&c,&paths,JournalFilterInput::default()).unwrap();
+   let html=crate::exports::export_html(&c,&paths,JournalFilterInput::default()).unwrap();
+   let csv_data=std::fs::read_to_string(csv.path).unwrap();
+   let html_data=std::fs::read_to_string(html.path).unwrap();
+   assert!(csv_data.contains("audited_source_price_correction_count"));
+   assert!(csv_data.contains("Original level price was transcribed incorrectly"));
+   assert!(html_data.contains("Audited historical Level Source price corrections"));
+   assert!(html_data.contains("7000.25"));
+   std::fs::remove_dir_all(root).unwrap();
+   assert_eq!(repository::list_journal_trades(&c,JournalFilterInput::default()).unwrap().len(),1);
+   c.execute_batch(
+     "DROP TRIGGER source_price_correction_no_update;
+      UPDATE candidate_source_price_correction_events
+        SET previous_source_price=6000 WHERE candidate_source_id='src';").unwrap();
+   assert!(verify_all(&c).is_err(),"corrupted price audit must block backup");
+   assert!(source_type_corrections::sources_at_decision(&c,"trade").is_err());
+ }
+
 }
