@@ -1,10 +1,17 @@
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {open} from '@tauri-apps/plugin-dialog';
 import {localApi,type DemoTransferPreview} from './services/localApi';
 
 /** Only Package C DEMO can execute the native import command.
  * The original Package B demo database and ZIP stay untouched. */
 export function DemoDataTransferPanel(){
+  const [canImport,setCanImport]=useState(false);
+  useEffect(()=>{
+    let mounted=true;
+    localApi.isPackageCDemo().then(enabled=>{if(mounted)setCanImport(enabled);})
+      .catch(()=>{if(mounted)setCanImport(false);});
+    return ()=>{mounted=false;};
+  },[]);
   const [source,setSource]=useState('');
   const [preview,setPreview]=useState<DemoTransferPreview|null>(null);
   const [confirmed,setConfirmed]=useState(false);
@@ -44,6 +51,7 @@ export function DemoDataTransferPanel(){
       setResult('Import was NOT verified. Do not retry without reviewing the Package C safety backup and data: '+String(e));
     }finally{lock.current=false;setBusy(false);}
   }
+  if(!canImport)return null;
   return <details className="guidedMore" aria-label="Import previous Package B demo test data">
     <summary>Package C DEMO only · continue tests using Package B DEMO history</summary>
     <p className="subtle">Select an existing verified ZIP backup from Package B DEMO. The original Package B app and ZIP are never changed. Import is allowed only into an EMPTY, separate Package C DEMO profile, never production. The source journal is verified and migrated in staging first.</p>
