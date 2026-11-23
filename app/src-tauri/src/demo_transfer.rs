@@ -22,6 +22,7 @@ pub struct DemoTransferPreview {
     pub correction_events:i64,
     pub initial_risk_correction_events:i64,
     pub source_type_correction_events:i64,
+    pub weekly_learning_action_events:i64,
     pub attachments:usize,
     pub original_backup_untouched:bool,
 }
@@ -32,6 +33,8 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "sessions"=>"SELECT COUNT(*) FROM sessions",
         "trades"=>"SELECT COUNT(*) FROM trades",
         "candidates"=>"SELECT COUNT(*) FROM candidates",
+        "candidate_revisions"=>"SELECT COUNT(*) FROM candidate_revisions",
+        "candidate_sources"=>"SELECT COUNT(*) FROM candidate_sources",
         "candidate_decisions"=>"SELECT COUNT(*) FROM candidate_decisions",
         "session_plan_revisions"=>"SELECT COUNT(*) FROM session_plan_revisions",
         "evidence_observations"=>"SELECT COUNT(*) FROM evidence_observations",
@@ -48,7 +51,16 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
 }
 fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     let conn=db::open_database(&paths.database())?;
+    // A partially populated profile is NOT empty even if it has no Trade.
+    // Check all workflow-owned records: replacing a draft Zone, Decision or
+    // evidence history would also be destructive. Registry/settings rows
+    // deliberately do not count as journal events.
     if count(&conn,"sessions")?>0||count(&conn,"trades")?>0||
+       count(&conn,"candidates")?>0||count(&conn,"candidate_revisions")?>0||
+       count(&conn,"candidate_sources")?>0||count(&conn,"candidate_decisions")?>0||
+       count(&conn,"session_plan_revisions")?>0||
+       count(&conn,"evidence_observations")?>0||
+       count(&conn,"risk_snapshots")?>0||
        count(&conn,"execution_fills")?>0||count(&conn,"trade_reviews")?>0||
        count(&conn,"fill_correction_events")?>0||
        count(&conn,"initial_risk_correction_events")?>0||
@@ -64,11 +76,14 @@ fn ensure_empty_target(paths:&AppPaths)->Result<(),AppError>{
     Ok(())
 }
 fn require_test_sessions(conn:&Connection)->Result<(),AppError>{
+    // Fail closed: an unknown, whitespace-padded or future environment value
+    // is NOT proof that the history is synthetic. Never infer DEMO status.
     let non_test:i64=conn.query_row(
-       "SELECT COUNT(*) FROM sessions WHERE UPPER(environment) IN ('REAL','LIVE')",
+       "SELECT COUNT(*) FROM sessions
+         WHERE environment IS NULL OR TRIM(UPPER(environment)) NOT IN ('DEMO','FORWARD_TEST')",
        [],|r|r.get(0))?;
     if non_test>0{
-        return Err(AppError::Validation("Source contains REAL sessions. Only isolated DEMO/FORWARD_TEST records may be transferred".into()));
+        return Err(AppError::Validation("Source contains non-DEMO or unknown sessions. Only explicitly DEMO/FORWARD_TEST records may be transferred".into()));
     }
     Ok(())
 }
@@ -104,6 +119,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         correction_events:count(&c,"fill_correction_events")?,
         initial_risk_correction_events:count(&c,"initial_risk_correction_events")?,
         source_type_correction_events:count(&c,"candidate_source_type_correction_events")?,
+        weekly_learning_action_events:count(&c,"weekly_learning_action_events")?,
         attachments:info.attachment_count,
         original_backup_untouched:true,
     })
@@ -134,7 +150,8 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_sha:&str)
        count(&c,"trade_reviews")?!=confirmed.reviews||
        count(&c,"fill_correction_events")?!=confirmed.correction_events||
        count(&c,"initial_risk_correction_events")?!=confirmed.initial_risk_correction_events||
-       count(&c,"candidate_source_type_correction_events")?!=confirmed.source_type_correction_events {
+       count(&c,"candidate_source_type_correction_events")?!=confirmed.source_type_correction_events||
+       count(&c,"weekly_learning_action_events")?!=confirmed.weekly_learning_action_events {
          return Err(AppError::Validation("Destination record counts could not be reconciled after import; inspect safety backup before retrying".into()));
     }
     crate::fill_corrections::verify_all_correction_chains(&c)?;
@@ -169,6 +186,13 @@ mod isolated_transfer_tests {
         assert!(require_test_sessions(&c).is_ok());
         c.execute("INSERT INTO sessions VALUES('REAL')",[]).unwrap();
         assert!(require_test_sessions(&c).is_err());
+        c.execute("DELETE FROM sessions WHERE environment='REAL'",[]).unwrap();
+        for unknown in ["", "UNKNOWN", "PAPER", "LIVE", " DEMO ", "FORWARD-TEST"] {
+            c.execute("INSERT INTO sessions VALUES(?1)",[unknown]).unwrap();
+            assert!(require_test_sessions(&c).is_err(), "unapproved environment: {unknown}");
+            c.execute("DELETE FROM sessions WHERE environment=?1",[unknown]).unwrap();
+        }
+        assert!(require_test_sessions(&c).is_ok());
     }
     #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
@@ -233,6 +257,7 @@ mod isolated_transfer_tests {
         assert_eq!(observed.zones,0);
         assert_eq!(observed.plan_revisions,0);
         assert_eq!(observed.evidence_events,0);
+        assert_eq!(observed.weekly_learning_action_events,0);
         let receipt=import_into_empty(&new_c,&backup,&observed.database_sha256).unwrap();
         assert_eq!(receipt.integrity,"ok");
         assert_eq!(fs::read(&backup).unwrap(),backup_bytes,"old source ZIP must stay byte-identical");
