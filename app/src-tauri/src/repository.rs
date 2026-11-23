@@ -1973,6 +1973,12 @@ pub struct JournalTradeRowDto {
     /// Number of immutable audit events recorded against this Trade's Fills;
     /// counts audit provenance, not corrected/confirmed profitability.
     pub audited_correction_count: i64,
+    /// Initial-risk correction events for this specific historical Trade.
+    pub audited_initial_risk_correction_count: i64,
+    /// Level Source type correction events attached to the Decision's saved Zone revision.
+    pub audited_source_type_correction_count: i64,
+    /// Level Source price correction events attached to the Decision's saved Zone revision.
+    pub audited_source_price_correction_count: i64,
     /// At-decision Setup version is distinct from retrospective closed-trade attribution.
     pub setup_version_id: Option<String>,
     pub setup_version_name: Option<String>,
@@ -2222,6 +2228,16 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
            JOIN execution_fills f ON f.execution_id=ce.execution_id
            WHERE f.trade_id=?1",
           [&trade_id],|r|r.get(0))?;
+        // Reuse the existing trade-scoped audit readouts. Do not count unrelated
+        // Zone revisions or other trades, and never infer corrections from
+        // changed effective values alone. A shared source may affect each
+        // independently saved Decision/Trade referencing that exact revision.
+        let audited_initial_risk_correction_count=
+            crate::initial_risk_corrections::list_initial_risk_corrections(conn,&trade_id)?.len() as i64;
+        let audited_source_type_correction_count=
+            crate::source_type_corrections::list_source_corrections_for_trade(conn,&trade_id)?.len() as i64;
+        let audited_source_price_correction_count=
+            crate::source_price_corrections::list_for_trade(conn,&trade_id)?.len() as i64;
         // This read-only attribution uses the saved version ID snapshotted at
         // the original entry. Historical closed-trade links are labelled
         // RETROSPECTIVE, never misrepresented as known at decision time.
@@ -2250,6 +2266,8 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
             realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,
             open_quantity:metrics.open_quantity,audited_correction_count,
+            audited_initial_risk_correction_count,audited_source_type_correction_count,
+            audited_source_price_correction_count,
             setup_version_id:setup.0,setup_version_name:setup.1,
             setup_version_number:setup.2,setup_attribution:setup.3,
             setup_defined_market_context:setup.4,
