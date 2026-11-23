@@ -1,3 +1,15 @@
+## Current operational update — 2026-11-23 Package C obstacle removal
+
+**Read this update before the earlier bootstrap snapshot below; bootstrap SHAs are historical.** The **active code branch remains** `feature/ptj-c-transfer-integrity-2026-11-23` (PUBLIC only, draft PR #17 not merged). Newest independently read-back code SHA at this update: `566f81579736d22bfd1c5f1537827164edad0124`; subsequent **docs-only** checkpoint commit on active code branch: `d8a2dad5c31238f0e206f92e78198168ec65fada`. Its detailed canonical checkpoint is `PTJ-C8-C9-OBSTACLE-REMOVAL-2026-11-23` in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on the active code branch. Always re-fetch the live HEAD and exact CI; this is an observed historical pointer.
+
+- Last completed pre-obstacle GitHub workflow: run `45153738608` SUCCESS frontend + Rust. Additional native C9 metrics code/tests run `45161633017` SUCCESS as observed. Newest full source C8 audit-read-guard workflow `45161972558` was still in progress at checkpoint; inspect latest result before declaring PASS.
+- Package C now includes known closed-trade `expectancy_pnl` and `win_loss_payoff_r` with denominators and native tests; new C8 Fill correction UI fail-closed gate locks historical corrections until independent Audit history read succeeds. All new changes are sourced and GitHub readback-verified. CI evidence and Windows acceptance remain separate.
+- Important corrected C8 fact: Price and Quantity historical Fill correction already exist via audited Preview/Record backend and Fill correction panel. Do not reimplement or disable them as though absent; **Windows safety/acceptance remains incomplete**. Broader timestamp, snapshot and cross-record identity/link correction requires an exact approved whitelist, append-only migration/rollback design and separate explicit authorization.
+- Still open: C9 full metric/semantics coverage; B26 Windows Review A/C, GC negative accounting cases, isolated B→C backup/transfer/rollback, an exact-source Windows DEMO installer and explicit acceptance. Existing Package A and B01–B25 accepted Windows scope must remain intact. Full Field Manager and all 12 roadmap categories preserved.
+- No merge, PRIVATE write, live SQLite change or Windows installer performed in this update. Next approved step: verify latest native CI, finish remaining safe C9/C8 integrity gates and plan **one cohesive** isolated Windows package instead of micro-installer cycles.
+
+---
+
 # PTJ — START HERE / Continuity & Recovery
 
 **Snapshot:** 2026-11-23 (Australia/Sydney) | **Status:** Continuity bootstrap, source/data unchanged. This page is a pointer, not a replacement for approved requirements or evidence.
