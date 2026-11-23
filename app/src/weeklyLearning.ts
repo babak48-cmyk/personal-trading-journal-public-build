@@ -167,6 +167,16 @@ export type WeeklyLearningSnapshot=Readonly<{
   eligibleRCount:number;
   missingRCount:number;
   correctedTradeCount:number;
+  /** Distinct trades within each independent immutable audit family. Families may overlap. */
+  fillCorrectedTradeCount:number;
+  initialRiskCorrectedTradeCount:number;
+  sourceTypeCorrectedTradeCount:number;
+  sourcePriceCorrectedTradeCount:number;
+  /** Individual revision events, NOT distinct trades. */
+  fillCorrectionEventCount:number;
+  initialRiskCorrectionEventCount:number;
+  sourceTypeCorrectionEventCount:number;
+  sourcePriceCorrectionEventCount:number;
   netR:number|null;
   ruleViolationCount:number;
   uncheckedRuleCount:number;
@@ -188,10 +198,23 @@ export function weeklyLearningSnapshot(
   const closed=weekly.filter(row=>row.status==='CLOSED');
   const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
   const missingRCount=closed.length-eligible.length;
-  // Count distinct trades with persisted corrections, not correction events.
-  // Revisions of the same Fill never inflate weekly sample size.
-  const correctedTradeCount=weekly.filter(row=>
-    Number.isInteger(row.audited_correction_count) && (row.audited_correction_count??0)>0
+  // A single Trade can be corrected in multiple ways and a single source
+  // may have multiple append-only revisions. Sum events for provenance,
+  // but count a Trade only once in the overall affected-trade denominator.
+  const validCount=(value:number|undefined)=>
+    value!==undefined&&Number.isSafeInteger(value)&&value>=0?value:0;
+  const fillCounts=weekly.map(row=>validCount(row.audited_correction_count));
+  const riskCounts=weekly.map(row=>validCount(row.audited_initial_risk_correction_count));
+  const sourceTypeCounts=weekly.map(row=>validCount(row.audited_source_type_correction_count));
+  const sourcePriceCounts=weekly.map(row=>validCount(row.audited_source_price_correction_count));
+  const affected=(counts:readonly number[])=>counts.filter(n=>n>0).length;
+  const eventTotal=(counts:readonly number[])=>counts.reduce((sum,n)=>sum+n,0);
+  const fillCorrectedTradeCount=affected(fillCounts);
+  const initialRiskCorrectedTradeCount=affected(riskCounts);
+  const sourceTypeCorrectedTradeCount=affected(sourceTypeCounts);
+  const sourcePriceCorrectedTradeCount=affected(sourcePriceCounts);
+  const correctedTradeCount=weekly.filter((_,i)=>
+    fillCounts[i]>0||riskCounts[i]>0||sourceTypeCounts[i]>0||sourcePriceCounts[i]>0
   ).length;
   const count=new Map<string,number>();
   weekly.forEach(row=>new Set(row.mistakes||[]).forEach(id=>count.set(id,(count.get(id)||0)+1)));
@@ -215,6 +238,12 @@ export function weeklyLearningSnapshot(
   return {
     weekStart,tradeCount:weekly.length,closedCount:closed.length,openCount:weekly.length-closed.length,
     eligibleRCount:eligible.length,missingRCount,correctedTradeCount,
+    fillCorrectedTradeCount,initialRiskCorrectedTradeCount,
+    sourceTypeCorrectedTradeCount,sourcePriceCorrectedTradeCount,
+    fillCorrectionEventCount:eventTotal(fillCounts),
+    initialRiskCorrectionEventCount:eventTotal(riskCounts),
+    sourceTypeCorrectionEventCount:eventTotal(sourceTypeCounts),
+    sourcePriceCorrectionEventCount:eventTotal(sourcePriceCounts),
     netR:eligible.length?eligible.reduce((total,row)=>total+(row.realized_r as number),0):null,
     ruleViolationCount:violated,uncheckedRuleCount:unchecked,mistakes,
     observation,action,scope:'FILTERED_TRADES_ONLY',
@@ -287,8 +316,12 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:
     'Trades: '+snapshot.tradeCount+'; closed: '+snapshot.closedCount+'; open/other: '+snapshot.openCount+'.',
     'Net R eligible: '+snapshot.eligibleRCount+'/'+snapshot.closedCount+' closed; missing eligible R: '+snapshot.missingRCount+'.',
     'Sum of eligible net R: '+(snapshot.netR==null?'unknown':snapshot.netR.toFixed(2)+'R')+'.',
-    'Audited-correction affected trades: '+snapshot.correctedTradeCount+
-      '. Reported results use effective values; original event records and reasons remain in the audit history.',
+    'Audited-correction affected trades (all four families; each Trade counted once): '+snapshot.correctedTradeCount+
+      '. Fill costs: '+snapshot.fillCorrectedTradeCount+' trade(s) / '+snapshot.fillCorrectionEventCount+' event(s)'+
+      '; Initial Risk: '+snapshot.initialRiskCorrectedTradeCount+' trade(s) / '+snapshot.initialRiskCorrectionEventCount+' event(s)'+
+      '; Level Source type: '+snapshot.sourceTypeCorrectedTradeCount+' trade(s) / '+snapshot.sourceTypeCorrectionEventCount+' event(s)'+
+      '; Level Source price: '+snapshot.sourcePriceCorrectedTradeCount+' trade(s) / '+snapshot.sourcePriceCorrectionEventCount+' event(s).'+
+      ' Category-specific trade counts may overlap. Reported results use effective values; original event records and reasons remain in the audit history.',
     'Rule violations: '+snapshot.ruleViolationCount+'; rule status unchecked: '+snapshot.uncheckedRuleCount+'.',
     'Most frequent recorded mistake: '+(snapshot.mistakes[0]?snapshot.mistakes[0].label+' ('+snapshot.mistakes[0].count+' trades)':'none recorded')+'.',
     'Decision-time level source groups (overlapping; do not sum group samples/R): '+(levelSources.length?levelSources.map(g=>g.label+' ['+g.tradeCount+' linked trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR===null?'R unknown':g.netR.toFixed(2)+'R')+']').join('; '):'none in the selected week')+'.',
