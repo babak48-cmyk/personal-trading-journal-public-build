@@ -118,7 +118,12 @@ export function weeklyDecisionHourBreakdown(
     const existing=groups.get(label)||[];
     existing.push(trade);groups.set(label,existing);
   }
-  return [...groups.entries()].sort(([left],[right])=>left.localeCompare(right)).map(([label,items])=>{
+  return [...groups.entries()].sort(([left],[right])=>{
+    const unknown='Unknown recorded Decision time / Session zone';
+    if(left===unknown)return right===unknown?0:1;
+    if(right===unknown)return -1;
+    return left.localeCompare(right);
+  }).map(([label,items])=>{
     const closed=items.filter(item=>item.status==='CLOSED');
     const unknown=label.startsWith('Unknown recorded');
     const eligible=unknown?[]:closed.filter(item=>item.realized_r!=null&&Number.isFinite(item.realized_r));
