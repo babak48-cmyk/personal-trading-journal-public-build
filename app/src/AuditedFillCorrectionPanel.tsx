@@ -32,10 +32,11 @@ export function AuditedFillCorrectionPanel({
 
   useEffect(()=>{
     let cancelled=false;
+    const epoch=++requestEpoch.current;
     setHistory(null);
     localApi.listTradeCorrectionHistory(trade.metrics.trade_id)
-      .then(v=>{if(!cancelled)setHistory(v);})
-      .catch(e=>{if(!cancelled)setMessage('Audit history could not be verified: '+String(e));});
+      .then(v=>{if(!cancelled&&epoch===requestEpoch.current)setHistory(v);})
+      .catch(e=>{if(!cancelled&&epoch===requestEpoch.current)setMessage('Audit history could not be verified: '+String(e));});
     return ()=>{cancelled=true;requestEpoch.current++;};
   },[trade.metrics.trade_id]);
 
