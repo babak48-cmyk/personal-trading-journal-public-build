@@ -10,6 +10,7 @@ mod exports;
 mod fill_corrections;
 mod initial_risk_corrections;
 mod source_type_corrections;
+mod source_price_corrections;
 mod import_readiness;
 mod setup_playbook;
 mod paths;
@@ -198,6 +199,9 @@ pub fn run() {
             commands::preview_source_type_correction,
             commands::record_source_type_correction,
             commands::list_trade_source_type_corrections,
+            commands::preview_source_price_correction,
+            commands::record_source_price_correction,
+            commands::list_trade_source_price_corrections,
             commands::record_fill_correction,
             commands::get_trade_for_decision,
             commands::list_unexecuted_trade_decisions,
