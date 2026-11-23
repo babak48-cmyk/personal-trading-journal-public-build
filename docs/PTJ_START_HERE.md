@@ -1,3 +1,13 @@
+## Latest operational transfer safety checkpoint — 2026-11-23
+
+Canonical active PUBLIC development branch: `feature/ptj-c-transfer-integrity-2026-11-23` (Draft PR #17, UNMERGED). The most recent independently GitHub-read-back code change is **`2d41ff13e9810dd6ca6815bbada612f695473584`** in `app/src-tauri/src/demo_transfer.rs`; its canonical `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` entry is **`PTJ-C-TRANSFER-NONEMPTY-USER-CONFIG-PREFLIGHT-2026-11-23`**, recorded by docs-only commit **`8ee1e38a39f05ffab69f5e5423b4823e34c8f767`**. This is a historical verified pointer; re-check live HEAD and exact CI in each new chat.
+
+**Key improvement:** Package C import into an "empty" DEMO destination now refuses not only prior Trades/Events but also existing user-owned Custom Field definitions/options, Setup Playbook details/priorities, and user-defined instruments/Setups/Level Sources, even with zero Sessions. Native negative tests were added; prior B→C fixture preserved. **CI for this increment is not yet verified PASS in this pointer**; workflow [45166529922](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45166529922) was pending/running when last checked. The preceding C8 three-way Fill correction readback was CI PASS [45165570035](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45165570035).
+
+Package C remains PARTIAL. Required next gates: verify final CI on exact source; examine remaining custom destination settings risk; B26 saved review Windows readback, GC negative tests, isolated B→C backup/rollback/restart, one cohesive exact-source Windows DEMO, and explicit user acceptance. Historical timestamp/identity/foreign-key correction changes remain separately authorization-gated. Never merge, touch PRIVATE or user live DB, or repeat accepted A/B B01–B25 tests without technical necessity.
+
+---
+
 ## Latest verified Package C checkpoint — 2026-11-23
 
 The latest independently verified PUBLIC development checkpoint is `PTJ-C8-FILL-CORRECTION-THREE-WAY-PERSISTED-READBACK-2026-11-23`, saved in the existing canonical `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` on `feature/ptj-c-transfer-integrity-2026-11-23`. Exact **CI-tested source code SHA** `cb989ffbf00bfd4e3922fae2e05f6f0bd9c0af8e`, followed by **docs-only** checkpoint commit `4b15ae0de4f05dd76e0d53b2ab86fccee3a7bf6d`. The [GitHub workflow 45165570035](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45165570035) completed SUCCESS for both frontend and Rust.
