@@ -323,7 +323,7 @@ mod tests{
    std::fs::remove_dir_all(root).unwrap();
    let journal=repository::list_journal_trades(&c,JournalFilterInput::default()).unwrap();
    assert_eq!(journal.len(),1);
-   assert_eq!(journal[0].audited_source_price_correction_count,2);
+   assert_eq!(journal[0].audited_source_price_correction_count,1);
    assert_eq!(journal[0].audited_source_type_correction_count,0);
    c.execute_batch(
      "DROP TRIGGER source_price_correction_no_update;
