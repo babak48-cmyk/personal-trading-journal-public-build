@@ -78,7 +78,7 @@ pub fn effective_price(conn:&Connection,id:&str,original:Option<f64>)
  for item in rows{
   let (event_id,n,first,prev,replacement,linked)=item?;
   if n!=revision+1||!same(first,original)||!same(prev,effective)||
-    linked!=previous_id||!replacement.is_finite()||replacement<=0.0||
+    linked!=previous_id||!replacement.is_finite()||
     same(Some(replacement),effective) {
    return Err(AppError::Validation("source-price correction audit chain failed verification".into()));
   }
@@ -92,10 +92,10 @@ pub fn preview(conn:&Connection,input:&SourcePriceCorrectionRequest)
  if !(5..=500).contains(&reason.chars().count()){
    return Err(AppError::Validation("historical source price correction requires a factual reason of 5–500 characters".into()));
  }
- if !input.replacement_price.is_finite()||input.replacement_price<=0.0{
-   return Err(AppError::Validation("replacement source price must be positive and finite".into()));
+ if !input.replacement_price.is_finite(){
+   return Err(AppError::Validation("replacement source price must be finite".into()));
  }
- if input.expected_effective_price.is_some_and(|p|!p.is_finite()||p<=0.0){
+ if input.expected_effective_price.is_some_and(|p|!p.is_finite()){
    return Err(AppError::Validation("expected source price is invalid".into()));
  }
  let (revision_id,original,tick)=identity(conn,&input.candidate_source_id)?;
@@ -242,7 +242,8 @@ mod tests{
    assert!(before.zone_geometry_unchanged);
    assert!(preview(&c,&req(0,Some(7000.0),7000.1)).is_err());
    assert!(preview(&c,&req(0,Some(7000.0),f64::NAN)).is_err());
-   assert!(preview(&c,&req(0,Some(7000.0),0.0)).is_err());
+   assert!(preview(&c,&req(0,Some(7000.0),7000.0)).is_err());
+   assert!(preview(&c,&req(0,Some(7000.0),-0.25)).is_ok(), "valid signed tick-aligned price must not be categorically rejected");
    let e=record(&mut c,req(0,Some(7000.0),7000.25)).unwrap();
    assert_eq!(e.revision,1);
    assert!(record(&mut c,req(0,Some(7000.0),7000.25)).is_err());
