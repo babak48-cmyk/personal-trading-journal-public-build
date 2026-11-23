@@ -41,7 +41,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2248,6 +2248,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const weeklyAction=weekly?(decisionOnlyError?weekly.action:weeklyDecisionAwareAction(weekly,decisionWeekSummary.missed,weeklyReasons)):'';
   const instrumentBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'instrument_symbol'):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
+  const observedEvidenceBreakdown=activeWeek?weeklyObservedEvidenceBreakdown(rows,activeWeek):[];
   const setupVersionBreakdown=activeWeek?weeklySetupVersionBreakdown(rows,activeWeek):[];
   const definedContextBreakdown=activeWeek?weeklyDefinedContextBreakdown(rows,activeWeek):[];
   const weeklyThreePart=weekly?weeklyThreePartReview(weekly,setupVersionBreakdown,decisionOnlyError?0:decisionWeekSummary.missed,weeklyAction):null;
@@ -2296,6 +2297,15 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded rule violation(s)</small>
           </div>)}</div>}
+        </details>
+        <details className="guidedMore"><summary>Actually observed Evidence by original Decision time · sample sizes</summary>
+          <p className="subtle">Only timestamp-valid, persisted observations at or before the original Decision count here. A saved plan, a Setup definition or a later observation is NOT historical confirmation. Groups overlap if one trade has multiple evidence types; do not sum them as independent trades. Empty or unknown timing is not proof that evidence was absent in the market.</p>
+          {observedEvidenceBreakdown.length===0?<p className="subtle">No trades in selected week.</p>:<div className="weeklyBreakdown">{observedEvidenceBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
+            <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
+            <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
+            <small>{group.ruleViolationCount} recorded rule violation(s)</small>
+          </div>)}</div>}
+          <p className="subtle">Other timing: {rows.filter(r=>journalWeekStart(r.session_date)===activeWeek).reduce((sum,row)=>sum+(row.evidence_post_decision_count??0),0)} observation(s) recorded after a Decision; {rows.filter(r=>journalWeekStart(r.session_date)===activeWeek).reduce((sum,row)=>sum+(row.evidence_unknown_timing_count??0),0)} with unknown timing. These are excluded from at-Decision attribution.</p>
         </details>
         <details className="guidedMore"><summary>Decision-time Level Source breakdown · sample sizes</summary>
           <p className="subtle">These groups use recorded decision-time level provenance, not later confirmation signals. A trade can have several sources, so group counts and R overlap and must not be summed. Unknown historical snapshots are not classified as no source. This is descriptive, not evidence of a profitable edge.</p>
