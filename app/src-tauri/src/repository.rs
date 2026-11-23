@@ -3257,3 +3257,39 @@ mod decision_absolute_time_order_tests {
                    vec!["earlier","legacy"]);
     }
 }
+
+#[cfg(test)]
+mod observed_evidence_at_decision_tests {
+    use super::*;
+    #[test]
+    fn event_time_and_ownership_exclude_later_unknown_and_other_zone_observations(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("
+          CREATE TABLE evidence_types(evidence_type_id TEXT PRIMARY KEY,label TEXT NOT NULL);
+          CREATE TABLE evidence_observations(
+            evidence_id TEXT PRIMARY KEY,evidence_type_id TEXT,trade_id TEXT,candidate_id TEXT,
+            occurred_at TEXT,role TEXT,present INTEGER
+          );
+          INSERT INTO evidence_types VALUES('dom','DOM'),('delta','Delta');
+          INSERT INTO evidence_observations VALUES
+           ('old','dom',NULL,'zone-a','2026-11-22T20:00:00+11:00','ENTRY_CONFIRMATION',1),
+           ('old-duplicate','dom',NULL,'zone-a','2026-11-22T09:10:00Z','ENTRY_CONFIRMATION',1),
+           ('after','delta',NULL,'zone-a','2026-11-22T09:30:01Z','SETUP_SUPPORT',1),
+           ('unknown','delta',NULL,'zone-a','not-a-time','SETUP_SUPPORT',1),
+           ('other','delta',NULL,'zone-b','2026-11-22T08:30:00Z','ENTRY_CONFIRMATION',1),
+           ('absent','delta',NULL,'zone-a','2026-11-22T08:10:00Z','ENTRY_CONFIRMATION',0);
+        ").unwrap();
+        let (seen,post,unknown)=trade_evidence_temporal_snapshot(
+           &conn,"trade-a",&Some("zone-a".into()),Some("2026-11-22T09:30:00Z")
+        ).unwrap();
+        assert_eq!(seen,vec!["ENTRY_CONFIRMATION: DOM"]);
+        assert_eq!(post,1);
+        assert_eq!(unknown,1);
+        let (legacy,post,unknown)=trade_evidence_temporal_snapshot(
+            &conn,"trade-a",&Some("zone-a".into()),None
+        ).unwrap();
+        assert!(legacy.is_empty());
+        assert_eq!(post,0);
+        assert_eq!(unknown,4);
+    }
+}
