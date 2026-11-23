@@ -239,6 +239,9 @@ export type WeeklyLearningSnapshot=Readonly<{
   sourceTypeCorrectionEventCount:number;
   sourcePriceCorrectionEventCount:number;
   netR:number|null;
+  /** Best/worst known net R among eligible CLOSED trade outcomes only. */
+  largestWinnerR:number|null;
+  largestLoserR:number|null;
   ruleViolationCount:number;
   uncheckedRuleCount:number;
   mistakes:readonly {id:string;label:string;count:number}[];
@@ -306,6 +309,10 @@ export function weeklyLearningSnapshot(
     sourceTypeCorrectionEventCount:eventTotal(sourceTypeCounts),
     sourcePriceCorrectionEventCount:eventTotal(sourcePriceCounts),
     netR:eligible.length?eligible.reduce((total,row)=>total+(row.realized_r as number),0):null,
+    largestWinnerR:eligible.some(row=>(row.realized_r as number)>0)
+      ?Math.max(...eligible.map(row=>row.realized_r as number).filter(r=>r>0)):null,
+    largestLoserR:eligible.some(row=>(row.realized_r as number)<0)
+      ?Math.min(...eligible.map(row=>row.realized_r as number).filter(r=>r<0)):null,
     ruleViolationCount:violated,uncheckedRuleCount:unchecked,mistakes,
     observation,action,scope:'FILTERED_TRADES_ONLY',
   };
@@ -377,6 +384,9 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:
     'Trades: '+snapshot.tradeCount+'; closed: '+snapshot.closedCount+'; open/other: '+snapshot.openCount+'.',
     'Net R eligible: '+snapshot.eligibleRCount+'/'+snapshot.closedCount+' closed; missing eligible R: '+snapshot.missingRCount+'.',
     'Sum of eligible net R: '+(snapshot.netR==null?'unknown':snapshot.netR.toFixed(2)+'R')+'.',
+    'Largest known closed winner: '+(snapshot.largestWinnerR===null?'not recorded':snapshot.largestWinnerR.toFixed(2)+'R')+
+      '; largest known closed loser: '+(snapshot.largestLoserR===null?'not recorded':snapshot.largestLoserR.toFixed(2)+'R')+
+      '. Only R-eligible closed Trades; missing-R outcomes are excluded, not zero.',
     'Audited-correction affected trades (all four families; each Trade counted once): '+snapshot.correctedTradeCount+
       '. Fill costs: '+snapshot.fillCorrectedTradeCount+' trade(s) / '+snapshot.fillCorrectionEventCount+' event(s)'+
       '; Initial Risk: '+snapshot.initialRiskCorrectedTradeCount+' trade(s) / '+snapshot.initialRiskCorrectionEventCount+' event(s)'+
