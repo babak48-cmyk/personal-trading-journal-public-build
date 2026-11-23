@@ -51,10 +51,12 @@ fn same(a:Option<f64>,b:Option<f64>)->bool{
 }
 fn identity(conn:&Connection,id:&str)->Result<(String,Option<f64>,f64),AppError>{
  conn.query_row(
- "SELECT cs.candidate_revision_id,cs.source_price,i.tick_size
+ "SELECT cs.candidate_revision_id,cs.source_price,
+     COALESCE(s.instrument_tick_size_snapshot,i.tick_size)
   FROM candidate_sources cs
   JOIN candidates c ON c.candidate_id=cs.candidate_id
-  JOIN instruments i ON i.instrument_id=c.instrument_id
+  JOIN sessions s ON s.session_id=c.session_id
+  JOIN instruments i ON i.instrument_id=s.instrument_id
   WHERE cs.candidate_source_id=?1 AND cs.candidate_revision_id IS NOT NULL
     AND EXISTS(SELECT 1 FROM candidate_revisions cr
       WHERE cr.candidate_revision_id=cs.candidate_revision_id AND cr.candidate_id=cs.candidate_id)",
@@ -259,6 +261,18 @@ mod tests{
    assert_eq!(verify_all(&c).unwrap(),2);
    assert_eq!(db::integrity_check(&c).unwrap(),"ok");
    assert_eq!(db::foreign_key_violation_count(&c).unwrap(),0);
+ }
+ #[test]
+ fn correct_price_uses_original_session_tick_snapshot_not_mutable_instrument_registry(){
+   let mut c=fixture();
+   c.execute_batch(
+      "UPDATE sessions SET instrument_tick_size_snapshot=0.25 WHERE session_id='s';
+       UPDATE instruments SET tick_size=0.5 WHERE instrument_id='i';").unwrap();
+   // 7000.25 is legal on the Session's original .25-tick contract, not
+   // under the subsequently changed registry .5-tick preference.
+   assert!(preview(&c,&req(0,Some(7000.0),7000.25)).is_ok());
+   record(&mut c,req(0,Some(7000.0),7000.25)).unwrap();
+   assert_eq!(verify_all(&c).unwrap(),1);
  }
  #[test]
  fn reject_missing_revision_or_unsaved_decision(){
