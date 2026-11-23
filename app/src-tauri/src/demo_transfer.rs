@@ -80,7 +80,7 @@ fn require_test_sessions(conn:&Connection)->Result<(),AppError>{
     // is NOT proof that the history is synthetic. Never infer DEMO status.
     let non_test:i64=conn.query_row(
        "SELECT COUNT(*) FROM sessions
-         WHERE environment IS NULL OR TRIM(UPPER(environment)) NOT IN ('DEMO','FORWARD_TEST')",
+         WHERE environment IS NULL OR UPPER(environment) NOT IN ('DEMO','FORWARD_TEST')",
        [],|r|r.get(0))?;
     if non_test>0{
         return Err(AppError::Validation("Source contains non-DEMO or unknown sessions. Only explicitly DEMO/FORWARD_TEST records may be transferred".into()));
