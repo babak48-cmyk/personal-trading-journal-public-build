@@ -82,6 +82,10 @@ fn count(conn:&Connection,table:&str)->Result<i64,AppError>{
         "custom_field_options"=>"SELECT COUNT(*) FROM custom_field_options",
         "setup_playbook_details"=>"SELECT COUNT(*) FROM setup_playbook_details",
         "setup_evidence_priorities"=>"SELECT COUNT(*) FROM setup_evidence_priorities",
+        "strategies"=>"SELECT COUNT(*) FROM strategies",
+        "strategy_versions"=>"SELECT COUNT(*) FROM strategy_versions",
+        "settings_profiles"=>"SELECT COUNT(*) FROM settings_profiles",
+        "settings_profile_versions"=>"SELECT COUNT(*) FROM settings_profile_versions",
         // Even a user-defined registry item without any captured journal
         // event must never be silently replaced by the imported profile.
         "user_defined_instruments"=>"SELECT COUNT(*) FROM instruments WHERE user_defined=1",
@@ -106,6 +110,7 @@ const JOURNAL_EVENT_TABLES:&[&str]=&[
     "custom_field_value_events","custom_field_selection_snapshots",
     "custom_field_definitions","custom_field_options",
     "setup_playbook_details","setup_evidence_priorities",
+    "strategies","strategy_versions","settings_profiles","settings_profile_versions",
     "user_defined_instruments","user_defined_setups","user_defined_level_sources",
     "setup_trade_links","fill_correction_events","initial_risk_correction_events",
     "candidate_source_type_correction_events","candidate_source_price_correction_events",
@@ -355,6 +360,24 @@ mod isolated_transfer_tests {
         assert_eq!(fs::read(&source).unwrap(),b"original user archive bytes",
           "refused source must not be deleted by staging preparation");
         fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
+    fn destination_strategy_and_settings_profiles_block_import_without_sessions(){
+        for kind in ["strategy","settings_profile"] {
+            let base=std::env::temp_dir().join(format!("ptj-c-profile-{kind}-{}",Uuid::new_v4()));
+            let paths=target_paths(&base);
+            let conn=db::open_database(&paths.database()).unwrap();
+            conn.execute("INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','2026-11-23')",[]).unwrap();
+            if kind=="strategy" {
+                conn.execute("INSERT INTO strategies(strategy_id,workspace_id,name) VALUES('st','w','Personal custom strategy')",[]).unwrap();
+                conn.execute("INSERT INTO strategy_versions(strategy_version_id,strategy_id,version_label,status) VALUES('st-v1','st','v1','DRAFT')",[]).unwrap();
+            } else {
+                conn.execute("INSERT INTO settings_profiles(settings_profile_id,workspace_id,name) VALUES('sp','w','My settings')",[]).unwrap();
+                conn.execute("INSERT INTO settings_profile_versions(settings_profile_version_id,settings_profile_id,version_label,payload_json) VALUES('sp-v1','sp','v1','{}')",[]).unwrap();
+            }
+            assert!(ensure_empty_target(&paths).is_err(),"strategy/settings profile without Trades is user data");
+            drop(conn);fs::remove_dir_all(base).unwrap();
+        }
     }
     #[test]
     fn copies_package_b_v11_test_history_into_empty_v12_demo_without_touching_source(){
