@@ -387,3 +387,63 @@ mod weekly_action_schema_v12_tests {
         assert_eq!(integrity_check(&c).unwrap(),"ok");
     }
 }
+
+#[cfg(test)]
+mod initial_risk_schema_v13_tests {
+    use super::*;
+    fn legacy_v12_with_initial_risk()->Connection {
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch(
+          "PRAGMA foreign_keys=ON;
+           CREATE TABLE schema_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL);
+           INSERT INTO schema_meta VALUES(1,0);").unwrap();
+        for (i,sql) in [MIGRATION_001,MIGRATION_002,MIGRATION_003,MIGRATION_004,
+                        MIGRATION_005,MIGRATION_006,MIGRATION_007,MIGRATION_008,
+                        MIGRATION_009,MIGRATION_010,MIGRATION_011,MIGRATION_012].iter().enumerate(){
+            let tx=c.unchecked_transaction().unwrap();
+            tx.execute_batch(sql).unwrap();
+            tx.execute("UPDATE schema_meta SET schema_version=?1 WHERE id=1",[(i+1) as i64]).unwrap();
+            tx.commit().unwrap();
+        }
+        c.execute_batch(
+          "INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','B history','date');
+           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+             VALUES('i','w','GC',0.1,100);
+           INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+             VALUES('s','w','i','2026-11-22','DEMO','date','CLOSED','date','date');
+           INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+             VALUES('d','s','2026-11-22T10:00:00Z','TRADE','LONG');
+           INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+             VALUES('t','d','s','LONG','CLOSED');
+           INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars)
+             VALUES('r','t','2026-11-22T10:01:00Z','INITIAL',4099.5,2,100);").unwrap();
+        assert_eq!(schema_version(&c).unwrap(),12);
+        c
+    }
+    #[test]
+    fn v13_failed_migration_rolls_back_and_preserves_old_risk_history(){
+        let c=legacy_v12_with_initial_risk();
+        let failure=(||->Result<(),rusqlite::Error>{
+            let tx=c.unchecked_transaction()?;
+            tx.execute_batch(MIGRATION_013)?;
+            tx.execute("INSERT INTO intentionally_missing_table VALUES(1)",[])?;
+            tx.execute("UPDATE schema_meta SET schema_version=13 WHERE id=1",[])?;
+            tx.commit()
+        })();
+        assert!(failure.is_err());
+        assert_eq!(schema_version(&c).unwrap(),12);
+        let count:i64=c.query_row(
+          "SELECT COUNT(*) FROM sqlite_master WHERE type='table'
+           AND name='initial_risk_correction_events'",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,0);
+        let original:f64=c.query_row("SELECT risk_dollars FROM risk_snapshots WHERE risk_snapshot_id='r'",[],|r|r.get(0)).unwrap();
+        assert_eq!(original,100.0);
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),13);
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),13);
+        assert_eq!(c.query_row("SELECT risk_dollars FROM risk_snapshots WHERE risk_snapshot_id='r'",[],|r|r.get::<_,f64>(0)).unwrap(),100.0);
+        assert_eq!(integrity_check(&c).unwrap(),"ok");
+        assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
