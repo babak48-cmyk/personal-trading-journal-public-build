@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -90,6 +90,22 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('Decision-time level source groups (overlapping; do not sum');
     expect(weeklyLearningText(weeklyLearningSnapshot(records,'2026-11-09'),groups)).toContain('Prior Day High [2 linked trades, 1/2 R eligible');
     expect(weeklyLevelSourceBreakdown(records,'2026-10-05')).toEqual([]);
+  });
+  it('separates observed-at-Decision evidence from later records and respects overlapping source groups',()=>{
+    const data=[
+      row('a','2026-11-09',{evidence_observed_at_decision:['ENTRY_CONFIRMATION: DOM','SETUP_SUPPORT: Delta','ENTRY_CONFIRMATION: DOM'],realized_r:1}),
+      row('b','2026-11-10',{evidence_observed_at_decision:['ENTRY_CONFIRMATION: DOM'],realized_r:null}),
+      row('c','2026-11-11',{evidence_observed_at_decision:[],evidence_post_decision_count:2,realized_r:-1}),
+      row('outside','2026-11-02',{evidence_observed_at_decision:['ENTRY_CONFIRMATION: DOM'],realized_r:99}),
+    ];
+    const results=weeklyObservedEvidenceBreakdown(data,'2026-11-09');
+    expect(results).toEqual([
+      {label:'ENTRY_CONFIRMATION: DOM',tradeCount:2,closedCount:2,eligibleRCount:1,netR:1,ruleViolationCount:0},
+      {label:'No timestamp-verified evidence at Decision',tradeCount:1,closedCount:1,eligibleRCount:1,netR:-1,ruleViolationCount:0},
+      {label:'SETUP_SUPPORT: Delta',tradeCount:1,closedCount:1,eligibleRCount:1,netR:1,ruleViolationCount:0},
+    ]);
+    expect(results.reduce((sum,r)=>sum+r.tradeCount,0)).toBe(4);
+    expect(weeklyObservedEvidenceBreakdown(data,'2026-10-26')).toEqual([]);
   });
   it('uses decision-only MISSED reasons for one cautious weekly action when trade process has no priority issue',()=>{
     const snap=weeklyLearningSnapshot([row('a','2026-11-09',{realized_r:1})],'2026-11-09');
