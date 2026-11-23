@@ -22,7 +22,7 @@ export type BackupInfo = { backup_version: number; created_at_utc: string; schem
 export type RestoreResult = { restored_from: string; safety_backup: string; integrity: string; restored_at_utc: string };
 export type DemoTransferPreview = {
   source_schema_version:number;target_schema_version:number;database_sha256:string;
-  sessions:number;trades:number;zones:number;decisions:number;plan_revisions:number;evidence_events:number;risk_snapshots:number;fills:number;reviews:number;correction_events:number;initial_risk_correction_events:number;source_type_correction_events:number;
+  sessions:number;trades:number;zones:number;decisions:number;plan_revisions:number;evidence_events:number;risk_snapshots:number;fills:number;reviews:number;correction_events:number;initial_risk_correction_events:number;source_type_correction_events:number;weekly_learning_action_events:number;
   attachments:number;original_backup_untouched:boolean;
 };
 
