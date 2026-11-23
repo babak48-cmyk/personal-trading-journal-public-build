@@ -44,7 +44,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2278,6 +2278,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const instrumentBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'instrument_symbol'):[];
   const directionBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'direction'):[];
   const sessionBreakdown=activeWeek?weeklySessionBreakdown(rows,activeWeek):[];
+  const weekdayBreakdown=activeWeek?weeklyWeekdayBreakdown(rows,activeWeek):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
   const observedEvidenceBreakdown=activeWeek?weeklyObservedEvidenceBreakdown(rows,activeWeek):[];
   const setupVersionBreakdown=activeWeek?weeklySetupVersionBreakdown(rows,activeWeek):[];
@@ -2312,6 +2313,14 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded rule violation(s)</small>
           </div>)}</div>
+        </details>
+        <details className="guidedMore"><summary>Day of week · recorded Session date</summary>
+          <p className="subtle">Weekday comes from the saved Session date, not the trade execution time or current device timezone. Trade-level filters apply; no day-of-week trading edge is inferred.</p>
+          {weekdayBreakdown.length===0?<p className="subtle">No executed Trades in this selected week.</p>:<div className="weeklyBreakdown">{weekdayBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
+            <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
+            <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
+            <small>{group.ruleViolationCount} recorded rule violation(s)</small>
+          </div>)}</div>}
         </details>
         <details className="guidedMore"><summary>Session breakdown · distinct recorded session IDs</summary>
           <p className="subtle">Separate journal sessions are not combined even if they share a date. Only current-filter executed Trades are counted; no decision-only records or missing R are fabricated.</p>
