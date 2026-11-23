@@ -2016,6 +2016,12 @@ pub struct AnalyticsSummaryDto {
     pub win_loss_payoff_r: Option<f64>,
     /// Known closed net P&L divided by the count of closed Trades with known net P&L.
     pub expectancy_pnl: Option<f64>,
+    /// Consecutive positive/negative R outcomes in known closing-time order.
+    pub max_winning_streak: Option<i64>,
+    pub max_losing_streak: Option<i64>,
+    /// Largest peak-to-trough drop in cumulative realized net R of the
+    /// COMPLETE filtered closed-trade sequence. NOT account equity drawdown.
+    pub max_realized_r_drawdown: Option<f64>,
     pub net_pnl: Option<f64>,
     pub rule_violation_trades: i64,
     pub bad_decision_win_count: i64,
@@ -2320,6 +2326,59 @@ mod extra_analytics_metric_tests {
     }
 }
 
+/// Sequence analytics are available only for an entirely date-ordered,
+/// R-eligible CLOSED sample. Do not collapse missing-R Trades into zero or
+/// invent the order of simultaneous/unknown exits.
+fn complete_realized_r_sequence(
+    mut points:Vec<(chrono::DateTime<chrono::Utc>,f64)>
+)->Option<(i64,i64,f64)>{
+    if points.is_empty()||points.iter().any(|(_,r)|!r.is_finite()){return None;}
+    points.sort_by_key(|(at,_)|*at);
+    if points.windows(2).any(|w|w[0].0==w[1].0){return None;}
+    let mut run_win=0;let mut run_loss=0;
+    let mut best_win=0;let mut best_loss=0;
+    let mut cumulative=0.0_f64;let mut peak=0.0_f64;let mut drawdown=0.0_f64;
+    for (_,r) in points{
+        if r>1e-9{run_win+=1;run_loss=0;}
+        else if r< -1e-9{run_loss+=1;run_win=0;}
+        else{run_win=0;run_loss=0;}
+        best_win=best_win.max(run_win);
+        best_loss=best_loss.max(run_loss);
+        cumulative+=r;peak=peak.max(cumulative);
+        drawdown=drawdown.max(peak-cumulative);
+    }
+    Some((best_win,best_loss,drawdown))
+}
+
+#[cfg(test)]
+mod chronological_realized_r_tests {
+    use super::complete_realized_r_sequence;
+    use chrono::{DateTime,Utc};
+    fn at(s:&str)->DateTime<Utc>{
+        DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+    }
+    #[test]
+    fn ordered_realized_r_peak_drawdown_and_streaks(){
+        let dates=["2026-11-09T01:00:00Z","2026-11-09T02:00:00Z",
+          "2026-11-09T03:00:00Z","2026-11-09T04:00:00Z",
+          "2026-11-09T05:00:00Z","2026-11-09T06:00:00Z"];
+        // Out-of-order input must be sorted by actual close time.
+        let points=vec![(at(dates[5]),0.0),(at(dates[3]),-1.0),
+          (at(dates[0]),2.0),(at(dates[4]),1.0),(at(dates[2]),-2.0),
+          (at(dates[1]),1.0)];
+        // R equity: 0,2,3,1,0,1,1; peak-to-trough is 3 R.
+        assert_eq!(complete_realized_r_sequence(points),Some((2,2,3.0)));
+    }
+    #[test]
+    fn unknown_duplicate_or_unordered_identity_is_not_a_zero_drawdown(){
+        let t=at("2026-11-09T00:00:00Z");
+        assert_eq!(complete_realized_r_sequence(Vec::new()),None);
+        assert_eq!(complete_realized_r_sequence(vec![(t,1.0),(t,-1.0)]),None);
+        assert_eq!(complete_realized_r_sequence(vec![(t,f64::NAN)]),None);
+        assert_eq!(complete_realized_r_sequence(vec![(t,-0.5)]),Some((0,1,0.5)));
+    }
+}
+
 pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result<AnalyticsSummaryDto,AppError>{
     let rows=list_journal_trades(conn,filter)?;
     let closed:Vec<&JournalTradeRowDto>=rows.iter().filter(|x|x.status=="CLOSED").collect();
@@ -2346,6 +2405,37 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     // Initial risk is NOT required for trustworthy net P&L. Missing costs
     // result in NULL net P&L and those Trades cannot dilute this denominator.
     let expectancy_pnl=known_pnl_expectancy(&pnls);
+    // Each CLOSED trade must have a finite R and a complete, unambiguous
+    // timestamp for EVERY exit Fill. The final exit defines realized outcome
+    // order, never Session date or a guessed Trade-ID ordering.
+    let mut sequence=Vec::new();
+    let mut sequence_complete=!closed.is_empty();
+    for row in &closed{
+        let Some(r)=row.realized_r.filter(|v|v.is_finite()) else{
+            sequence_complete=false;break;
+        };
+        let mut query=conn.prepare(
+            "SELECT occurred_at FROM execution_fills
+             WHERE trade_id=?1 AND action='EXIT' ORDER BY rowid"
+        )?;
+        let events=query.query_map([&row.trade_id],|item|item.get::<_,Option<String>>(0))?;
+        let mut last:Option<chrono::DateTime<chrono::Utc>>=None;
+        let mut any=false;
+        for observed in events{
+            any=true;
+            let Some(raw)=observed? else{sequence_complete=false;break;};
+            let Ok(stamp)=chrono::DateTime::parse_from_rfc3339(&raw) else{
+                sequence_complete=false;break;
+            };
+            let instant=stamp.with_timezone(&chrono::Utc);
+            last=Some(last.map_or(instant,|old|old.max(instant)));
+        }
+        if !sequence_complete||!any{sequence_complete=false;break;}
+        sequence.push((last.expect("at least one parsed exit timestamp"),r));
+    }
+    let chronological=if sequence_complete{
+        complete_realized_r_sequence(sequence)
+    }else{None};
     let rule_violation_trades=rows.iter().filter(|x|x.rule_status=="VIOLATED").count() as i64;
     // A known profitable result does not require a known initial risk.
     // Unknown costs -> UNKNOWN net result and are never counted as wins.
@@ -2359,6 +2449,9 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
         wins,losses,breakeven,win_rate,average_r,median_r,net_r,
         average_winner_r,average_loser_r,profit_factor_r,expectancy_r:average_r,
         win_loss_payoff_r,expectancy_pnl,
+        max_winning_streak:chronological.map(|v|v.0),
+        max_losing_streak:chronological.map(|v|v.1),
+        max_realized_r_drawdown:chronological.map(|v|v.2),
         net_pnl:if pnls.is_empty(){None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
     })
 }
