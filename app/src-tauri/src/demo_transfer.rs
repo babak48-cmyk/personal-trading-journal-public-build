@@ -225,6 +225,13 @@ pub fn import_into_empty(paths:&AppPaths,archive:&Path,expected_archive_sha:&str
         crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(c)?;
         crate::source_type_corrections::verify_all_source_correction_chains(c)?;
         crate::source_price_corrections::verify_all(c)?;
+        // Validate the physical source ZIP after the staged copy is installed,
+        // while Restore still has its rollback snapshot. If the original
+        // archive changed during import, reject before reporting success.
+        if external_archive_sha256(paths,archive)?!=confirmed.archive_sha256{
+            return Err(AppError::Validation(
+                "Source ZIP changed during B-to-C import; destination rollback required".into()));
+        }
         Ok(())
     })?;
     Ok(receipt)
