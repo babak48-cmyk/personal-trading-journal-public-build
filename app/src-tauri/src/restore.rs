@@ -208,6 +208,49 @@ mod backup_integrity_tests {
     use zip::{write::SimpleFileOptions, ZipWriter};
 
     #[test]
+    fn failing_final_postcopy_check_rolls_back_existing_target_and_preserves_original_archive(){
+        let root=std::env::temp_dir().join(format!("ptj-post-restore-rollback-{}",uuid::Uuid::new_v4()));
+        fn fixture(root:PathBuf)->AppPaths{
+            let paths=AppPaths{
+                data:root.join("data"),attachments:root.join("attachments"),
+                backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs"),root
+            };
+            for dir in [&paths.root,&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs]{
+                fs::create_dir_all(dir).unwrap();
+            }
+            paths
+        }
+        let source=fixture(root.join("source"));
+        let target=fixture(root.join("target"));
+        let source_conn=db::open_database(&source.database()).unwrap();
+        source_conn.execute_batch(
+          "INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','now');
+           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+           VALUES('i','w','ES',0.25,50);
+           INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+           VALUES('src-session','w','i','2026-11-23','DEMO','now','CLOSED','now','now');"
+        ).unwrap();
+        drop(source_conn);
+        let archive=crate::backup::create_backup(&source).unwrap();
+        let archive_before=fs::read(&archive).unwrap();
+        let target_conn=db::open_database(&target.database()).unwrap();
+        assert_eq!(target_conn.query_row("SELECT COUNT(*) FROM sessions",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+        drop(target_conn);
+        let outcome=replace_live_from_backup_with_postcheck(&target,&archive,|installed|{
+            let n:i64=installed.query_row("SELECT COUNT(*) FROM sessions",[],|r|r.get(0))?;
+            assert_eq!(n,1,"postcheck must see the installed copy, not the original target");
+            Err(AppError::Validation("injected post-copy verification failure".into()))
+        });
+        assert!(outcome.is_err(),"post-copy failure cannot become a SUCCESS receipt");
+        let reopened=db::open_database(&target.database()).unwrap();
+        assert_eq!(reopened.query_row("SELECT COUNT(*) FROM sessions",[],|r|r.get::<_,i64>(0)).unwrap(),0,
+            "previous destination must survive a failed post-restore verification");
+        assert_eq!(db::integrity_check(&reopened).unwrap(),"ok");
+        drop(reopened);
+        assert_eq!(fs::read(&archive).unwrap(),archive_before,"original backup must remain byte-identical");
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn validator_rejects_missing_attachment_and_accepts_present_attachment() {
         let root = std::env::temp_dir().join(format!("ptj-archive-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
