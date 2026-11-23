@@ -745,10 +745,17 @@ pub fn get_current_plan(conn: &Connection, session_id: &str) -> Result<CurrentPl
     let mut candidates=Vec::new();
     for (id,label,intent,trend,pm,pf,pt,rp,current_revision_id,required_json,invalidation_json,notes,setup_version_id) in base {
         let status:String=conn.query_row("SELECT status FROM candidate_status_events WHERE candidate_id=?1 ORDER BY occurred_at DESC,rowid DESC LIMIT 1",[&id],|r|r.get(0)).optional()?.unwrap_or_else(||"PLANNED".into());
-        let mut sstmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_id=?1 AND cs.candidate_revision_id=?2 ORDER BY cs.is_primary DESC,lst.label")?;
-        let rows=sstmt.query_map(params![&id,&current_revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
-        let source_type_ids=rows.iter().map(|x|x.0.clone()).collect();
-        let sources=rows.into_iter().map(|x|x.1).collect();
+        let mut sstmt=conn.prepare("SELECT cs.candidate_source_id,cs.source_type_id FROM candidate_sources cs WHERE cs.candidate_id=?1 AND cs.candidate_revision_id=?2 ORDER BY cs.is_primary DESC,cs.rowid")?;
+        let source_rows=sstmt.query_map(params![&id,&current_revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+        let mut source_type_ids=Vec::new();let mut sources=Vec::new();
+        for (source_id,original_type) in source_rows {
+            let (effective,revision,_)=crate::source_type_corrections::effective_type(conn,&source_id,&original_type)?;
+            let label:String=conn.query_row(
+              "SELECT label FROM level_source_types WHERE source_type_id=?1",
+              [&effective],|r|r.get(0))?;
+            source_type_ids.push(effective);
+            sources.push(if revision>0{format!("{label} [corrected historical entry]")}else{label});
+        }
         let required_conditions=required_json.as_deref().and_then(|x|serde_json::from_str(x).ok()).unwrap_or_default();
         let invalidation_conditions=invalidation_json.as_deref().and_then(|x|serde_json::from_str(x).ok()).unwrap_or_default();
         candidates.push(CandidateCurrentDto{candidate_id:id,label,directional_intent:intent,trend_relationship:trend,price_mode:pm,price_from:pf,price_to:pt,reference_price:rp,required_conditions,invalidation_conditions,notes,current_status:status,sources,source_type_ids,setup_version_id});
@@ -2014,8 +2021,14 @@ fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<
     // A legacy decision without a revision snapshot stays UNKNOWN (no attribution)
     // rather than acquiring sources added after the trade.
     let Some(revision_id)=decision_candidate_revision_id else{return Ok(Vec::new())};
-    let mut stmt=conn.prepare("SELECT lst.source_type_id,lst.label FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id WHERE cs.candidate_revision_id=?1 ORDER BY cs.is_primary DESC,lst.label")?;
-    let rows=stmt.query_map([revision_id],|r|Ok((r.get(0)?,r.get(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let mut stmt=conn.prepare("SELECT candidate_source_id,source_type_id FROM candidate_sources WHERE candidate_revision_id=?1 ORDER BY is_primary DESC,rowid")?;
+    let originals=stmt.query_map([revision_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?)))?.collect::<Result<Vec<_>,_>>()?;
+    let mut rows=Vec::new();
+    for (source_id,original_id) in originals{
+        let (effective,revision,_)=crate::source_type_corrections::effective_type(conn,&source_id,&original_id)?;
+        let label:String=conn.query_row("SELECT label FROM level_source_types WHERE source_type_id=?1",[&effective],|r|r.get(0))?;
+        rows.push((effective,if revision>0{format!("{label} [corrected historical entry]")}else{label}));
+    }
     Ok(rows)
 }
 
