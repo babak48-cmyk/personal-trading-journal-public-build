@@ -228,6 +228,34 @@ mod decision_only_html_export_tests{
     use rusqlite::Connection;
 
     #[test]
+    fn rapid_exports_preserve_prior_report_contents_and_never_replace_existing_files(){
+        let conn=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        let root=std::env::temp_dir().join(format!("ptj-evidence-unique-{}",uuid::Uuid::new_v4()));
+        let paths=AppPaths{
+          root:root.clone(),data:root.join("data"),attachments:root.join("attachments"),
+          backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs")
+        };
+        let filter=JournalFilterInput::default();
+        let first_html=export_html(&conn,&paths,filter.clone()).unwrap();
+        let first_csv=export_csv(&conn,&paths,filter.clone()).unwrap();
+        let html_before=std::fs::read(&first_html.path).unwrap();
+        let csv_before=std::fs::read(&first_csv.path).unwrap();
+        let second_html=export_html(&conn,&paths,filter.clone()).unwrap();
+        let second_csv=export_csv(&conn,&paths,filter).unwrap();
+        assert_ne!(first_html.path,second_html.path);
+        assert_ne!(first_csv.path,second_csv.path);
+        assert_eq!(std::fs::read(&first_html.path).unwrap(),html_before);
+        assert_eq!(std::fs::read(&first_csv.path).unwrap(),csv_before);
+        assert_eq!(std::fs::read_dir(&paths.exports).unwrap().count(),4);
+        let preserved=paths.exports.join("protected.html");
+        std::fs::write(&preserved,b"ORIGINAL").unwrap();
+        assert!(write_new_report(&preserved,b"REPLACEMENT").is_err(),
+          "create_new must reject any preexisting file");
+        assert_eq!(std::fs::read(&preserved).unwrap(),b"ORIGINAL");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn html_exports_original_missed_and_no_trade_without_fabricating_trades_r_or_reasons(){
         let conn=Connection::open_in_memory().unwrap();
         crate::db::migrate(&conn).unwrap();
