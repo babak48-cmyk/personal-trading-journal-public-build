@@ -27,6 +27,7 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(localDecisionHour('2026-11-09T00:30:00','Australia/Sydney')).toBeNull();
     expect(localDecisionHour('2026-11-09','Australia/Sydney')).toBeNull();
     expect(localDecisionHour('unknown','Australia/Sydney')).toBeNull();
+    expect(localDecisionHour('2026-02-30T00:30:00Z','Australia/Sydney')).toBeNull();
     expect(localDecisionHour('2026-11-09T00:30:00Z','Invalid/Zone')).toBeNull();
     expect(localDecisionHour('2026-11-09T00:30:00Z',null)).toBeNull();
 
