@@ -86,6 +86,23 @@ export type HistoricalSourceReadout = {
   original_source_type_id:string; original_label:string;
   effective_source_type_id:string; effective_label:string;
   revision:number; corrected:boolean;
+  original_source_price:number|null;effective_source_price:number|null;price_correction_revision:number;
+};
+export type SourcePriceCorrectionRequest = {
+  candidate_source_id:string;expected_effective_price:number|null;
+  expected_revision:number;replacement_price:number;reason:string;
+};
+export type SourcePriceCorrectionEvent = {
+  correction_id:string;candidate_source_id:string;revision:number;
+  original_source_price:number|null;previous_source_price:number|null;
+  replacement_source_price:number;expected_prior_correction_id:string|null;
+  reason:string;recorded_at_utc:string;actor:string;
+};
+export type SourcePriceCorrectionPreview = {
+  candidate_source_id:string;candidate_revision_id:string;original_source_price:number|null;
+  current_effective_price:number|null;replacement_price:number;expected_revision:number;
+  related_decision_count:number;related_trade_count:number;reason:string;
+  monetary_result_unchanged:boolean;zone_geometry_unchanged:boolean;explicit_confirmation_required:boolean;
 };
 export type SourceTypeCorrectionRequest = {
   candidate_source_id:string; expected_effective_type_id:string;
@@ -314,6 +331,9 @@ export const localApi = {
   previewSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionPreview>('preview_source_type_correction',{input}),
   recordSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionEvent>('record_source_type_correction',{input}),
   listTradeSourceTypeCorrections: (tradeId:string) => invoke<SourceTypeCorrectionEvent[]>('list_trade_source_type_corrections',{tradeId}),
+  previewSourcePriceCorrection: (input:SourcePriceCorrectionRequest) => invoke<SourcePriceCorrectionPreview>('preview_source_price_correction',{input}),
+  recordSourcePriceCorrection: (input:SourcePriceCorrectionRequest) => invoke<SourcePriceCorrectionEvent>('record_source_price_correction',{input}),
+  listTradeSourcePriceCorrections: (tradeId:string) => invoke<SourcePriceCorrectionEvent[]>('list_trade_source_price_corrections',{tradeId}),
   previewInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionPreview>('preview_initial_risk_correction',{input}),
   recordInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionEvent>('record_initial_risk_correction',{input}),
   listInitialRiskCorrections: (tradeId:string) => invoke<InitialRiskCorrectionEvent[]>('list_initial_risk_corrections',{tradeId}),
