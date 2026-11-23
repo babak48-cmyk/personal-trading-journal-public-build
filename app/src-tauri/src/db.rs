@@ -455,3 +455,69 @@ mod initial_risk_schema_v13_tests {
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
     }
 }
+
+#[cfg(test)]
+mod source_type_schema_v14_tests {
+    use super::*;
+    fn v13_with_source()->Connection {
+        let c=Connection::open_in_memory().unwrap();
+        c.execute_batch(
+            "PRAGMA foreign_keys=ON;
+             CREATE TABLE schema_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL);
+             INSERT INTO schema_meta VALUES(1,0);").unwrap();
+        let old=[
+            MIGRATION_001,MIGRATION_002,MIGRATION_003,MIGRATION_004,
+            MIGRATION_005,MIGRATION_006,MIGRATION_007,MIGRATION_008,
+            MIGRATION_009,MIGRATION_010,MIGRATION_011,MIGRATION_012,MIGRATION_013
+        ];
+        for (i,migration) in old.iter().enumerate(){
+            let tx=c.unchecked_transaction().unwrap();
+            tx.execute_batch(migration).unwrap();
+            tx.execute("UPDATE schema_meta SET schema_version=?1 WHERE id=1",
+                [(i+1) as i64]).unwrap();
+            tx.commit().unwrap();
+        }
+        c.execute_batch(
+          "INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','B past data','now');
+           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+              VALUES('i','w','ES',0.25,50);
+           INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+              VALUES('sess','w','i','2026-11-23','DEMO','now','CLOSED','now','now');
+           INSERT INTO candidates(candidate_id,session_id,instrument_id,label,identified_when,created_at)
+              VALUES('zone','sess','i','Past level','PRE_SESSION','now');
+           INSERT INTO candidate_revisions(candidate_revision_id,candidate_id,revision_number,created_at,price_mode,change_type)
+              VALUES('rev','zone',1,'now','RANGE','CREATE');
+           INSERT INTO level_source_types(source_type_id,workspace_id,code,label,source_group)
+              VALUES('source','w','SRC','Original','STRUCTURE');
+           INSERT INTO candidate_sources(candidate_source_id,candidate_id,candidate_revision_id,source_type_id)
+              VALUES('cs','zone','rev','source');").unwrap();
+        assert_eq!(schema_version(&c).unwrap(),13);
+        c
+    }
+    #[test]
+    fn source_v14_migration_rolls_back_atomically_preserving_v13_original_and_replays(){
+        let c=v13_with_source();
+        let failed=(||->Result<(),rusqlite::Error>{
+            let tx=c.unchecked_transaction()?;
+            tx.execute_batch(MIGRATION_014)?;
+            tx.execute("INSERT INTO this_intentionally_absent_table VALUES (1)",[])?;
+            tx.execute("UPDATE schema_meta SET schema_version=14",[])?;
+            tx.commit()
+        })();
+        assert!(failed.is_err());
+        assert_eq!(schema_version(&c).unwrap(),13);
+        let created:i64=c.query_row(
+          "SELECT COUNT(*) FROM sqlite_master
+           WHERE type='table' AND name='candidate_source_type_correction_events'",
+          [],|r|r.get(0)).unwrap();
+        assert_eq!(created,0);
+        assert_eq!(c.query_row("SELECT source_type_id FROM candidate_sources WHERE candidate_source_id='cs'",[],|r|r.get::<_,String>(0)).unwrap(),"source");
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),14);
+        migrate(&c).unwrap();
+        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(c.query_row("SELECT source_type_id FROM candidate_sources WHERE candidate_source_id='cs'",[],|r|r.get::<_,String>(0)).unwrap(),"source");
+        assert_eq!(integrity_check(&c).unwrap(),"ok");
+        assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
