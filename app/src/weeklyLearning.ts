@@ -90,7 +90,10 @@ export function localDecisionHour(
 ):string|null{
   if(!recorded||!zone||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(recorded))return null;
   const at=new Date(recorded);
-  if(!Number.isFinite(at.getTime()))return null;
+  const civilDate=recorded.slice(0,10);
+  const checkedDay=new Date(civilDate+'T00:00:00Z');
+  if(!Number.isFinite(at.getTime())||!Number.isFinite(checkedDay.getTime())||
+     checkedDay.toISOString().slice(0,10)!==civilDate)return null;
   try{
     const formatter=new Intl.DateTimeFormat('en-GB',{
       timeZone:zone,hour:'2-digit',hourCycle:'h23',
