@@ -320,6 +320,9 @@ mod audited_source_type_tests {
         assert!(affected.level_sources.iter().any(|s|s.contains("Actual Level")));
         assert!(affected.level_sources.iter().any(|s|s.contains("corrected historical entry")));
         assert_eq!(unaffected.level_sources,vec!["Original High"]);
+        assert_eq!(affected.audited_source_type_correction_count,1);
+        assert_eq!(unaffected.audited_source_type_correction_count,0);
+        assert_eq!(affected.audited_source_price_correction_count,0);
         assert_eq!(list_source_corrections_for_trade(&conn,"trade1").unwrap().len(),1);
         assert_eq!(list_source_corrections_for_trade(&conn,"trade2").unwrap().len(),0);
         assert_eq!(verify_all_source_correction_chains(&conn).unwrap(),1);
