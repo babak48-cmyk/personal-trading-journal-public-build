@@ -1990,6 +1990,10 @@ pub struct JournalTradeRowDto {
 #[derive(Debug, Serialize)]
 pub struct AnalyticsSummaryDto {
     pub trade_count: i64,
+    /// Closed Trades; includes those with unknown costs or initial risk.
+    pub closed_trade_count: i64,
+    /// Closed Trades with verified net P&L, even if initial risk is unknown.
+    pub eligible_net_pnl_count: i64,
     pub eligible_r_count: i64,
     pub wins: i64,
     pub losses: i64,
@@ -2278,9 +2282,16 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     let gross_win:f64=winners.iter().sum(); let gross_loss:f64=losers.iter().map(|x|x.abs()).sum();
     let profit_factor_r=if gross_loss>0.0{Some(gross_win/gross_loss)}else{None};
     let rule_violation_trades=rows.iter().filter(|x|x.rule_status=="VIOLATED").count() as i64;
-    let bad_decision_win_count=closed.iter().filter(|x|matches!(x.decision_quality.as_deref(),Some("C")|Some("INVALID")) && x.realized_r.unwrap_or(0.0)>0.0).count() as i64;
+    // A known profitable result does not require a known initial risk.
+    // Unknown costs -> UNKNOWN net result and are never counted as wins.
+    let bad_decision_win_count=closed.iter().filter(|x|
+        matches!(x.decision_quality.as_deref(),Some("C")|Some("INVALID")) &&
+        x.net_realized_pnl.is_some_and(|net|net>1e-9)
+    ).count() as i64;
     Ok(AnalyticsSummaryDto{
-        trade_count:rows.len() as i64,eligible_r_count:eligible,wins,losses,breakeven,win_rate,average_r,median_r,net_r,
+        trade_count:rows.len() as i64,closed_trade_count:closed.len() as i64,
+        eligible_net_pnl_count:pnls.len() as i64,eligible_r_count:eligible,
+        wins,losses,breakeven,win_rate,average_r,median_r,net_r,
         average_winner_r,average_loser_r,profit_factor_r,expectancy_r:average_r,
         net_pnl:if pnls.is_empty(){None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
     })
@@ -2964,6 +2975,50 @@ mod unknown_cost_accounting_integrity_tests {
         assert_eq!(summary.eligible_r_count,1);
         assert_eq!(summary.net_r,Some(1.0));
         assert_eq!(summary.net_pnl,Some(20.0));
+    }
+}
+
+#[cfg(test)]
+mod analytics_coverage_truth_tests {
+    use super::*;
+    #[test]
+    fn known_profit_bad_decision_without_initial_risk_is_counted_but_not_invented_r(){
+        let db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        db.execute_batch("
+            INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','now');
+            INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+                VALUES('i','w','ES',0.25,50);
+            INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+                VALUES('s','w','i','2026-11-23','DEMO','now','CLOSED','now','now');
+            INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+                VALUES ('d1','s','2026-11-23T08:00:00Z','TRADE','LONG'),
+                       ('d2','s','2026-11-23T09:00:00Z','TRADE','LONG'),
+                       ('d3','s','2026-11-23T10:00:00Z','TRADE','LONG');
+            INSERT INTO trades(trade_id,decision_id,session_id,direction,status,decision_quality)
+                VALUES('t1','d1','s','LONG','CLOSED','A'),
+                      ('t2','d2','s','LONG','CLOSED','C'),
+                      ('t3','d3','s','LONG','CLOSED','INVALID');
+            INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+                VALUES('f11','t1','2026-11-23T08:01:00Z','ENTRY','BUY',7000,1,1,0),
+                      ('f12','t1','2026-11-23T08:02:00Z','EXIT','SELL',7001,1,1,0),
+                      ('f21','t2','2026-11-23T09:01:00Z','ENTRY','BUY',7000,1,1,0),
+                      ('f22','t2','2026-11-23T09:02:00Z','EXIT','SELL',7001,1,1,0),
+                      ('f31','t3','2026-11-23T10:01:00Z','ENTRY','BUY',7000,1,NULL,0),
+                      ('f32','t3','2026-11-23T10:02:00Z','EXIT','SELL',7001,1,1,0);
+            INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,risk_dollars)
+                VALUES('r1','t1','2026-11-23T08:01:00Z','INITIAL',100);").unwrap();
+        let summary=get_analytics_summary(&db,JournalFilterInput::default()).unwrap();
+        assert_eq!(summary.trade_count,3);
+        assert_eq!(summary.closed_trade_count,3);
+        assert_eq!(summary.eligible_net_pnl_count,2);
+        assert_eq!(summary.eligible_r_count,1);
+        assert_eq!(summary.net_pnl,Some(96.0));
+        assert_eq!(summary.net_r,Some(0.48));
+        assert_eq!(summary.bad_decision_win_count,1,
+          "C trade with known net profit belongs in process-quality warning even with unknown risk");
+        assert!(summary.small_sample);
+        assert_eq!(db::integrity_check(&db).unwrap(),"ok");
     }
 }
 
