@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -19,6 +19,20 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(weeklyTradeReadiness(false,'',0)).toBe('EMPTY');
   });
 
+  it('derives weekday only from valid recorded Session dates across Monday-Sunday',()=>{
+    const data=[
+      row('mon','2026-11-09',{realized_r:2}),
+      row('mon-unknown','2026-11-09',{realized_r:null,rule_status:'VIOLATED'}),
+      row('sun','2026-11-15',{realized_r:null}),
+      row('outside','2026-11-08',{realized_r:90}),
+      row('invalid','2026-02-30',{realized_r:99}),
+    ];
+    expect(weeklyWeekdayBreakdown(data,'2026-11-09')).toEqual([
+      {label:'Monday',tradeCount:2,closedCount:2,eligibleRCount:1,netR:2,ruleViolationCount:1},
+      {label:'Sunday',tradeCount:1,closedCount:1,eligibleRCount:0,netR:null,ruleViolationCount:0},
+    ]);
+    expect(weeklyWeekdayBreakdown([],'2026-11-09')).toEqual([]);
+  });
   it('keeps separate session IDs on the same date, and unknown net R distinct from zero',()=>{
     const records=[
       row('one','2026-11-09',{session_id:'session-A',realized_r:1}),
