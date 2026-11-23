@@ -64,6 +64,11 @@ export function DemoDataTransferPanel(){
       <div className="summaryStrip">
         <span><b>Sessions</b>{preview.sessions}</span>
         <span><b>Trades</b>{preview.trades}</span>
+        <span><b>Zones</b>{preview.zones}</span>
+        <span><b>Decisions</b>{preview.decisions}</span>
+        <span><b>Plan revisions</b>{preview.plan_revisions}</span>
+        <span><b>Evidence events</b>{preview.evidence_events}</span>
+        <span><b>Risk snapshots</b>{preview.risk_snapshots}</span>
         <span><b>Fills</b>{preview.fills}</span>
         <span><b>Reviews</b>{preview.reviews}</span>
         <span><b>Correction events</b>{preview.correction_events}</span>
