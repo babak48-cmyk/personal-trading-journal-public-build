@@ -29,7 +29,7 @@ import { sessionReviewRequiredIssues } from './sessionReviewValidation';
 import { reviewCompletionIssues } from './reviewCompletion';
 import { isCompletedReviewForTrade } from './reviewIdentity';
 import { filterCrossSessionPendingReviews } from './crossSessionReviewQueue';
-import { findClosedReviewTarget } from './reviewBacklogTarget';
+import { findClosedReviewTarget, findJournalTradeTarget } from './reviewBacklogTarget';
 import { AuditedFillCorrectionPanel } from './AuditedFillCorrectionPanel';
 import { PackageCTransferPanel } from './PackageCTransferPanel';
 import { AuditedInitialRiskCorrectionPanel } from './AuditedInitialRiskCorrectionPanel';
@@ -367,7 +367,7 @@ export function App(){
   const [crossSessionReviewError,setCrossSessionReviewError]=useState('');
   const [crossSessionReviewSearch,setCrossSessionReviewSearch]=useState('');
   const crossSessionReviewRequestRef=useRef(0);
-  const [requestedReviewTarget,setRequestedReviewTarget]=useState<{sessionId:string;tradeId:string}|null>(null);
+  const [requestedReviewTarget,setRequestedReviewTarget]=useState<{sessionId:string;tradeId:string;fromAnalytics?:boolean}|null>(null);
   const [reviewQueue,setReviewQueue]=useState<TradeMetrics[]|null>(null);
   const [reviewQueueLoading,setReviewQueueLoading]=useState(false);
   const [reviewQueueError,setReviewQueueError]=useState('');
@@ -688,7 +688,7 @@ export function App(){
     return window.confirm('Switch '+context+'? The following UNSAVED inputs will be discarded: '+parts.join('; ')+'. Previously saved Decision, execution, risk and Review history will NOT be deleted. Continue?');
   }
 
-  async function loadActive(s:SessionSummary, requestedTradeId?:string){
+  async function loadActive(s:SessionSummary, requestedTradeId?:string, fromAnalytics=false){
     // A Recent session click is also navigation. Re-selecting the current session
     // must exit Roadmap/Analytics/Safety/Settings WITHOUT reloading or discarding drafts.
     if(s.session_id===active?.session_id && !requestedTradeId){
@@ -697,10 +697,10 @@ export function App(){
       return;
     }
     if(s.session_id===active?.session_id && requestedTradeId){
-      if(findClosedReviewTarget(s.session_id,requestedTradeId,sessionTrades)){
+      if((fromAnalytics?findJournalTradeTarget:findClosedReviewTarget)(s.session_id,requestedTradeId,sessionTrades)){
         setShowRoadmap(false);setShowAnalysis(false);setShowSafety(false);setShowSettings(false);
         window.scrollTo(0,0);
-        setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
+        setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId,fromAnalytics});
       }else setMessage('The selected pending Review trade could not be verified in this session. Refresh the backlog.');
       return;
     }
@@ -771,8 +771,8 @@ export function App(){
       if(!stillCurrent())return;
       setSessionTrades(restoredTrades);
       if(requestedTradeId){
-        if(findClosedReviewTarget(s.session_id,requestedTradeId,restoredTrades)){
-          setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
+        if((fromAnalytics?findJournalTradeTarget:findClosedReviewTarget)(s.session_id,requestedTradeId,restoredTrades)){
+          setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId,fromAnalytics});
         }else setMessage('The selected pending Review trade is no longer a verified closed trade in this session. Refresh the backlog.');
       }
       // Quick page access is a view state, not evidence that earlier steps were incomplete.
@@ -798,7 +798,7 @@ export function App(){
   // unsaved-input and Review-verification guards in openTradeDetail.
   useEffect(()=>{
     if(!requestedReviewTarget||active?.session_id!==requestedReviewTarget.sessionId)return;
-    const target=findClosedReviewTarget(requestedReviewTarget.sessionId,requestedReviewTarget.tradeId,sessionTrades);
+    const target=(requestedReviewTarget.fromAnalytics?findJournalTradeTarget:findClosedReviewTarget)(requestedReviewTarget.sessionId,requestedReviewTarget.tradeId,sessionTrades);
     if(!target)return;
     setRequestedReviewTarget(null);
     void openTradeDetail(target);
@@ -2046,7 +2046,7 @@ export function App(){
           <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
         </section>}
         {active&&<div className="sessionContextBar"><span><b><JournalIcon name="session"/>Session</b>{active.session_date}</span><span><b><JournalIcon name="zone"/>Instrument</b>{active.instrument_symbol}</span><span><b><JournalIcon name="settings"/>Environment</b>{active.environment.replaceAll('_',' ')}</span><small>{active.status==='DRAFT'?'Draft: session setup can still be edited before plan confirmation.':'Confirmed session: identity is preserved in history; plan changes use revisions.'}</small></div>}
-        {showRoadmap ? <FeatureRoadmapPanel onClose={()=>setShowRoadmap(false)}/> : showAnalysis ? <AnalyticsPanel filter={journalFilter} appliedFilter={appliedJournalFilter} analyticsLoading={analyticsLoading} analyticsError={analyticsError} patchFilter={patchJournalFilter} apply={()=>refreshAnalytics()} rows={journalRows} instruments={instruments} decisionOnlyRows={decisionOnlyRows} decisionReasonRows={decisionReasonRows} decisionOnlyError={decisionOnlyError} summary={analytics} mistakes={mistakeSummary} sources={sources} evidenceTypes={evidenceTypes} openTrade={async(id)=>{try{const d=await localApi.getTradeDetail(id);setActiveTrade(d);setShowAnalysis(false);const sess=sessions.find(x=>x.session_id===d.metrics.session_id);if(sess)await loadActive(sess);}catch(e){setMessage(String(e));}}} quickMode={quickMode} fieldVisibility={fieldVisibility} fieldPlacements={fieldPlacements} fieldText={fieldText} fieldOrder={fieldOrder}/> : showSafety ? (<>{<div className="panel" aria-label="Backup location and drive selection">
+        {showRoadmap ? <FeatureRoadmapPanel onClose={()=>setShowRoadmap(false)}/> : showAnalysis ? <AnalyticsPanel filter={journalFilter} appliedFilter={appliedJournalFilter} analyticsLoading={analyticsLoading} analyticsError={analyticsError} patchFilter={patchJournalFilter} apply={()=>refreshAnalytics()} rows={journalRows} instruments={instruments} decisionOnlyRows={decisionOnlyRows} decisionReasonRows={decisionReasonRows} decisionOnlyError={decisionOnlyError} summary={analytics} mistakes={mistakeSummary} sources={sources} evidenceTypes={evidenceTypes} openTrade={async(id)=>{try{const d=await localApi.getTradeDetail(id);const sess=sessions.find(x=>x.session_id===d.metrics.session_id);if(!sess)throw new Error('Trade journal owner Session not found. Refresh sessions before opening the Trade.');await loadActive(sess,d.metrics.trade_id,true);}catch(e){setMessage(String(e));}}} quickMode={quickMode} fieldVisibility={fieldVisibility} fieldPlacements={fieldPlacements} fieldText={fieldText} fieldOrder={fieldOrder}/> : showSafety ? (<>{<div className="panel" aria-label="Backup location and drive selection">
         <div className="panelTitle"><div><h2><JournalIcon name="backup"/>Backup folder and drive</h2>
           <p className="subtle">Choose any existing accessible folder on C:, D:, E: or an external drive. Each backup also retains a separate internal recovery copy.</p></div></div>
         <p style={{overflowWrap:'anywhere'}}><strong>Saved destination:</strong> {backupDestination??'App-managed default'}.</p>
