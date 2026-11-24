@@ -689,8 +689,17 @@ export function App(){
   }
 
   async function loadActive(s:SessionSummary, requestedTradeId?:string){
+    // A Recent session click is also navigation. Re-selecting the current session
+    // must exit Roadmap/Analytics/Safety/Settings WITHOUT reloading or discarding drafts.
+    if(s.session_id===active?.session_id && !requestedTradeId){
+      setShowRoadmap(false);setShowAnalysis(false);setShowSafety(false);setShowSettings(false);
+      window.scrollTo(0,0);
+      return;
+    }
     if(s.session_id===active?.session_id && requestedTradeId){
       if(findClosedReviewTarget(s.session_id,requestedTradeId,sessionTrades)){
+        setShowRoadmap(false);setShowAnalysis(false);setShowSafety(false);setShowSettings(false);
+        window.scrollTo(0,0);
         setRequestedReviewTarget({sessionId:s.session_id,tradeId:requestedTradeId});
       }else setMessage('The selected pending Review trade could not be verified in this session. Refresh the backlog.');
       return;
@@ -721,6 +730,10 @@ export function App(){
       setEvidenceSaved(false);setEvidencePrice(null);setEvidenceDirection('');setEvidenceNote('');setEvidenceFeedback('');
       setNotebookPage('PLAN');setNotebookMaxPage(0);setDecisionCandidate(null);setPendingDecisionPage(null);setPendingDirectEvidenceZone(null);setDecisionClosePrompt(false);setQuickZoneId('');setHistoryOnlyZoneId(null);historyReadRequestRef.current++;setHistoryOnlyError('');setHistoryOnlyLoading(false);setPendingTradeDecision(null);setActiveTrade(null);setCandidateDecisions({});setEntryCommissionInput('');setEntryFeesInput('');setFillCommissionInput('');setFillFeesInput('');
     }
+    // Close overlay pages ONLY after all unsaved-input leave guards accept the switch.
+    // Previously, the Session loaded while Roadmap stayed visible (invisible navigation).
+    setShowRoadmap(false);setShowAnalysis(false);setShowSafety(false);setShowSettings(false);
+    window.scrollTo(0,0);
     const loadRequest=++sessionLoadRequestRef.current;
     const stillCurrent=()=>isCurrentSessionLoad(loadRequest,sessionLoadRequestRef.current);
     setShowDraftSetup(false);setValidationErrors([]);
@@ -1934,7 +1947,7 @@ export function App(){
         </div>
 
         <button className={showRoadmap?'activeMode':''} onClick={()=>{setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}><JournalIcon name="plan"/>Feature Roadmap</button>
-        <div className="recent"><strong id="ptj-recent-heading">Recent</strong><div className="recentList" role="region" aria-labelledby="ptj-recent-heading" tabIndex={0}>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" disabled={active?.session_id===lastOpenedSessionId} onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div></div>
+        <div className="recent"><strong id="ptj-recent-heading">Recent</strong><div className="recentList" role="region" aria-labelledby="ptj-recent-heading" tabIndex={0}>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div></div>
         <details className="guidedMore" aria-label="Reviews pending across sessions">
           <summary>Review backlog {crossSessionReviewQueue!==null?'· '+crossSessionReviewQueue.length+(crossSessionReviewQueue.length===250?'+':''):''}</summary>
           <p className="subtle">Closed trades awaiting Review across sessions. Select a trade to open its saved session and exact Review. This does not block new entries; unsaved-input guards still apply.</p>
