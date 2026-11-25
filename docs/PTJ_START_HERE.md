@@ -1,3 +1,9 @@
+## Package D staging and instance isolation — 2026-11-26
+
+Latest source `c74defb2f93927888be2848c86d163cbd86e1687` on PUBLIC `feature/ptj-c-transfer-integrity-2026-11-23`, open PR #17. Canonical checkpoint `PTJ-D-STAGING-AND-INSTANCE-ISOLATION-2026-11-26` in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md` commit `5bf29d95948ceb6a2a03126779f60076e78f7c10`. Prior CI 45631244762 PASS for previous readiness/WAL/downgrade source plus docs. Restore/transfer CI 45632037915 frontend and Rust PASS, packaging was in progress. New exclusive per-root instance lock source and tests persisted/read back, latest CI not yet verified. No installed Windows acceptance. Package D PARTIAL. Next verify live CI, finish bounded archive/concurrency and rollback audit, then cohesive isolated Windows acceptance (including duplicate instance and independent DEMO). No merge, PRIVATE changes, real data operations or requirement closure. Preserve full Field Manager PARTIAL, all 12 categories and C outstanding gates. Reverify live head and results.
+
+---
+
 ## Package D release readiness / WAL / downgrade safety — 2026-11-26
 
 Latest PUBLIC development source SHA `1596f1f4ab67866e57d091793d1ad589502d5f56` on `feature/ptj-c-transfer-integrity-2026-11-23`, PR #17. Canonical checkpoint `PTJ-D-RELEASE-READINESS-WAL-DOWNGRADE-GATE-2026-11-26` in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md`, docs commit `2b1ece09e061f9009e35293fb8a8a8b0cf35bb28`. User authorized continuing Package D. Source readback verified; CI for this increment UNKNOWN (not yet returned), native tests written, not executed in current operation. Previous exact-source CI 45629151538 remains PASS only for earlier SHA cf7899c9629a6a15eed70b93ccc469f1d9ae6aa7. No new installed Windows acceptance.
