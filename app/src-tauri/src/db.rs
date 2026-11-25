@@ -19,14 +19,33 @@ const MIGRATION_013: &str = include_str!("../migrations/013_initial_risk_correct
 const MIGRATION_014: &str = include_str!("../migrations/014_candidate_source_type_corrections.sql");
 const MIGRATION_015: &str = include_str!("../migrations/015_candidate_source_price_corrections.sql");
 
+// Refuse newer databases before changing connection journal settings or running
+// migrations. An older installer must never operate against a newer schema.
+fn reject_future_schema(conn: &Connection) -> Result<(), AppError> {
+    let has_meta: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_meta')",
+        [], |r| r.get(0))?;
+    if has_meta {
+        let version: u32 = conn.query_row("SELECT schema_version FROM schema_meta WHERE id=1",
+            [], |r| r.get(0)).optional()?.unwrap_or(0);
+        if version > CURRENT_SCHEMA_VERSION {
+            return Err(AppError::Validation(format!(
+                "Database schema {version} is newer than supported schema {CURRENT_SCHEMA_VERSION}; use the matching or newer application")));
+        }
+    }
+    Ok(())
+}
+
 pub fn open_database(path: &Path) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
+    reject_future_schema(&conn)?;
     conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;")?;
     migrate(&conn)?;
     Ok(conn)
 }
 
 pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
+    reject_future_schema(conn)?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_meta (id INTEGER PRIMARY KEY CHECK(id = 1), schema_version INTEGER NOT NULL);\n         INSERT OR IGNORE INTO schema_meta(id, schema_version) VALUES(1, 0);"
     )?;
@@ -586,4 +605,25 @@ mod source_price_schema_v15_tests {
    assert_eq!(integrity_check(&c).unwrap(),"ok");
    assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
  }
+}
+
+#[cfg(test)]
+mod future_schema_release_tests {
+    use super::*;
+    #[test]
+    fn older_app_rejects_newer_schema_without_rewriting_history() {
+        let path = std::env::temp_dir().join(format!("ptj-future-schema-{}.db", uuid::Uuid::new_v4()));
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch("CREATE TABLE schema_meta(id INTEGER PRIMARY KEY, schema_version INTEGER NOT NULL);
+            CREATE TABLE future_history(value TEXT);
+            INSERT INTO future_history VALUES('original');").unwrap();
+        c.execute("INSERT INTO schema_meta VALUES(1,?1)", [CURRENT_SCHEMA_VERSION+1]).unwrap();
+        assert!(migrate(&c).is_err());
+        drop(c);
+        let original = std::fs::read(&path).unwrap();
+        let err = open_database(&path).unwrap_err();
+        assert!(err.to_string().contains("newer than supported"));
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        std::fs::remove_file(path).unwrap();
+    }
 }
