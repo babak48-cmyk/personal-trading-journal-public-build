@@ -94,11 +94,24 @@ pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
     Ok(info)
 }
 
+// Only a directory newly created by this operation is removed on failure.
+pub(crate) struct StagingCleanup(pub(crate) Option<PathBuf>);
+impl Drop for StagingCleanup {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() { let _ = fs::remove_dir_all(path); }
+    }
+}
+
 pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBuf, AppError> {
-    let _info = validate_backup(backup_path)?;
-    let staging = paths.root.join("restore-staging");
-    if staging.exists() { fs::remove_dir_all(&staging)?; }
-    fs::create_dir_all(&staging)?;
+    let info = validate_backup(backup_path)?;
+    if info.schema_version > db::CURRENT_SCHEMA_VERSION {
+        return Err(AppError::Validation("Backup schema is newer than this application supports".into()));
+    }
+    // Each operation owns its staging directory. Never erase a previous preview,
+    // an interrupted recovery, or a source archive placed in a legacy staging folder.
+    let staging = paths.root.join(format!("restore-staging-{}", uuid::Uuid::new_v4()));
+    fs::create_dir(&staging)?;
+    let mut guard = StagingCleanup(Some(staging.clone()));
 
     let file = File::open(backup_path)?;
     let mut zip = ZipArchive::new(file)?;
@@ -117,6 +130,9 @@ pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBu
     }
 
     let restored_db = staging.join("database.sqlite");
+    if sha256_bytes(&fs::read(&restored_db)?) != info.database_sha256 {
+        return Err(AppError::Validation("Extracted database differs from validated archive".into()));
+    }
     let conn = db::open_database(&restored_db)?;
     let integrity = db::integrity_check(&conn)?;
     if integrity != "ok" { return Err(AppError::Validation(format!("restored database integrity: {integrity}"))); }
@@ -127,6 +143,8 @@ pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBu
     crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&conn)?;
     crate::source_type_corrections::verify_all_source_correction_chains(&conn)?;
     crate::source_price_corrections::verify_all(&conn)?;
+    drop(conn);
+    guard.0 = None;
     Ok(staging)
 }
 
@@ -165,6 +183,7 @@ pub fn replace_live_from_backup_with_postcheck<F>(
 where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
     // 1) Validate and unpack before touching live data.
     let staging = restore_to_staging(paths, backup_path)?;
+    let _staging_cleanup = StagingCleanup(Some(staging.clone()));
     let staged_db = staging.join("database.sqlite");
     let staged_attachments = staging.join("attachments");
 
@@ -212,7 +231,6 @@ where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
     match apply_result {
         Ok(integrity) => {
             let _ = fs::remove_dir_all(&rollback_root);
-            let _ = fs::remove_dir_all(&staging);
             Ok(RestoreResult {
                 restored_from: backup_path.to_string_lossy().to_string(),
                 safety_backup: safety_backup.to_string_lossy().to_string(),
@@ -397,5 +415,36 @@ mod backup_integrity_tests {
                 "a checksum-consistent corrupt SQLite or schema mismatch cannot report Backup valid");
         }
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod staging_release_tests {
+    use super::*;
+    #[test]
+    fn repeated_staging_never_removes_previous_stage_or_original_archive() {
+        let root=std::env::temp_dir().join(format!("ptj-stage-isolation-{}",uuid::Uuid::new_v4()));
+        let paths=AppPaths{data:root.join("data"),attachments:root.join("attachments"),
+            backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs"),root};
+        for dir in [&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        drop(db::open_database(&paths.database()).unwrap());
+        let archive=crate::backup::create_backup(&paths).unwrap();
+        let legacy=paths.root.join("restore-staging");
+        fs::create_dir(&legacy).unwrap();
+        let source=legacy.join("original.zip");
+        fs::copy(&archive,&source).unwrap();
+        let original=fs::read(&source).unwrap();
+        let first=restore_to_staging(&paths,&source).unwrap();
+        let second=restore_to_staging(&paths,&source).unwrap();
+        assert_ne!(first,second);
+        assert!(first.join("database.sqlite").is_file());
+        assert!(second.join("database.sqlite").is_file());
+        assert_eq!(fs::read(&source).unwrap(),original);
+        drop(StagingCleanup(Some(second.clone())));
+        assert!(!second.exists());
+        assert!(first.exists());
+        fs::remove_dir_all(&paths.root).unwrap();
     }
 }
