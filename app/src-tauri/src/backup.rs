@@ -158,6 +158,37 @@ mod destination_tests {
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
+    fn published_backup_is_validated_zip_with_exact_sqlite_bytes_and_attachments() {
+        let root=std::env::temp_dir().join(format!("ptj-publish-verified-backup-{}",uuid::Uuid::new_v4()));
+        let paths=AppPaths {
+            data:root.join("data"),attachments:root.join("attachments"),
+            backups:root.join("backups"),exports:root.join("exports"),
+            logs:root.join("logs"),root,
+        };
+        for dir in [&paths.root,&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        let conn=db::open_database(&paths.database()).unwrap();
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        drop(conn);
+        fs::write(paths.attachments.join("synthetic.png"),b"synthetic attachment bytes").unwrap();
+        let first=create_backup(&paths).unwrap();
+        assert!(first.exists());
+        assert_eq!(first.extension().and_then(|x|x.to_str()),Some("zip"));
+        let info=crate::restore::validate_backup(&first).unwrap();
+        assert_eq!(info.schema_version,db::CURRENT_SCHEMA_VERSION);
+        assert_eq!(info.attachment_count,1);
+        let first_bytes=fs::read(&first).unwrap();
+        let second=create_backup(&paths).unwrap();
+        assert_ne!(first,second,"new backup must never overwrite a previous archive");
+        assert_eq!(fs::read(&first).unwrap(),first_bytes);
+        assert_eq!(crate::restore::validate_backup(&second).unwrap().attachment_count,1);
+        assert!(fs::read_dir(&paths.backups).unwrap().all(|e|{
+            e.unwrap().path().extension().and_then(|x|x.to_str())==Some("zip")
+        }),"only validated ZIPs may be published, no .partial candidate remains");
+        fs::remove_dir_all(&paths.root).unwrap();
+    }
+    #[test]
     fn unavailable_destination_does_not_touch_source() {
         let root = std::env::temp_dir().join(format!("ptj-backup-invalid-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
