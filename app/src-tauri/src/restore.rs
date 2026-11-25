@@ -284,13 +284,18 @@ mod backup_integrity_tests {
     fn validator_rejects_missing_attachment_and_accepts_present_attachment() {
         let root = std::env::temp_dir().join(format!("ptj-archive-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
+        let fixture=root.join("fixture.sqlite");
+        let db_conn=db::open_database(&fixture).unwrap();
+        db_conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        drop(db_conn);
+        let valid_db=fs::read(&fixture).unwrap();
         for include_attachment in [false, true] {
             let path = root.join(if include_attachment { "present.zip" } else { "missing.zip" });
             let file = File::create(&path).unwrap();
             let mut zip = ZipWriter::new(file);
             let options = SimpleFileOptions::default();
             zip.start_file("database.sqlite", options).unwrap();
-            zip.write_all(b"synthetic-database-test").unwrap();
+            zip.write_all(&valid_db).unwrap();
             if include_attachment {
                 zip.start_file("attachments/test.png", options).unwrap();
                 zip.write_all(b"synthetic-screenshot-test").unwrap();
@@ -298,8 +303,8 @@ mod backup_integrity_tests {
             let info = BackupInfo {
                 backup_version: 1,
                 created_at_utc: "2026-11-12T00:00:00Z".into(),
-                schema_version: 1,
-                database_sha256: sha256_bytes(b"synthetic-database-test"),
+                schema_version: db::CURRENT_SCHEMA_VERSION,
+                database_sha256: sha256_bytes(&valid_db),
                 attachment_count: 1,
             };
             zip.start_file("backup_info.json", options).unwrap();
@@ -308,6 +313,26 @@ mod backup_integrity_tests {
 
             let checked = validate_backup(&path);
             assert_eq!(checked.is_ok(), include_attachment);
+        }
+        // A forged but internally consistent ZIP+SHA is not a valid SQLite backup.
+        // A truthful SQLite file with a false declared schema is also rejected.
+        for (name,payload,schema) in [
+            ("fake-sqlite.zip",b"not a SQLite database".as_slice(),db::CURRENT_SCHEMA_VERSION),
+            ("false-schema.zip",valid_db.as_slice(),db::CURRENT_SCHEMA_VERSION-1),
+        ] {
+            let file=File::create(root.join(name)).unwrap();
+            let mut zip=ZipWriter::new(file);
+            zip.start_file("database.sqlite",SimpleFileOptions::default()).unwrap();
+            zip.write_all(payload).unwrap();
+            let info=BackupInfo {
+                backup_version:1,created_at_utc:"2026-11-12T00:00:00Z".into(),
+                schema_version:schema,database_sha256:sha256_bytes(payload),attachment_count:0,
+            };
+            zip.start_file("backup_info.json",SimpleFileOptions::default()).unwrap();
+            zip.write_all(serde_json::to_string(&info).unwrap().as_bytes()).unwrap();
+            zip.finish().unwrap();
+            assert!(validate_backup(&root.join(name)).is_err(),
+                "a checksum-consistent corrupt SQLite or schema mismatch cannot report Backup valid");
         }
         fs::remove_dir_all(root).unwrap();
     }
