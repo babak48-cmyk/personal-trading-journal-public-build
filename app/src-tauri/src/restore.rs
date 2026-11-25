@@ -302,6 +302,47 @@ mod backup_integrity_tests {
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
+    fn failed_restore_preserves_original_absence_of_attachment_folder(){
+        let base=std::env::temp_dir().join(format!("ptj-rollback-absent-{}",uuid::Uuid::new_v4()));
+        fn paths(root:PathBuf)->AppPaths{
+            let p=AppPaths{data:root.join("data"),attachments:root.join("attachments"),
+                backups:root.join("backups"),exports:root.join("exports"),
+                logs:root.join("logs"),root};
+            for dir in [&p.root,&p.data,&p.backups,&p.exports,&p.logs]{
+                fs::create_dir_all(dir).unwrap();
+            }
+            p
+        }
+        let source=paths(base.join("source"));
+        let destination=paths(base.join("destination"));
+        let src_db=db::open_database(&source.database()).unwrap();
+        src_db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        drop(src_db);
+        fs::create_dir_all(&source.attachments).unwrap();
+        fs::write(source.attachments.join("synthetic.png"),b"source screenshot").unwrap();
+        let archive=crate::backup::create_backup(&source).unwrap();
+        let original_archive=fs::read(&archive).unwrap();
+        let dest_db=db::open_database(&destination.database()).unwrap();
+        dest_db.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        drop(dest_db);
+        assert!(!destination.attachments.exists(),"target initially has NO attachments directory");
+        let failed=replace_live_from_backup_with_postcheck(&destination,&archive,|_|{
+            assert!(destination.attachments.join("synthetic.png").exists(),
+                "test reaches postcopy after source attachment extraction");
+            Err(AppError::Validation("injected rejection after attachment copy".into()))
+        });
+        let message=format!("{}",failed.unwrap_err());
+        assert!(message.contains("rollback completed"),"recovery result must be truthful: {message}");
+        assert!(!destination.attachments.exists(),
+            "rollback must remove newly introduced attachments when target had no directory");
+        let db_after=db::open_database(&destination.database()).unwrap();
+        assert_eq!(db::integrity_check(&db_after).unwrap(),"ok");
+        drop(db_after);
+        assert_eq!(fs::read(&archive).unwrap(),original_archive,
+            "restore must never change the original source backup");
+        fs::remove_dir_all(base).unwrap();
+    }
+    #[test]
     fn validator_rejects_missing_attachment_and_accepts_present_attachment() {
         let root = std::env::temp_dir().join(format!("ptj-archive-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
