@@ -227,6 +227,7 @@ pub fn preview(paths:&AppPaths,archive:&Path)->Result<DemoTransferPreview,AppErr
         return Err(AppError::Validation("Unsupported prior DEMO backup schema version".into()));
     }
     let staged=restore::restore_to_staging(paths,archive)?;
+    let _staging_cleanup=restore::StagingCleanup(Some(staged.clone()));
     let c=db::open_database(&staged.join("database.sqlite"))?;
     let staged_schema=db::schema_version(&c)?;
     if staged_schema!=db::CURRENT_SCHEMA_VERSION{
