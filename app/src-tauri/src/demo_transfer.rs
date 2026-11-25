@@ -146,10 +146,20 @@ fn ensure_pristine_reference_catalog(conn:&Connection)->Result<(),AppError>{
             Ok(values)
         };
         let references=collect(&baseline)?;
-        for (id,record) in collect(conn)?{
-            if references.get(&id)!=Some(&record){
+        let actual=collect(conn)?;
+        for (id,record) in &actual{
+            if references.get(id)!=Some(record){
                 return Err(AppError::Validation(format!(
                     "Package C destination contains altered or nonbaseline {table} registry entry {id}; transfer is blocked to preserve settings"
+                )));
+            }
+        }
+        // A missing built-in reference is also a destination customization.
+        // Comparing only extant destination rows silently accepted deletions.
+        for id in references.keys(){
+            if !actual.contains_key(id){
+                return Err(AppError::Validation(format!(
+                    "Package C destination is missing baseline {table} registry entry {id}; transfer is blocked to preserve settings"
                 )));
             }
         }
