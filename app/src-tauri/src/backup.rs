@@ -17,6 +17,17 @@ fn sha256(path: &Path) -> Result<String, AppError> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+// SQLite returns a result row even when a checkpoint is blocked by a reader.
+// A successful SQL call alone does not guarantee the main file contains all commits.
+fn checkpoint_for_backup(conn: &rusqlite::Connection) -> Result<(), AppError> {
+    let (busy, log, checkpointed): (i64, i64, i64) = conn.query_row(
+        "PRAGMA wal_checkpoint(TRUNCATE)", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    if busy != 0 || log != checkpointed {
+        return Err(AppError::Validation("Backup blocked: SQLite WAL checkpoint incomplete; retry after other database activity finishes".into()));
+    }
+    Ok(())
+}
+
 pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     let conn = db::open_database(&paths.database())?;
     let integrity = db::integrity_check(&conn)?;
@@ -30,7 +41,7 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     crate::source_price_corrections::verify_all(&conn)?;
     // Force committed WAL pages into the main database before packaging the file.
     // The app uses a single local database; backups are serialized through this command.
-    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    checkpoint_for_backup(&conn)?;
     drop(conn);
 
     // A staging file ensures failed ZIP creation never leaves a *.zip that appears valid.
@@ -197,5 +208,30 @@ mod destination_tests {
         assert!(copy_backup_to_directory(&source, &root.join("missing")).is_err());
         assert_eq!(fs::read(&source).unwrap(), b"original");
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod wal_release_tests {
+    use super::*;
+    #[test]
+    fn pinned_reader_blocks_incomplete_checkpoint_until_released() {
+        let dir=std::env::temp_dir().join(format!("ptj-wal-gate-{}",uuid::Uuid::new_v4()));
+        fs::create_dir(&dir).unwrap();
+        let path=dir.join("test.sqlite");
+        let writer=rusqlite::Connection::open(&path).unwrap();
+        writer.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=0;
+            CREATE TABLE test(value INTEGER); INSERT INTO test VALUES(1);").unwrap();
+        checkpoint_for_backup(&writer).unwrap();
+        let reader=rusqlite::Connection::open(&path).unwrap();
+        reader.execute_batch("BEGIN").unwrap();
+        assert_eq!(reader.query_row("SELECT COUNT(*) FROM test",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        writer.execute("INSERT INTO test VALUES(2)",[]).unwrap();
+        assert!(checkpoint_for_backup(&writer).is_err());
+        reader.execute_batch("ROLLBACK").unwrap();
+        checkpoint_for_backup(&writer).unwrap();
+        drop(reader);
+        drop(writer);
+        fs::remove_dir_all(dir).unwrap();
     }
 }
