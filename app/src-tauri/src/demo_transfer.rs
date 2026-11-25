@@ -126,6 +126,14 @@ fn ensure_pristine_reference_catalog(conn:&Connection)->Result<(),AppError>{
     let baseline=Connection::open_in_memory()?;
     db::migrate(&baseline)?;
     crate::repository::ensure_default_workspace(&baseline)?;
+    // A fresh, never-opened destination is genuinely empty: it may not have
+    // the app's initial Workspace or seeded catalog rows yet. This is safe.
+    // Any PARTIALLY populated catalog must match the full built-in baseline.
+    let uninitialized:bool=conn.query_row(
+        "SELECT NOT EXISTS(SELECT 1 FROM workspaces)
+            AND NOT EXISTS(SELECT 1 FROM instruments)
+            AND NOT EXISTS(SELECT 1 FROM level_source_types)
+            AND NOT EXISTS(SELECT 1 FROM evidence_types)",[],|r|r.get(0))?;
     // Explicit source columns: exclude generated timestamps; include every
     // user-editable reference attribute, disabled state and presentation order.
     for (table,sql) in [
@@ -157,7 +165,7 @@ fn ensure_pristine_reference_catalog(conn:&Connection)->Result<(),AppError>{
         // A missing built-in reference is also a destination customization.
         // Comparing only extant destination rows silently accepted deletions.
         for id in references.keys(){
-            if !actual.contains_key(id){
+            if !uninitialized && !actual.contains_key(id){
                 return Err(AppError::Validation(format!(
                     "Package C destination is missing baseline {table} registry entry {id}; transfer is blocked to preserve settings"
                 )));
