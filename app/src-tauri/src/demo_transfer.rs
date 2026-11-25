@@ -454,6 +454,25 @@ mod isolated_transfer_tests {
         drop(conn);fs::remove_dir_all(base).unwrap();
     }
     #[test]
+    fn missing_builtin_reference_row_blocks_transfer_without_any_trades(){
+        for (table,key,id) in [
+            ("instruments","instrument_id","instrument-ES"),
+            ("level_source_types","source_type_id","source-VAH"),
+            ("evidence_types","evidence_type_id","evidence-ATS"),
+        ]{
+            let base=std::env::temp_dir().join(format!("ptj-c-missing-seed-{}-{}",table,Uuid::new_v4()));
+            let paths=target_paths(&base);
+            let conn=db::open_database(&paths.database()).unwrap();
+            crate::repository::ensure_default_workspace(&conn).unwrap();
+            assert!(ensure_empty_target(&paths).is_ok(),"baseline must be safe before edit");
+            let sql=format!("DELETE FROM {table} WHERE {key}=?1");
+            assert_eq!(conn.execute(&sql,[id]).unwrap(),1,"test must delete one known built-in row");
+            assert!(ensure_empty_target(&paths).is_err(),
+                "a removed default {table} row is a changed destination and must block import");
+            drop(conn);fs::remove_dir_all(base).unwrap();
+        }
+    }
+    #[test]
     fn existing_builtin_registry_edits_cannot_be_overwritten_by_import(){
         for kind in ["instrument_price","instrument_disabled","instrument_order",
                      "level_label","level_disabled","evidence_status","workspace_name"]{
