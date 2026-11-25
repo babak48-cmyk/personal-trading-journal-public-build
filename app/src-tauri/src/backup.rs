@@ -46,10 +46,12 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
         let mut zip = ZipWriter::new(file);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-        let db_path = paths.database();
-        let db_hash = sha256(&db_path)?;
+        // Hash the EXACT same immutable byte buffer that goes into the ZIP,
+        // never two independent reads of a potentially changing database.
+        let database_bytes = fs::read(paths.database())?;
+        let db_hash = hex::encode(Sha256::digest(&database_bytes));
         zip.start_file("database.sqlite", options)?;
-        zip.write_all(&fs::read(&db_path)?)?;
+        zip.write_all(&database_bytes)?;
 
         let mut attachment_count = 0usize;
         if paths.attachments.exists() {
@@ -81,6 +83,13 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
 
     if let Err(err) = result {
         // This is a new, uniquely named incomplete staging file, never an existing backup.
+        let _ = fs::remove_file(&staging);
+        return Err(err);
+    }
+    // Only publish a completed ZIP after re-opening it and validating the
+    // archived SQLite, its declared schema, attachment CRC/count and DB hash.
+    // A failed candidate remains a hidden .partial file and is removed.
+    if let Err(err) = crate::restore::validate_backup(&staging) {
         let _ = fs::remove_file(&staging);
         return Err(err);
     }
