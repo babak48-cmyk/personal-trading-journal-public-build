@@ -1,3 +1,11 @@
+## Package D release readiness / WAL / downgrade safety — 2026-11-26
+
+Latest PUBLIC development source SHA `1596f1f4ab67866e57d091793d1ad589502d5f56` on `feature/ptj-c-transfer-integrity-2026-11-23`, PR #17. Canonical checkpoint `PTJ-D-RELEASE-READINESS-WAL-DOWNGRADE-GATE-2026-11-26` in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md`, docs commit `2b1ece09e061f9009e35293fb8a8a8b0cf35bb28`. User authorized continuing Package D. Source readback verified; CI for this increment UNKNOWN (not yet returned), native tests written, not executed in current operation. Previous exact-source CI 45629151538 remains PASS only for earlier SHA cf7899c9629a6a15eed70b93ccc469f1d9ae6aa7. No new installed Windows acceptance.
+
+Three scoped fixes: refuse future schema before migration/journal settings; reject incomplete WAL checkpoint; readiness requires validated backup, not ZIP extension alone. No schema change, real database access, merge or PRIVATE writes. Package D still PARTIAL; further staging/concurrent-write safety audit and exact-source CI followed by cohesive isolated Windows upgrade/backup/restore/restart/rollback acceptance. Preserve all 12 categories, full Field Manager PARTIAL, all previously accepted evidence, Package C transfer and C8/C9 outstanding gates. Reverify live head/PR/CI before acting.
+
+---
+
 ## Verified Package D publish-only-validated backup gate — 2026-11-26
 
 Latest independently CI-tested CODE SHA on authorized PUBLIC feature branch `feature/ptj-c-transfer-integrity-2026-11-23`: `cf7899c9629a6a15eed70b93ccc469f1d9ae6aa7`. Canonical checkpoint `PTJ-D-PUBLISH-ONLY-VERIFIED-BACKUP-2026-11-26` on that branch in `docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md`, recorded by docs commit `0927d403f0d49a1babf048ac97dcb0341bbcf88c`. [CI run 45629151538](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45629151538) VERIFIED completed SUCCESS for frontend, Rust native regressions and isolated Windows Package C NSIS build. Draft PR #17 remains OPEN/UNMERGED as of checkpoint; reverify live branch, PR and CI each session.
