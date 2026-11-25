@@ -4,6 +4,7 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 use zip::ZipArchive;
 use crate::{db, error::AppError, paths::AppPaths};
+use rusqlite::OpenFlags;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupInfo {
@@ -25,6 +26,34 @@ fn read_entry(zip: &mut ZipArchive<File>, name: &str) -> Result<Vec<u8>, AppErro
     let mut out = Vec::new();
     f.read_to_end(&mut out)?;
     Ok(out)
+}
+
+// Read-only SQLite verification in a separate, uniquely named TEMP file.
+// Never open the user's live database or migrate the archived database to
+// verify a backup. The complete archive bytes are already hash-checked.
+struct TemporaryValidationDatabase(PathBuf);
+impl Drop for TemporaryValidationDatabase {
+    fn drop(&mut self) { let _ = fs::remove_file(&self.0); }
+}
+fn validate_archived_sqlite(db_bytes:&[u8], declared_schema:u32)->Result<(),AppError> {
+    let temp=std::env::temp_dir().join(format!("ptj-backup-verify-{}.sqlite",uuid::Uuid::new_v4()));
+    let mut out=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    let guard=TemporaryValidationDatabase(temp);
+    out.write_all(db_bytes)?;
+    out.flush()?;
+    drop(out);
+    let conn=rusqlite::Connection::open_with_flags(
+        &guard.0, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+    if db::integrity_check(&conn)?!="ok" {
+        return Err(AppError::Validation("archived SQLite database failed integrity check".into()));
+    }
+    if db::foreign_key_violation_count(&conn)?>0 {
+        return Err(AppError::Validation("archived SQLite database has foreign key violations".into()));
+    }
+    if db::schema_version(&conn)?!=declared_schema {
+        return Err(AppError::Validation("backup manifest schema differs from archived SQLite schema".into()));
+    }
+    Ok(())
 }
 
 pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
@@ -61,6 +90,7 @@ pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
             info.attachment_count, actual_attachments
         )));
     }
+    validate_archived_sqlite(&db_bytes,info.schema_version)?;
     Ok(info)
 }
 
