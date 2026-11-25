@@ -171,12 +171,15 @@ where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
     // 2) Create a verified safety backup of the current live state.
     let safety_backup = crate::backup::create_backup(paths)?;
 
-    // 3) Prepare rollback copies. These are local filesystem snapshots used only during the replace operation.
-    let rollback_root = paths.root.join(format!("restore-rollback-{}", Utc::now().format("%Y%m%d_%H%M%S")));
-    fs::create_dir_all(&rollback_root)?;
+    // 3) Prepare rollback copies. A UUID prevents a second attempt in the
+    // same second from reusing an earlier recovery folder.
+    let rollback_root = paths.root.join(format!("restore-rollback-{}", uuid::Uuid::new_v4()));
+    fs::create_dir(&rollback_root)?;
     let live_db = paths.database();
-    if live_db.exists() { fs::copy(&live_db, rollback_root.join("journal.db"))?; }
-    if paths.attachments.exists() { copy_dir_recursive(&paths.attachments, &rollback_root.join("attachments"))?; }
+    let original_db_existed = live_db.exists();
+    let original_attachments_existed = paths.attachments.exists();
+    if original_db_existed { fs::copy(&live_db, rollback_root.join("journal.db"))?; }
+    if original_attachments_existed { copy_dir_recursive(&paths.attachments, &rollback_root.join("attachments"))?; }
 
     let apply_result: Result<String, AppError> = (|| {
         // Replace database file only after staged integrity has passed.
@@ -218,16 +221,34 @@ where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
             })
         }
         Err(err) => {
-            // Best-effort rollback. Keep rollback folder if anything goes wrong so manual recovery remains possible.
-            let rollback_db = rollback_root.join("journal.db");
-            if rollback_db.exists() { let _ = fs::copy(&rollback_db, &live_db); }
-            let rollback_att = rollback_root.join("attachments");
-            if rollback_att.exists() {
-                let _ = fs::remove_dir_all(&paths.attachments);
-                let _ = fs::create_dir_all(&paths.attachments);
-                let _ = copy_dir_recursive(&rollback_att, &paths.attachments);
+            // A failed replace must restore both the original bytes AND the
+            // original existence/absence of the attachment directory.
+            // Report rollback failures explicitly and preserve its snapshots.
+            let rollback_result = (|| -> Result<(), AppError> {
+                let rollback_db = rollback_root.join("journal.db");
+                if original_db_existed {
+                    fs::copy(&rollback_db, &live_db)?;
+                } else if live_db.exists() {
+                    fs::remove_file(&live_db)?;
+                }
+                if paths.attachments.exists() {
+                    fs::remove_dir_all(&paths.attachments)?;
+                }
+                if original_attachments_existed {
+                    fs::create_dir_all(&paths.attachments)?;
+                    copy_dir_recursive(&rollback_root.join("attachments"), &paths.attachments)?;
+                }
+                Ok(())
+            })();
+            match rollback_result {
+                Ok(()) => Err(AppError::Validation(format!(
+                    "restore failed; destination rollback completed: {err}"
+                ))),
+                Err(rollback_err) => Err(AppError::Validation(format!(
+                    "restore failed: {err}; destination rollback FAILED: {rollback_err}; recovery snapshot retained at {}",
+                    rollback_root.display()
+                ))),
             }
-            Err(AppError::Validation(format!("restore failed and rollback was attempted: {err}")))
         }
     }
 }
