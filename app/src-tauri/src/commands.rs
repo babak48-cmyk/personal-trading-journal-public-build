@@ -113,6 +113,11 @@ pub fn current_custom_field_typed_value(app:AppHandle,owner_stage:String,owner_i
     let conn=open_custom_fields_readonly(&app)?;
     crate::custom_fields::read_current_typed_value(&conn,&owner_stage,&owner_id,&field_id)
 }
+#[tauri::command]
+pub fn list_custom_field_typed_history(app:AppHandle,owner_stage:String,owner_id:String,field_id:String)->Result<Vec<crate::custom_fields::HistoricalTypedValue>,AppError>{
+    let conn=open_custom_fields_readonly(&app)?;
+    crate::custom_fields::read_typed_history(&conn,&owner_stage,&owner_id,&field_id)
+}
 #[derive(Serialize)]
 pub struct DatabaseHealth {
     schema_version: u32,

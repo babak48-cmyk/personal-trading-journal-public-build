@@ -447,6 +447,34 @@ pub fn read_current_typed_value(conn:&Connection,owner_stage:&str,owner_id:&str,
     ).optional()?;
     Ok(found)
 }
+/// Read-only immutable typed-value history, with the same scoped/bounded contract
+/// as selection history. The current field definition is not a historical label snapshot.
+#[derive(Serialize,PartialEq,Debug)]
+pub struct HistoricalTypedValue {
+    pub recorded_at:String,
+    #[serde(flatten)]
+    pub value:CurrentTypedValue,
+}
+pub fn read_typed_history(conn:&Connection,owner_stage:&str,owner_id:&str,field_id:&str)->Result<Vec<HistoricalTypedValue>,AppError>{
+    if ![owner_stage,owner_id,field_id].iter().all(|v|valid_key(v)) {
+        return Err(invalid("invalid typed history lookup key"));
+    }
+    let mut stmt=conn.prepare(
+        "SELECT event_id,value_type,text_value,number_value,boolean_value,date_value,recorded_at
+         FROM custom_field_value_events
+         WHERE owner_stage=?1 AND owner_id=?2 AND field_id=?3
+           AND value_type IN ('TEXT','NUMBER','BOOLEAN','DATE')
+         ORDER BY recorded_at DESC,rowid DESC LIMIT 100"
+    )?;
+    let rows=stmt.query_map(params![owner_stage,owner_id,field_id],|r|Ok(HistoricalTypedValue{
+        recorded_at:r.get(6)?,
+        value:CurrentTypedValue{
+            event_id:r.get(0)?,value_type:r.get(1)?,text_value:r.get(2)?,
+            number_value:r.get(3)?,boolean_value:r.get::<_,Option<i64>>(4)?.map(|v|v==1),date_value:r.get(5)?
+        }
+    }))?;
+    Ok(rows.collect::<Result<Vec<_>,_>>()?)
+}
 pub fn record_typed_value(conn:&mut Connection,input:&TypedValueInput)->Result<(),AppError>{
     if ![&input.event_id,&input.field_id,&input.owner_stage,&input.owner_id].iter().all(|v|valid_key(v)) {
         return Err(invalid("invalid value identity"));
@@ -661,6 +689,48 @@ mod tests {
 
         let count:i64=c.query_row("SELECT count(*) FROM custom_field_value_events",[],|r|r.get(0)).unwrap();
         assert_eq!(count,1);
+    }
+    #[test]
+    fn typed_history_is_scoped_bounded_and_keeps_retired_values() {
+        let mut db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        db.execute_batch("
+            INSERT INTO workspaces(workspace_id,name,created_at) VALUES('h-w','TEST','2026-11-20');
+            INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+              VALUES('h-i','h-w','ES',0.25,50);
+            INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+              VALUES('h-s','h-w','h-i','2026-11-20','DEMO','2026-11-20','DRAFT','2026-11-20','2026-11-20'),
+                    ('h-other','h-w','h-i','2026-11-21','DEMO','2026-11-21','DRAFT','2026-11-21','2026-11-21');
+            INSERT INTO custom_field_definitions(field_id,stage,field_type,label)
+              VALUES('h-number','session','NUMBER','Score'),('h-bool','session','BOOLEAN','Ready');
+        ").unwrap();
+        let mut input=TypedValueInput{event_id:"".into(),field_id:"h-number".into(),
+            owner_stage:"session".into(),owner_id:"h-s".into(),text_value:None,
+            number_value:Some(0.0),boolean_value:None,date_value:None};
+        for index in 0..101 {
+            input.event_id=format!("hist-{index}");
+            input.number_value=Some(index as f64);
+            record_typed_value(&mut db,&input).unwrap();
+        }
+        input.event_id="other-owner".into();input.owner_id="h-other".into();
+        record_typed_value(&mut db,&input).unwrap();
+        let boolean=TypedValueInput{event_id:"bool-false".into(),field_id:"h-bool".into(),
+            owner_stage:"session".into(),owner_id:"h-s".into(),text_value:None,
+            number_value:None,boolean_value:Some(false),date_value:None};
+        record_typed_value(&mut db,&boolean).unwrap();
+        edit_custom_field(&mut db,"h-number","Renamed score","",false,false,0).unwrap();
+        let events=read_typed_history(&db,"session","h-s","h-number").unwrap();
+        assert_eq!(events.len(),100);
+        assert_eq!(events[0].value.event_id,"hist-100");
+        assert_eq!(events[99].value.event_id,"hist-1");
+        assert_eq!(events[0].value.number_value,Some(100.0));
+        assert!(!events[0].recorded_at.is_empty());
+        assert_eq!(read_typed_history(&db,"session","h-other","h-number").unwrap().len(),1);
+        assert!(read_typed_history(&db,"premarket-plan","h-s","h-number").unwrap().is_empty());
+        assert_eq!(read_typed_history(&db,"session","h-s","h-bool").unwrap()[0].value.boolean_value,Some(false));
+        assert!(read_typed_history(&db,"session","","h-number").is_err());
+        let total:i64=db.query_row("SELECT count(*) FROM custom_field_value_events",[],|r|r.get(0)).unwrap();
+        assert_eq!(total,103);
     }
     #[test]
     fn package_a_native_text_required_guard_matches_quick_detailed_on_real_schema() {

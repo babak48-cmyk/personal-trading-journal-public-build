@@ -148,6 +148,7 @@ pub fn run() {
             commands::list_custom_field_selection_history,
             commands::record_custom_field_typed_value,
             commands::current_custom_field_typed_value,
+            commands::list_custom_field_typed_history,
             commands::runtime_readiness,
             commands::run_beta_self_test,
             commands::get_field_requirement_overrides,
