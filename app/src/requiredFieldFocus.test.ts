@@ -30,7 +30,7 @@ describe('Required/Conditional Quick focus across nested accordions',()=>{
 });
 
 describe('Required focus retry ownership',()=>{
- const destination:RequiredFocusContext={sessionId:'s1',generation:4,page:'PLAN',draftStep:2,draftPlanPage:0,draftZonePage:1,zoneId:'z1',quickMode:true,evidenceId:null,decisionId:null};
+ const destination:RequiredFocusContext={sessionId:'s1',generation:4,page:'PLAN',draftStep:2,draftPlanPage:0,draftZonePage:1,zoneId:'z1',quickMode:true,evidenceId:null,decisionId:null,tradeId:'t1',sessionReviewId:'r1',reviewGeneration:7};
  it('allows the current request at its intended destination',()=>{
   expect(isCurrentRequiredFocus(5,5,destination,{...destination})).toBe(true);
  });
@@ -41,6 +41,7 @@ describe('Required focus retry ownership',()=>{
   {sessionId:'s2'},{generation:5},{page:'REVIEW'},{draftStep:1},
   {draftPlanPage:1},{draftZonePage:0},{zoneId:'z2'},{quickMode:false},
   {evidenceId:'e2'},{decisionId:'d2'},
+  {tradeId:'t2'},{sessionReviewId:'r2'},{reviewGeneration:8},
  ])('cancels a retry after destination ownership changes: %j',(change)=>{
   expect(isCurrentRequiredFocus(5,5,destination,{...destination,...change})).toBe(false);
  });
