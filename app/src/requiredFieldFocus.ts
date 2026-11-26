@@ -18,3 +18,22 @@ export function openRequiredFieldDisclosures(node:DisclosureNode):number {
   }
   return count;
 }
+
+
+/** A retry may run only for its newest request and exact destination.
+ * Navigation never changes validation or persisted values. */
+export type RequiredFocusContext = Readonly<{
+ sessionId:string|null; generation:number; page:string; draftStep:number;
+ draftPlanPage:number; draftZonePage:number; zoneId:string; quickMode:boolean;
+ evidenceId:string|null; decisionId:string|null;
+}>;
+export function isCurrentRequiredFocus(
+ request:number,currentRequest:number,expected:RequiredFocusContext,current:RequiredFocusContext,
+):boolean {
+ return request===currentRequest && expected.sessionId===current.sessionId
+  && expected.generation===current.generation && expected.page===current.page
+  && expected.draftStep===current.draftStep && expected.draftPlanPage===current.draftPlanPage
+  && expected.draftZonePage===current.draftZonePage && expected.zoneId===current.zoneId
+  && expected.quickMode===current.quickMode && expected.evidenceId===current.evidenceId
+  && expected.decisionId===current.decisionId;
+}
