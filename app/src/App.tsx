@@ -1182,6 +1182,24 @@ export function App(){
     if(!confirmCloseEvidenceEditor())return false;
     return discardEvidenceEditorDraft();
   }
+  function openQuickZones(){
+    if(!active)return;
+    if(active.status==='DRAFT'){
+      if(!draftBusy&&!showDraftSetup&&!draftSetupSaving&&!confirmingPlan)void saveAndAdvanceDraft(2);
+      return;
+    }
+    if(!plan||!navigateNotebookPage('PLAN'))return;
+    const owner=active.session_id,generation=sessionLoadRequestRef.current;
+    window.requestAnimationFrame(()=>{
+      if(activeSessionIdRef.current!==owner||sessionLoadRequestRef.current!==generation)return;
+      const panel=document.getElementById('journal-zone-actions');
+      if(panel?.getClientRects().length)panel.scrollIntoView({behavior:'smooth',block:'start'});
+    });
+  }
+  function continueQuickEntry(){
+    if(!pendingTradeDecision||tradeOpening||!navigateNotebookPage('EXECUTION'))return;
+    focusQuickEntryInput();
+  }
   function goToNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'){
     setNotebookPage(page);
     setNotebookMaxPage(v=>Math.max(v,['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'].indexOf(page)));
@@ -1694,8 +1712,11 @@ export function App(){
   }
   function loadReviewPending(){setReviewQueueRefreshToken(v=>v+1);}
   function focusQuickEntryInput(){
+    const owner=active?.session_id,generation=sessionLoadRequestRef.current;
     window.requestAnimationFrame(()=>{
+      if(!owner||activeSessionIdRef.current!==owner||sessionLoadRequestRef.current!==generation)return;
       const panel=document.getElementById('journal-quick-entry');
+      if(!panel?.getClientRects().length)return;
       panel?.scrollIntoView({behavior:'smooth',block:'start'});
       panel?.querySelector<HTMLInputElement>('[data-validation-id="trade.entryPrice"] input')?.focus({preventScroll:true});
     });
@@ -1935,8 +1956,8 @@ export function App(){
       <div className="journeySteps">
         <div className={active ? 'journeyStep journeyDone' : 'journeyStep journeyCurrent'}><span>01</span><b><JournalIcon name="session"/>Session</b><small>{active ? 'Selected' : 'Start here'}</small></div>
         <div className={plan ? 'journeyStep journeyDone' : active ? 'journeyStep journeyCurrent' : 'journeyStep'}><span>02</span><b><JournalIcon name="zone"/>Planning</b><small>{plan ? 'Confirmed' : active ? 'Draft / confirm' : 'Next'}</small>{active?.status==='DRAFT' && !plan && <div className="journeyDraftLinks"><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(1)}>Plan</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(2)}>Opportunity Zones</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(3)}>Review</button></div>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b><JournalIcon name="evidence"/>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'})}>Select zone ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b><JournalIcon name="checklist"/>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={()=>document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'})}>Select zone ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b><JournalIcon name="evidence"/>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={openQuickZones}>Select zone ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b><JournalIcon name="checklist"/>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={openQuickZones}>Select zone ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>05</span><b><JournalIcon name="entry"/>Execution</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('EXECUTION'))window.requestAnimationFrame(()=>document.getElementById('journal-session-trades')?.scrollIntoView({behavior:'smooth',block:'start'}));}}>View trades ↓</button>}</div>
         <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b><JournalIcon name="review"/>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('REVIEW')){if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>document.getElementById('journal-session-review')?.scrollIntoView({behavior:'smooth',block:'start'}));}}}>Session review ↓</button>}</div>
       </div>
@@ -2024,7 +2045,7 @@ export function App(){
         {active&&!showRoadmap&&!showSettings&&!showAnalysis&&!showSafety&&plan&&(!quickMode||notebookPage==='DECISION')&&<section className="panel" aria-label="Quick capture" style={{padding:16,marginBottom:16}}>
           <div className="panelTitle"><div><h2><JournalIcon name="entry"/>Quick capture</h2><p className="subtle">Current session · choose a Zone, then record a decision. Execution is separate.</p>{quickShortcutReport&&<p className="subtle" role="status">Windows shortcut: {quickShortcutReport.registered?'Ctrl+Alt+J registered':'Ctrl+Alt+J unavailable (another app may own it)'}</p>}</div></div>
           <div className="rowActions" style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
-            <button type="button" onClick={()=>{if(active.status==='DRAFT')setDraftStep(2);else document.getElementById('journal-zone-actions')?.scrollIntoView({behavior:'smooth',block:'start'});}} disabled={active.status!=='DRAFT'&&!plan}>View Zones</button>
+            <button type="button" onClick={openQuickZones} disabled={active.status==='DRAFT'?(draftBusy||showDraftSetup||draftSetupSaving||confirmingPlan):!plan}>View Zones</button>
             {active.status!=='DRAFT'&&plan&&<>
               <label htmlFor="quick-zone-choice">Zone</label>
               <select id="quick-zone-choice" aria-label="Choose current session Zone" value={quickZoneId} onChange={e=>{
@@ -2052,7 +2073,7 @@ export function App(){
                 window.requestAnimationFrame(()=>document.getElementById('journal-quick-decision')?.scrollIntoView({behavior:'smooth',block:'start'}));
               }}>{type==='NO_TRADE'?'NO TRADE':type}</button>)}
             </>}
-            {pendingTradeDecision&&<button type="button" className="primary" onClick={()=>document.getElementById('journal-quick-entry')?.scrollIntoView({behavior:'smooth',block:'start'})}>Continue trade entry</button>}
+            {pendingTradeDecision&&<button type="button" className="primary" onClick={continueQuickEntry} disabled={tradeOpening}>Continue trade entry</button>}
           </div>
           <small className="subtle">Selecting a decision does not create an entry or fill; save it in the decision form.</small>
         </section>}
