@@ -257,6 +257,8 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
  * Restrict editable text settings to verifiably consumed UI controls.
  * Other inventoried controls remain visible for audit, without fake customization. */
 export const RENDERED_FIELD_TEXT_IDS = [
+  // Presentation only: preserve required/conditional and visibility protections.
+  'psychology.emotionAffected', 'psychology.state', 'psychology.stage', 'candidate.trendRelationship',
   // Protected Setup definitions accept label/help customization, NOT visibility toggles.
   'setup.marketContext', 'setup.zoneLocation', 'setup.prerequisites', 'setup.entryTriggers', 'setup.supportingEvidence', 'setup.contraryEvidence', 'setup.invalidation',
   'setup.sourceTrade', 'setup.notes', 'setup.evidenceHelp',
