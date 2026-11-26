@@ -59,10 +59,14 @@ fn validate_archived_sqlite(db_bytes:&[u8], declared_schema:u32)->Result<(),AppE
 pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
     let file = File::open(path)?;
     let mut zip = ZipArchive::new(file)?;
-    let info_bytes = read_entry(&mut zip, "backup_info.json")?;
+    validate_open_archive(&mut zip)
+}
+
+fn validate_open_archive(zip: &mut ZipArchive<File>) -> Result<BackupInfo, AppError> {
+    let info_bytes = read_entry(zip, "backup_info.json")?;
     let info: BackupInfo = serde_json::from_slice(&info_bytes)?;
     if info.backup_version != 1 { return Err(AppError::Validation("unsupported backup version".into())); }
-    let db_bytes = read_entry(&mut zip, "database.sqlite")?;
+    let db_bytes = read_entry(zip, "database.sqlite")?;
     if sha256_bytes(&db_bytes) != info.database_sha256 {
         return Err(AppError::Validation("database checksum mismatch".into()));
     }
@@ -75,7 +79,17 @@ pub fn validate_backup(path: &Path) -> Result<BackupInfo, AppError> {
         let path = item.enclosed_name().ok_or_else(|| AppError::Validation(
             "unsafe path in backup archive".into()
         ))?.to_owned();
-        if !seen.insert(path.clone()) {
+        // Only the documented version-1 payload is allowed. In particular,
+        // SQLite WAL/SHM/journal sidecars must never be extracted alongside
+        // the hash-verified database before opening it.
+        let is_core = path == Path::new("database.sqlite") || path == Path::new("backup_info.json");
+        let is_attachment = path.starts_with("attachments")
+            && (path != Path::new("attachments") || item.is_dir());
+        if !(is_core && !item.is_dir() || is_attachment) {
+            return Err(AppError::Validation("unexpected path in backup archive".into()));
+        }
+        // Windows destination names are case-insensitive.
+        if !seen.insert(path.to_string_lossy().to_lowercase()) {
             return Err(AppError::Validation("duplicate path in backup archive".into()));
         }
         if !item.is_dir() && path.starts_with("attachments") {
@@ -103,7 +117,10 @@ impl Drop for StagingCleanup {
 }
 
 pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBuf, AppError> {
-    let info = validate_backup(backup_path)?;
+    // Validate and extract from one open archive, not two independent opens.
+    let file = File::open(backup_path)?;
+    let mut zip = ZipArchive::new(file)?;
+    let info = validate_open_archive(&mut zip)?;
     if info.schema_version > db::CURRENT_SCHEMA_VERSION {
         return Err(AppError::Validation("Backup schema is newer than this application supports".into()));
     }
@@ -113,8 +130,6 @@ pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBu
     fs::create_dir(&staging)?;
     let mut guard = StagingCleanup(Some(staging.clone()));
 
-    let file = File::open(backup_path)?;
-    let mut zip = ZipArchive::new(file)?;
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i)?;
         let Some(enclosed) = entry.enclosed_name().map(|p| p.to_owned()) else {
@@ -124,7 +139,7 @@ pub fn restore_to_staging(paths: &AppPaths, backup_path: &Path) -> Result<PathBu
         let output = staging.join(enclosed);
         if entry.is_dir() { fs::create_dir_all(&output)?; continue; }
         if let Some(parent) = output.parent() { fs::create_dir_all(parent)?; }
-        let mut out = File::create(&output)?;
+        let mut out = fs::OpenOptions::new().write(true).create_new(true).open(&output)?;
         std::io::copy(&mut entry, &mut out)?;
         out.flush()?;
     }
@@ -413,6 +428,32 @@ mod backup_integrity_tests {
             zip.finish().unwrap();
             assert!(validate_backup(&root.join(name)).is_err(),
                 "a checksum-consistent corrupt SQLite or schema mismatch cannot report Backup valid");
+        }
+        // Unexpected sidecars and Windows case-colliding attachments cannot
+        // be restored even when the manifest and main DB hash are truthful.
+        for (name, entries) in [
+            ("sidecar.zip", vec!["database.sqlite-wal"]),
+            ("case-collision.zip", vec!["attachments/A.png", "attachments/a.png"]),
+        ] {
+            let archive=root.join(name);
+            let mut zip=ZipWriter::new(File::create(&archive).unwrap());
+            let options=SimpleFileOptions::default();
+            zip.start_file("database.sqlite",options).unwrap();
+            zip.write_all(&valid_db).unwrap();
+            for entry in &entries {
+                zip.start_file(*entry,options).unwrap();
+                zip.write_all(b"unexpected payload").unwrap();
+            }
+            let info=BackupInfo {
+                backup_version:1,created_at_utc:"2026-11-26T00:00:00Z".into(),
+                schema_version:db::CURRENT_SCHEMA_VERSION,
+                database_sha256:sha256_bytes(&valid_db),
+                attachment_count:entries.iter().filter(|p| p.starts_with("attachments/")).count(),
+            };
+            zip.start_file("backup_info.json",options).unwrap();
+            zip.write_all(serde_json::to_string(&info).unwrap().as_bytes()).unwrap();
+            zip.finish().unwrap();
+            assert!(validate_backup(&archive).is_err(), "{name} must be rejected");
         }
         fs::remove_dir_all(root).unwrap();
     }
