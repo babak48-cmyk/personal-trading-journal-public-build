@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {FIELD_MANAGER_ORDER_SECTIONS,managerOrderPosition,fieldManagerCapabilities} from './fieldManagerOrdering';
+import {FIELD_MANAGER_ORDER_SECTIONS,managerOrderPosition,fieldManagerCapabilities,SESSION_REVIEW_REFLECTION_ORDER} from './fieldManagerOrdering';
 import {FIELD_CONTROL_INVENTORY,orderFieldIdsWithinSection} from './fieldInventory';
 
 describe('Package A connected Field Manager ordering',()=>{
@@ -41,5 +41,18 @@ describe('Field Manager actual capability filters',()=>{
  it('keeps execution identities protected and unknown IDs noneditable',()=>{
   expect(fieldManagerCapabilities('trade.entryPrice')).toMatchObject({protected:true,editable:false,requirement:false,visibility:false,order:false,text:false});
   expect(fieldManagerCapabilities('unknown.field').editable).toBe(false);
+ });
+});
+
+describe('Session review overall assessment ordering',()=>{
+ it('preserves default and existing two-field saved order',()=>{
+  expect(orderFieldIdsWithinSection(SESSION_REVIEW_REFLECTION_ORDER,{})).toEqual(['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.overall']);
+  expect(orderFieldIdsWithinSection(SESSION_REVIEW_REFLECTION_ORDER,{'sessionReview.nextImprovement':0,'sessionReview.wentWell':1})).toEqual(['sessionReview.nextImprovement','sessionReview.wentWell','sessionReview.overall']);
+ });
+ it('allows overall assessment to move to first position without changing field identity',()=>{
+  const ranks={'sessionReview.overall':0,'sessionReview.wentWell':1,'sessionReview.nextImprovement':2};
+  expect(managerOrderPosition('sessionReview.overall',ranks)?.position).toBe(0);
+  expect(orderFieldIdsWithinSection(SESSION_REVIEW_REFLECTION_ORDER,ranks)).toEqual(['sessionReview.overall','sessionReview.wentWell','sessionReview.nextImprovement']);
+  expect(fieldManagerCapabilities('sessionReview.overall').order).toBe(true);
  });
 });
