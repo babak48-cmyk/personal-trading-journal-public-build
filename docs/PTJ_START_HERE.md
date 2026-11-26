@@ -1,3 +1,9 @@
+## Field Manager capability and reflection order CI verified — 2026-11-26
+
+PUBLIC PR #17 branch `feature/ptj-c-transfer-integrity-2026-11-23`, tested source `a68c18adf0267857081419e9326b4193371257c4`, CI 45766654659 SUCCESS frontend/Rust/isolated Windows build. Canonical checkpoint `PTJ-FIELD-MANAGER-EDITABILITY-AND-REFLECTION-ORDER-CI-2026-11-26` commit `313a62cb4e7196aa923b553a5b9ef397b95428a7`. Planning terminology CI 45758022816 also SUCCESS. Field Manager filters actual capabilities and custom labels; Overall Session Assessment order connected to both modes, old preferences preserved. Windows installed acceptance OPEN. Next: actual remaining form binding/required navigation gaps in full Field Manager and Quick Workflow; no repetitive tests without technical reason. D scoped ACCEPTED and all 12 categories/C gates retained. No merge, private write, data mutation or separate installer delivery.
+
+---
+
 ## Planning terminology implementation — 2026-11-26
 
 User prioritized previously approved Market Outlook and Planning/Opportunity Zones clarification. PUBLIC PR #17 on `feature/ptj-c-transfer-integrity-2026-11-23`, source `52cf18f76cbb97c842fa76e71a047b41e9f287a7`, canonical checkpoint `PTJ-PLANNING-OUTLOOK-TERMINOLOGY-IMPLEMENTATION-2026-11-26` commit `79b942249f5926ec009a3a9723744d38fa2a03dc`. Five source/test files independently read back. Display mapping preserves stored bias codes; Planning aggregate distinct from Opportunity Zones; actual trade direction unchanged. CI UNKNOWN (no runs returned yet), Windows/user acceptance OPEN. Next verify CI, audit remaining raw outlook labels and timeline/export regression coverage, then resume Full Field Manager and Quick Workflow. D scoped ACCEPTED retained; all 12 categories and C gates preserved. No separate installer, schema/data change, merge or PRIVATE write.
