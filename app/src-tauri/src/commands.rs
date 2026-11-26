@@ -118,6 +118,14 @@ pub fn list_custom_field_typed_history(app:AppHandle,owner_stage:String,owner_id
     let conn=open_custom_fields_readonly(&app)?;
     crate::custom_fields::read_typed_history(&conn,&owner_stage,&owner_id,&field_id)
 }
+#[tauri::command]
+pub fn analyze_custom_trade_field(app:AppHandle,filter:JournalFilterInput,field_id:String)->Result<crate::custom_analytics::CustomTradeAnalysis,AppError>{
+    let mut conn=open_custom_fields_readonly(&app)?;
+    let tx=conn.transaction()?;
+    let result=crate::custom_analytics::analyze(&tx,filter,&field_id)?;
+    tx.commit()?;
+    Ok(result)
+}
 #[derive(Serialize)]
 pub struct DatabaseHealth {
     schema_version: u32,

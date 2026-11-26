@@ -2,6 +2,7 @@ mod attachments;
 mod backup;
 mod commands;
 mod custom_fields;
+mod custom_analytics;
 mod custom_presentation;
 mod db;
 mod diagnostics;
@@ -149,6 +150,7 @@ pub fn run() {
             commands::record_custom_field_typed_value,
             commands::current_custom_field_typed_value,
             commands::list_custom_field_typed_history,
+            commands::analyze_custom_trade_field,
             commands::runtime_readiness,
             commands::run_beta_self_test,
             commands::get_field_requirement_overrides,
