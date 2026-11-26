@@ -2646,6 +2646,22 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
       setHistoryBusy(v=>v.filter(id=>id!==fieldId));
     }
   }
+  async function reloadSavedSelection(fieldId:string){
+    if(busyRef.current)return;
+    const field=fields.find(f=>f.field_id===fieldId);
+    if(!field)return;
+    busyRef.current=true;setBusy(true);onDraftDirtyChange?.(customEditorKey('select',ownerStage,ownerId),true);
+    try{
+      const current=await localApi.currentCustomFieldSelection(ownerStage,ownerId,fieldId);
+      const restored=current?.options.map(o=>o.option_id)||[];
+      setSelected(v=>({...v,[fieldId]:restored}));setOriginal(v=>({...v,[fieldId]:restored}));
+      setPersistedValid(v=>({...v,[fieldId]:isUsableCustomSelection(current,field.field_type as 'SINGLE_SELECT'|'MULTI_SELECT')}));
+      setHistoricalLabels(v=>({...v,[fieldId]:current?.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.label_at_selection).join(', ')||''}));
+      setUncertainWrites(v=>v.filter(id=>id!==fieldId));setLocalErrors(v=>v.filter(id=>id!==fieldId));
+      setFieldFeedback(v=>({...v,[fieldId]:'Saved selection reloaded. Local draft discarded; no new event was written.'}));
+    }catch(e){setFieldFeedback(v=>({...v,[fieldId]:'Reload failed; local draft and save lock retained. '+String(e)}));}
+    finally{busyRef.current=false;setBusy(false);}
+  }
   async function save(fieldId:string){
     if(busyRef.current||uncertainWrites.includes(fieldId))return;
     const values=selected[fieldId]||[];
@@ -2657,7 +2673,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
       return;
     }
     if(persistedValid[fieldId]&&values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
-    busyRef.current=true;setBusy(true);setFieldFeedback(v=>({...v,[fieldId]:'Saving selection…'}));
+    busyRef.current=true;setBusy(true);onDraftDirtyChange?.(customEditorKey('select',ownerStage,ownerId),true);setFieldFeedback(v=>({...v,[fieldId]:'Saving selection…'}));
     const request={event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:ownerStage,owner_id:ownerId,option_ids:[...values]};
     let writeAttempted=false;
     try {
@@ -2676,7 +2692,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
     }catch(e){
       if(writeAttempted)setUncertainWrites(v=>v.includes(fieldId)?v:[...v,fieldId]);
       setNotice('Selection write could not be verified: '+String(e));
-      setFieldFeedback(v=>({...v,[fieldId]:'Save outcome uncertain. Reopen this session and inspect the stored selection before retrying; repeated events are blocked here.'}));
+      setFieldFeedback(v=>({...v,[fieldId]:'Save outcome uncertain. Use Reload saved answer to inspect the persisted selection without writing another event.'}));
     }
     finally{busyRef.current=false;setBusy(false);}
   }
@@ -2704,16 +2720,17 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
           </p>)}
         </details>}
         {field.field_type==='SINGLE_SELECT'
-          ? <select aria-label={field.label} value={values[0]||''} onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}>
+          ? <select aria-label={field.label} disabled={busy||uncertainWrites.includes(field.field_id)} value={values[0]||''} onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.value?[e.target.value]:[]}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}>
             <option value="">Select an option</option>
             {available.filter(o=>o.active||values.includes(o.option_id)).map(o=><option value={o.option_id} key={o.option_id}>{o.label}{o.active?'':' (inactive)'}</option>)}
           </select>
           : <div>{available.filter(o=>o.active||values.includes(o.option_id)).map(o=><label key={o.option_id}>
-            <input type="checkbox" checked={values.includes(o.option_id)} disabled={!o.active&&!values.includes(o.option_id)}
+            <input type="checkbox" checked={values.includes(o.option_id)} disabled={busy||uncertainWrites.includes(field.field_id)||(!o.active&&!values.includes(o.option_id))}
               onChange={e=>{setSelected(v=>({...v,[field.field_id]:e.target.checked?[...values,o.option_id]:values.filter(id=>id!==o.option_id)}));setLocalErrors(v=>v.filter(x=>x!==field.field_id));setFieldFeedback(v=>({...v,[field.field_id]:''}));}}/>
             {o.label}{o.active?'':' (inactive)'}
           </label>)}</div>}
         <button type="button" disabled={busy||uncertainWrites.includes(field.field_id)||(same&&values.length>0&&persistedValid[field.field_id])||!valid} aria-busy={busy} onClick={()=>save(field.field_id)}>{busy?'Saving…':'Save selection'}</button>
+        {(uncertainWrites.includes(field.field_id)||!same)&&<button type="button" disabled={busy} onClick={()=>void reloadSavedSelection(field.field_id)}>Reload saved answer (discard local draft)</button>}
         {fieldFeedback[field.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[field.field_id]}</small>}
       </div>;
     })}
@@ -2755,6 +2772,20 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
     onDraftDirtyChange?.(key,dirty||busy||uncertainWrites.length>0);
     return ()=>onDraftDirtyChange?.(key,false);
   },[values,original,fields,ownerStage,ownerId,busy,uncertainWrites]);
+  async function reloadSavedValue(field:import('./services/localApi').CustomFieldDefinition){
+    if(busyRef.current)return;
+    const id=field.field_id;
+    busyRef.current=true;setBusy(true);onDraftDirtyChange?.(customEditorKey('typed',ownerStage,ownerId),true);
+    try{
+      const value=await localApi.currentCustomFieldTypedValue(ownerStage,ownerId,id);
+      const restored=value?.value_type!==field.field_type?'':value?.value_type==='BOOLEAN'?(value.boolean_value===true?'true':value.boolean_value===false?'false':''):value?.value_type==='NUMBER'?(value.number_value==null?'':String(value.number_value)):value?.value_type==='DATE'?(value.date_value||''):(value?.text_value||'');
+      setValues(v=>({...v,[id]:restored}));setOriginal(v=>({...v,[id]:restored}));
+      setPersistedValid(v=>({...v,[id]:isUsableCustomTypedValue(field.field_type,value)}));
+      setUncertainWrites(v=>v.filter(x=>x!==id));setLocalErrors(v=>v.filter(x=>x!==id));
+      setFieldFeedback(v=>({...v,[id]:'Saved answer reloaded. Local draft discarded; no new event was written.'}));
+    }catch(e){setFieldFeedback(v=>({...v,[id]:'Reload failed; local draft and save lock retained. '+String(e)}));}
+    finally{busyRef.current=false;setBusy(false);}
+  }
   async function save(field:import('./services/localApi').CustomFieldDefinition){
     if(busyRef.current||uncertainWrites.includes(field.field_id))return;
     const raw=values[field.field_id]??'';
@@ -2765,7 +2796,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
       setFieldFeedback(v=>({...v,[field.field_id]:'Enter a valid value before saving.'}));
       return;
     }
-    busyRef.current=true;setBusy(true);setFieldFeedback(v=>({...v,[field.field_id]:'Saving value…'}));
+    busyRef.current=true;setBusy(true);onDraftDirtyChange?.(customEditorKey('typed',ownerStage,ownerId),true);setFieldFeedback(v=>({...v,[field.field_id]:'Saving value…'}));
     const request={
       event_id:crypto.randomUUID(),field_id:field.field_id,owner_stage:ownerStage,owner_id:ownerId,
       text_value:field.field_type==='TEXT'?raw:null,
@@ -2789,7 +2820,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
     }catch(e){
       if(writeAttempted)setUncertainWrites(v=>v.includes(field.field_id)?v:[...v,field.field_id]);
       setMessage('Custom value write could not be verified: '+String(e));
-      setFieldFeedback(v=>({...v,[field.field_id]:'Save outcome uncertain. Reopen this session and inspect the stored value before retrying; repeated events are blocked here.'}));
+      setFieldFeedback(v=>({...v,[field.field_id]:'Save outcome uncertain. Use Reload saved answer to inspect the persisted value without writing another event.'}));
     }
     finally{busyRef.current=false;setBusy(false);}
   }
@@ -2803,11 +2834,12 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
     {visibleFields.map(f=><div id={customFieldFocusId(ownerStage,ownerId,f.field_id)} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id))||localErrors.includes(f.field_id)?'validationFieldError':'')} key={f.field_id}>
       <label>{f.label}{f.required?' · Required':''}
         {f.field_type==='BOOLEAN'
-          ?<select value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
-          :<input type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} maxLength={f.field_type==='TEXT'?4000:undefined} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}/>}
+          ?<select disabled={busy||uncertainWrites.includes(f.field_id)} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}><option value="">Choose</option><option value="true">Yes</option><option value="false">No</option></select>
+          :<input disabled={busy||uncertainWrites.includes(f.field_id)} type={f.field_type==='DATE'?'date':f.field_type==='NUMBER'?'number':'text'} maxLength={f.field_type==='TEXT'?4000:undefined} value={values[f.field_id]??''} onChange={e=>{setValues(v=>({...v,[f.field_id]:e.target.value}));setLocalErrors(v=>v.filter(x=>x!==f.field_id));setFieldFeedback(v=>({...v,[f.field_id]:''}));}}/>}
       </label>
       {f.help_text&&<p className="subtle">{f.help_text}</p>}
       <button type="button" disabled={busy||uncertainWrites.includes(f.field_id)||((values[f.field_id]??'').trim()!==''&&(values[f.field_id]??'')===(original[f.field_id]??'')&&persistedValid[f.field_id])} aria-busy={busy} onClick={()=>save(f)}>{busy?'Saving…':'Save value'}</button>
+      {(uncertainWrites.includes(f.field_id)||(values[f.field_id]??'')!==(original[f.field_id]??''))&&<button type="button" disabled={busy} onClick={()=>void reloadSavedValue(f)}>Reload saved answer (discard local draft)</button>}
       {fieldFeedback[f.field_id]&&<small role="status" aria-live="polite">{fieldFeedback[f.field_id]}</small>}
     </div>)}
     {message&&<p role="status" className="subtle">{message}</p>}
