@@ -1,3 +1,17 @@
+## 2026-11-27 — Supplemental Set 1 reconciliation after execution-chat transfer
+Checkpoint ID: PTJ-SET1-SUPPLEMENTAL-RECONCILED-2026-11-27
+Authority: approved concentrated Set 1 Field Manager/Custom Fields, Set 2 Quick Workflow, Set 3 one consolidated isolated Windows DEMO. No scope change.
+PUBLIC development branch: feature/ptj-c-transfer-integrity-2026-11-23; live exact HEAD verified by GitHub compare identical to 012806badbe4d5823b2f27788968105cff92ed5f at check time. PR #17 remains unmerged per latest handoff; do not infer a merge.
+Source sequence after previous canonical checkpoint: 859c0ac0c639ba265ce0179dac0a60eb3b60baa4 (immutable typed custom-answer history, 100-event read window, older rows retained); bffa9b4e64f7f17f68060177020c55e3b1d92f0d (read-only Custom Fields trade analytics with decision-time versus retrospective owner semantics); 012806badbe4d5823b2f27788968105cff92ed5f (App.tsx catalog revision/editor remount and dirty administration guard).
+Latest exact-source GitHub Actions run 45867131878 COMPLETED SUCCESS; independently checked all jobs: frontend SUCCESS, rust SUCCESS, package-c-demo Windows build SUCCESS. Earlier A CI 45856459691 and B CI 45861445836 SUCCESS according to supplemental handoff, not re-run. These results establish CI/installer build only, NOT installed Windows validation or user acceptance. No installer delivery requested for individual changes.
+Carry forward T01 terminology, T02 Field Manager label/help, T03 View Zones, and T04 TRADE→Trade navigation user-reported scoped Windows PASS; Entry Price autofocus UNKNOWN, actual fill not tested; preserve separately accepted A/B/D scope. No blanket Set 1/2/3 or Windows release acceptance.
+OPEN integrity review: verify all 14 editor keys, React unmount/cleanup, dirty-registry lifecycle, in-flight/uncertain writes, async stale effects, dynamic new Required visibility and preservation of unsaved inputs; add targeted regression tests before declaring catalog-sync Windows-safe. OPEN Set 1: all-input coverage, option lifecycle/ordering and stage integration, decision-only NO_TRADE/MISSED analytics, exports/HTML, deeper schema fixtures and Windows acceptance. OPEN Set 2: full Quick Workflow/lifecycle. OPEN Set 3: one consolidated installed DEMO validation.
+Preserve 12 roadmap categories, older acceptance and safety gates including true isolated B→C transfer/restart/rollback, external installer/backups hash and retention, replacement/rollback and simultaneous isolation, crash atomicity, separately gated historical corrections/C8, C9 DST and mixed currency, GC numerical scenario and full Windows #12 release. Setup Playbook PROPOSED, NinjaTrader Import CONDITIONAL under governing decisions.
+Safety: no schema migration, production/PRIVATE write, merge or destructive operation from this reconciliation. No local installer hash or independent external binary backup newly verified.
+NEXT: perform targeted catalog revision/dirty draft source audit, fix verified regressions within approved Set 1, then complete related field-manager gaps and Set 2 before consolidated Set 3. Independently read back this checkpoint and START_HERE pointer.
+
+---
+
 # PTJ DEMO Findings — Cohesive Batch Checkpoint
 Date: 2026-11-12 Australia/Sydney
 ID: PTJ-DEMO-FINDINGS-SOURCE-BATCH-2026-11-12
