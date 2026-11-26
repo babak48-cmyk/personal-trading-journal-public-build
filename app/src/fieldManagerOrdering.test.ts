@@ -39,7 +39,7 @@ describe('Field Manager actual capability filters',()=>{
   expect(fieldManagerCapabilities('psychology.emotionAffected')).toMatchObject({editable:true,requirement:true,visibility:false,placement:false});
  });
  it('keeps execution identities protected and unknown IDs noneditable',()=>{
-  for(const id of ['session.date','session.instrument','session.environment','candidate.intent','candidate.priceMode','trade.entryPrice','trade.stopPrice','trade.quantity']){
+  for(const id of ['session.date','session.instrument','session.environment','candidate.intent','candidate.priceMode','plan.bias','candidate.price','decision.type','decision.reason','trade.entryPrice','trade.stopPrice','trade.quantity']){
    expect(fieldManagerCapabilities(id),id).toMatchObject({protected:true,editable:true,requirement:false,visibility:false,placement:false,text:true,order:false});
   }
   expect(fieldManagerCapabilities('unknown.field').editable).toBe(false);
