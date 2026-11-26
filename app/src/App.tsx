@@ -2829,6 +2829,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
   const [newField,setNewField]=useState({label:'',stage:'session',field_type:'SINGLE_SELECT',help_text:''});
   const [newOption,setNewOption]=useState<Record<string,string>>({});
   const [renameFieldDraft,setRenameFieldDraft]=useState<Record<string,string>>({});
+  const [fieldHelpDraft,setFieldHelpDraft]=useState<Record<string,string>>({});
   const [renameOptionDraft,setRenameOptionDraft]=useState<Record<string,string>>({});
   const [cleanupPreflight,setCleanupPreflight]=useState<import('./services/localApi').CustomFieldCleanupPreflight|null>(null);
   const [cleanupConfirmText,setCleanupConfirmText]=useState('');
@@ -3043,25 +3044,31 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
           }}>Confirm permanent cleanup</button>
         </div>
       </div>}
-      <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameFieldDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.label}))}>Rename</button>
+      <button type="button" disabled={busy||uncertainAdmin} onClick={()=>{setRenameFieldDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.label}));setFieldHelpDraft(v=>({...v,[field.field_id]:v[field.field_id]??field.help_text}));}}>Edit label and help</button>
       {renameFieldDraft[field.field_id]!==undefined&&<div className="rowActions">
         <label>New field label <input maxLength={240} value={renameFieldDraft[field.field_id]}
           onChange={e=>setRenameFieldDraft(v=>({...v,[field.field_id]:e.target.value}))}/></label>
+        <label>Contextual help <input maxLength={240} value={fieldHelpDraft[field.field_id]??field.help_text} onChange={e=>setFieldHelpDraft(v=>({...v,[field.field_id]:e.target.value}))}/></label>
         <button type="button" disabled={busy||uncertainAdmin||!renameFieldDraft[field.field_id].trim()} onClick={()=>{
           const label=renameFieldDraft[field.field_id].trim();
+          const help=fieldHelpDraft[field.field_id]??field.help_text;
           void runChange(
             async()=>{
               const current=await localApi.listCustomFieldDefinitions();
               if(!isUniqueActiveCustomLabel(label,current.filter(f=>f.stage===field.stage).map(f=>({id:f.field_id,label:f.label,active:f.active})),field.field_id))
                 throw new CustomAdminValidationError('Another active field in this stage already uses this label.');
-              await localApi.editCustomFieldDefinition(field.field_id,label,field.help_text,field.required,field.active,field.display_order);
+              const latest=current.find(f=>f.field_id===field.field_id);
+              if(!latest)throw new CustomAdminValidationError('Field no longer exists; refresh definitions.');
+              if(latest.label!==field.label||latest.help_text!==field.help_text)throw new CustomAdminValidationError('Field text changed since editing began; refresh before saving.');
+              validateNewCustomFieldDefinition({...latest,label,help_text:help});
+              await localApi.editCustomFieldDefinition(latest.field_id,label,help,latest.required,latest.active,latest.display_order);
             },
-            async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.label===label&&current.active===field.active;},
+            async()=>{const current=(await localApi.listCustomFieldDefinitions()).find(f=>f.field_id===field.field_id);return !!current&&current.label===label&&current.help_text===help&&current.stage===field.stage&&current.field_type===field.field_type&&current.active===field.active;},
             undefined,
-            ()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})
+            ()=>{setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;});setFieldHelpDraft(v=>{const next={...v};delete next[field.field_id];return next;});}
           );
-        }}>Save name</button>
-        <button type="button" disabled={busy||uncertainAdmin} onClick={()=>setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;})}>Cancel</button>
+        }}>Save label and help</button>
+        <button type="button" disabled={busy||uncertainAdmin} onClick={()=>{setRenameFieldDraft(v=>{const next={...v};delete next[field.field_id];return next;});setFieldHelpDraft(v=>{const next={...v};delete next[field.field_id];return next;});}}>Cancel</button>
       </div>}
       {['SINGLE_SELECT','MULTI_SELECT'].includes(field.field_type)&&<>
         <p className="subtle">Step 1: Create this optional select field. Step 2: Add at least one active option below. Step 3: Mark Required if needed. Existing saved selections retain their historical option labels.</p>
