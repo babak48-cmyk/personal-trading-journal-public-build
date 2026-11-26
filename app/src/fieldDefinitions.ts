@@ -1,3 +1,10 @@
+// Display-only market outlook vocabulary; persisted bias codes remain unchanged.
+export const MARKET_OUTLOOK_VALUES = ['LONG','SHORT','NEUTRAL','MIXED','UNKNOWN'] as const;
+const MARKET_OUTLOOK_LABELS: Record<string,string> = {LONG:'Bullish',SHORT:'Bearish',NEUTRAL:'Sideways',MIXED:'Mixed',UNKNOWN:'Unclear'};
+export function marketOutlookLabel(value:string|null|undefined):string {
+  return value && Object.prototype.hasOwnProperty.call(MARKET_OUTLOOK_LABELS,value) ? MARKET_OUTLOOK_LABELS[value] : 'Unclear';
+}
+
 export type RequirementDefault = 'SYSTEM_REQUIRED'|'OPTIONAL'|'CONDITIONAL';
 export type FieldGroup = 'Session'|'Plan'|'Candidate'|'Evidence'|'Decision'|'Trade'|'Review'|'Psychology'|'SessionReview'|'Attachment'|'Setup';
 
@@ -52,8 +59,8 @@ export const FIELD_DEFINITIONS:FieldDefinition[] = [
   {id:'session.environment',group:'Session',label:'Environment',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
     helpShort:'Whether the session is real money, demo, or forward testing.',helpExample:'Use DEMO when rehearsing execution without live capital.',optionHelp:{REAL:'Live/real-money trading.',DEMO:'Simulated/demo execution.',FORWARD_TEST:'Forward-testing a method in current market conditions.'}},
 
-  {id:'plan.bias',group:'Plan',label:'Bias',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
-    helpShort:'Your initial directional view before the session develops.',helpExample:'SHORT if your base case expects lower prices, but you still record contrary evidence.',helpLong:'Bias is a hypothesis, not a command to trade. It can later change through a plan revision.',optionHelp:{LONG:'Base case favors higher prices.',SHORT:'Base case favors lower prices.',NEUTRAL:'No directional edge is currently preferred.',MIXED:'Different scenarios point in different directions.',UNKNOWN:'You do not yet have enough information to form a view.'}},
+  {id:'plan.bias',group:'Plan',label:'Market Outlook',defaultRequirement:'SYSTEM_REQUIRED',systemLocked:true,
+    helpShort:'Your initial directional view before the session develops.',helpExample:'Bearish if your base case expects lower prices, but you still record contrary evidence.',helpLong:'Market outlook is a hypothesis, not a trade direction or a command to trade. It can later change through a plan revision.',optionHelp:{LONG:'Base case favors higher prices.',SHORT:'Base case favors lower prices.',NEUTRAL:'Your base case is sideways or lacks a preferred directional move.',MIXED:'Different scenarios point in different directions.',UNKNOWN:'You do not yet have enough information to form a view.'}},
   {id:'plan.mainScenario',group:'Plan',label:'Main scenario',defaultRequirement:'OPTIONAL',systemLocked:false,
     helpShort:'The primary market path you expect and what would make it actionable.',helpExample:'If ES holds below prior-day POC, look for rejection on a retest before considering a short.',helpLong:'Describe the expected sequence rather than only a direction. This makes later decision-quality review more useful.'},
   {id:'plan.alternativeScenario',group:'Plan',label:'Alternative scenario',defaultRequirement:'OPTIONAL',systemLocked:false,
