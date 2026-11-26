@@ -555,11 +555,11 @@ export function App(){
   }
   function clearValidation(id:string){if(requiredFocusTargetRef.current===id)requiredFocusRequestRef.current++;setValidationErrors(v=>v.filter(x=>x!==id));}
   function invalidClass(id:string){return validationErrors.includes(id)?'validationFieldError':'';}
-  const requiredFocusContext:RequiredFocusContext={sessionId:active?.session_id??null,generation:sessionLoadRequestRef.current,page:notebookPage,draftStep,draftPlanPage,draftZonePage,zoneId:quickZoneId,quickMode,evidenceId:evidenceCandidate?.candidate_id??null,decisionId:decisionCandidate?.candidate_id??null};
+  const requiredFocusContext:RequiredFocusContext={sessionId:active?.session_id??null,generation:sessionLoadRequestRef.current,page:notebookPage,draftStep,draftPlanPage,draftZonePage,zoneId:quickZoneId,quickMode,evidenceId:evidenceCandidate?.candidate_id??null,decisionId:decisionCandidate?.candidate_id??null,tradeId:activeTrade?.metrics.trade_id??null,sessionReviewId:sessionReview?.review_id??null,reviewGeneration:reviewSelectionRequestRef.current};
   const requiredFocusContextRef=useRef(requiredFocusContext);
   requiredFocusContextRef.current=requiredFocusContext;
   useEffect(()=>()=>{requiredFocusRequestRef.current++;},[]);
-  function jumpToRequiredField(id:string){
+  function jumpToRequiredField(id:string,preserveDecisionDraft=false){
     const request=++requiredFocusRequestRef.current;
     requiredFocusTargetRef.current=id;
     const route=quickValidationRoute(id,active?.status==='DRAFT',!!plan);
@@ -567,7 +567,10 @@ export function App(){
     // override it for custom fields: a draft has no confirmed Execution/Review
     // pages, and a second route could navigate away from unsaved Quick inputs.
     const targetPage=route.notebookPage;
-    if(targetPage!==null&&!navigateNotebookPage(targetPage))return;
+    if(targetPage!==null){
+      if(preserveDecisionDraft&&targetPage==='PLAN'&&notebookPage==='DECISION')setNotebookPage('PLAN');
+      else if(!navigateNotebookPage(targetPage))return;
+    }
     // Quick renders one Zone at a time. A required field belonging to another
     // Zone cannot be focused until its canonical owner is selected.
     // Never guess an owner from an ambiguous concatenated ID or mutate data.
@@ -579,9 +582,9 @@ export function App(){
     if(targetPage==='REVIEW')setShowSessionReview(true);
     const expected:RequiredFocusContext={...requiredFocusContext,page:targetPage??notebookPage,draftStep:route.draftStep??draftStep,draftPlanPage:route.draftPlanPage??draftPlanPage,draftZonePage:route.draftZonePage??draftZonePage,zoneId:ownerZone??quickZoneId,
       evidenceId:targetPage!==null&&targetPage!==notebookPage&&notebookPage==='EVIDENCE'?null:requiredFocusContext.evidenceId,
-      decisionId:targetPage!==null&&targetPage!==notebookPage&&notebookPage==='DECISION'?null:requiredFocusContext.decisionId};
+      decisionId:targetPage!==null&&targetPage!==notebookPage&&notebookPage==='DECISION'&&!preserveDecisionDraft?null:requiredFocusContext.decisionId};
     const focusVisible=(attempt:number)=>{
-      if(!isCurrentRequiredFocus(request,requiredFocusRequestRef.current,expected,{...requiredFocusContextRef.current,generation:sessionLoadRequestRef.current}))return;
+      if(!isCurrentRequiredFocus(request,requiredFocusRequestRef.current,expected,{...requiredFocusContextRef.current,generation:sessionLoadRequestRef.current,reviewGeneration:reviewSelectionRequestRef.current}))return;
       const candidates=[
         ...Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]')).filter(el=>el.dataset.validationId===id),
         ...Array.from(document.querySelectorAll<HTMLElement>('[id]')).filter(el=>el.id===id)
@@ -1031,7 +1034,7 @@ export function App(){
           ...sessionMissing.map(x=>'Session: '+x.label),
           ...planMissing.map(x=>'Pre-market plan: '+x.label),
         ].join(', ')+'.');
-        window.setTimeout(()=>focusRequiredCustomField(first.fieldId,stage,active.session_id),120);
+        jumpToRequiredField(customFieldFocusId(stage,active.session_id,first.fieldId));
         return;
       }
     }catch(e){if(stillCurrent())setMessage('Plan not confirmed: could not verify required Session custom fields. '+String(e));return;}
@@ -1431,9 +1434,7 @@ export function App(){
           ...candidateMissing.map(x=>'Candidate: '+x.label),
           ...zoneMissing.map(x=>'Zone: '+x.label),
         ].join(', ')+'.');
-        setNotebookPage('PLAN');
-        setQuickZoneId(decisionCandidate.candidate_id);
-        window.setTimeout(()=>focusRequiredCustomField(first.fieldId,firstStage,decisionCandidate.candidate_id),120);
+        jumpToRequiredField(customFieldFocusId(firstStage,decisionCandidate.candidate_id,first.fieldId),true);
         decisionSavingRef.current=false;setDecisionSaving(false);
         return;
       }
@@ -1836,8 +1837,7 @@ export function App(){
             setValidationErrors(ids);
             setValidationIssueLabels(v=>({...v,...Object.fromEntries(issues.map((issue,index)=>[ids[index],issue.label]))}));
             setSessionReviewFeedback('Save required Session Review custom values: '+issues.map(issue=>issue.label).join(', ')+'.');
-            setNotebookPage('REVIEW');
-            window.setTimeout(()=>focusRequiredCustomField(issues[0].fieldId,'session-review',sessionReview.review_id),120);
+            jumpToRequiredField(customFieldFocusId('session-review',sessionReview.review_id,issues[0].fieldId));
             return;
           }
         }
@@ -1890,8 +1890,7 @@ export function App(){
             ...reviewMissing.map(x=>'Post-trade review: '+x.label),
           ].join(', ')+'.');
           setReviewFeedback('Save the named required custom fields before completing.');
-          setNotebookPage('EXECUTION');
-          window.setTimeout(()=>focusRequiredCustomField(first.fieldId,firstStage,savingTradeId,()=>{if(reviewSelectionRequestRef.current===reviewRequestAtStart)setReviewFeedback('Required custom field is not visible for the selected Trade. Reopen this Trade to load its saved custom field controls; no Review was completed.');}),120);
+          jumpToRequiredField(customFieldFocusId(firstStage,savingTradeId,first.fieldId));
           return;
         }
       }catch(e){setReviewFeedback('Required field check failed. Verify existing values before retrying.');setMessage('Review not completed: required custom fields could not be verified. '+String(e));return;}
@@ -2550,29 +2549,13 @@ function AppearanceManager({onClose,onInstruments,onSources,onRequirements,value
   </div></div>;
 }
 
-function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStage,ownerId:string,onUnreachable?:()=>void){
-  // Required values are checked against the canonical owner, including post-trade-review.
-  // The correct Quick notebook page must be visible before an editor can receive focus.
-  const targetId=customFieldFocusId(ownerStage,ownerId,fieldId);
-  function focusWhenReady(attempt:number){
-    const target=document.getElementById(targetId);
-    if(!target){
-      if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
-      else onUnreachable?.();
-      return;
-    }
-    // The owner-scoped custom field may be inside nested Quick/Review groups.
-    // Open all ancestor disclosures before asking whether the field is visible.
-    openRequiredFieldDisclosures(target);
-    if(target.getClientRects().length===0){
-      if(attempt<12)window.setTimeout(()=>focusWhenReady(attempt+1),100);
-      else onUnreachable?.();
-      return;
-    }
-    target.scrollIntoView({behavior:'smooth',block:'center'});
-    target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
-  }
-  focusWhenReady(0);
+function focusRequiredCustomField(fieldId:string,ownerStage:CustomFieldOwnerStage,ownerId:string){
+  const target=document.getElementById(customFieldFocusId(ownerStage,ownerId,fieldId));
+  if(!target)return;
+  openRequiredFieldDisclosures(target);
+  if(!target.getClientRects().length)return;
+  target.scrollIntoView({behavior:'smooth',block:'center'});
+  target.querySelector<HTMLElement>('input:not(:disabled),select:not(:disabled),textarea:not(:disabled)')?.focus({preventScroll:true});
 }
 function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presentationReady,validationErrors,onSaved,onDraftDirtyChange}:{ownerId:string;ownerStage:CustomFieldOwnerStage;quickMode:boolean;presentation:CustomFieldPresentationMap;presentationReady:boolean;validationErrors:readonly string[];onSaved:(id:string)=>void;onDraftDirtyChange?:(key:string,dirty:boolean)=>void}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
