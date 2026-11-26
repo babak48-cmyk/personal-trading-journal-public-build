@@ -56,3 +56,13 @@ describe('Session review overall assessment ordering',()=>{
   expect(fieldManagerCapabilities('sessionReview.overall').order).toBe(true);
  });
 });
+
+
+describe('Protected psychology and trend presentation preferences',()=>{
+ it.each(['psychology.state','psychology.stage','candidate.trendRelationship'])('allows text customization only for %s',id=>{
+  expect(fieldManagerCapabilities(id)).toMatchObject({editable:true,text:true,protected:true,requirement:false,visibility:false,placement:false,order:false});
+ });
+ it('retains required-only semantics of the emotion gate while enabling text',()=>{
+  expect(fieldManagerCapabilities('psychology.emotionAffected')).toMatchObject({editable:true,text:true,requirement:true,visibility:false,placement:false,order:false});
+ });
+});
