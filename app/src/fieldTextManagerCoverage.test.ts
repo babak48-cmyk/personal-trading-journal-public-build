@@ -6,7 +6,7 @@ describe('Field Manager complete rendered text-editor coverage', () => {
   it('lists unique connected, formally defined and live-presented controls', () => {
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
     // Connected controls grow with approved Stage coverage; a stale fixed count must not reject added verified fields.
-    const textOnly=[...["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"],'psychology.emotionAffected','psychology.state','psychology.stage','candidate.trendRelationship'];
+    const textOnly=[...["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"],'psychology.emotionAffected','psychology.state','psychology.stage','candidate.trendRelationship','session.date', 'session.instrument', 'session.environment', 'candidate.intent', 'candidate.priceMode', 'trade.entryPrice', 'trade.stopPrice', 'trade.quantity'];
     expect(RENDERED_FIELD_TEXT_IDS).toHaveLength(ACTIVE_VISIBILITY_FIELD_IDS.length+textOnly.length);
     for(const id of ['setup.sourceTrade','setup.notes','setup.evidenceHelp'])expect(RENDERED_FIELD_TEXT_IDS).toContain(id);
     expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...textOnly]));
