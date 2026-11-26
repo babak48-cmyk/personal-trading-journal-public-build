@@ -8,6 +8,9 @@ import {SETUP_DEFINITION_FIELD_IDS} from './setupFieldManager';
  * Ordering is strictly within the existing workflow stage/section.
  * Unsupported inputs remain present in the inventory, but cannot be given a fake order control.
  */
+export const SESSION_REVIEW_REFLECTION_ORDER = ['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.overall'] as const;
+
+/** Preserve old two-field preferences: an unranked Overall stays last. */
 export const FIELD_MANAGER_ORDER_SECTIONS = [
  {label:'Setup definition criteria (protected)',ids:SETUP_DEFINITION_FIELD_IDS},
  {label:'Plan scenarios',ids:['plan.mainScenario','plan.alternativeScenario']},
@@ -18,7 +21,7 @@ export const FIELD_MANAGER_ORDER_SECTIONS = [
  {label:'Trade Review quality and exit',ids:['review.decisionQuality','review.executionQuality','review.managementQuality','review.exitReason']},
  {label:'Trade Review notes',ids:['review.exitNote','review.note']},
  {label:'Session Review assessment',ids:['sessionReview.planQuality','sessionReview.discipline']},
- {label:'Session Review reflection',ids:['sessionReview.wentWell','sessionReview.nextImprovement']},
+ {label:'Session Review reflection',ids:SESSION_REVIEW_REFLECTION_ORDER},
  {label:'Session Review learning',ids:['sessionReview.wentPoorly','sessionReview.bestDecision','sessionReview.biggestMistake','sessionReview.marketLearning']},
 ] as const;
 
