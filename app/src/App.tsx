@@ -662,7 +662,12 @@ export function App(){
     }
     setAnalyticsLoading(false);
   }
-  async function openAnalysis(){setShowSafety(false);setShowSettings(false);setShowAnalysis(true);window.scrollTo(0,0);await refreshAnalytics();}
+  function allowCustomEditorTransition(context:string):boolean{
+    if(!hasUnsavedCustomEditors(dirtyCustomEditorsRef.current))return true;
+    setMessage('Finish saving Custom Field answers or resolve their uncertain save outcome before '+context+'. Your current inputs have been retained.');
+    return false;
+  }
+  async function openAnalysis(){if(!allowCustomEditorTransition('opening Analyze'))return;setShowSafety(false);setShowSettings(false);setShowAnalysis(true);window.scrollTo(0,0);await refreshAnalytics();}
   function patchJournalFilter(p:Partial<JournalFilter>){setJournalFilter(v=>({...v,...p}));}
   function unsavedEntryCapture():boolean{
     return !!pendingTradeDecision&&hasUnsavedEntryInputs({
@@ -697,6 +702,7 @@ export function App(){
     setNewStop(null);setStopReason('');
   }
   function confirmDiscardUnsavedTradeCapture(context:string,includeEntry=true):boolean{
+    if(!allowCustomEditorTransition('switching '+context))return false;
     if(reviewSavingRef.current||fillSavingRef.current||stopSavingRef.current){
       setMessage('A trade/Review save is still in progress. Finish it before switching '+context+'.');return false;
     }
@@ -730,8 +736,7 @@ export function App(){
       setMessage('This Draft has unsaved Plan/Zone changes. Save the Draft before reloading it.');
       return;
     }
-    if(active?.session_id!==s.session_id&&hasUnsavedCustomEditors(dirtyCustomEditorsRef.current)
-      &&!window.confirm('Custom Field values are not saved. Switch sessions and discard those unsaved editor drafts? Previously saved custom-field history will be kept.')){
+    if(active?.session_id!==s.session_id&&!allowCustomEditorTransition('switching sessions')){
       setMessage('Session switch cancelled. Save your unfinished Custom Field values first.');
       return;
     }
@@ -995,8 +1000,7 @@ export function App(){
   }
 
   function newSession(){
-    if(hasUnsavedCustomEditors(dirtyCustomEditorsRef.current)
-      &&!window.confirm('Unsubmitted Custom Field values will be discarded when starting another Session. Continue?')){
+    if(!allowCustomEditorTransition('starting another session')){
       setMessage('New Session cancelled. Save your unfinished Custom Fields first.');
       return;
     }
@@ -1017,7 +1021,7 @@ export function App(){
 
   async function confirm(){
     if(!active||active.status!=='DRAFT'){setMessage('Initial plan can only be confirmed for a draft session.');return;}
-    if(confirmingPlanRef.current)return;
+    if(confirmingPlanRef.current||!allowCustomEditorTransition('confirming the plan'))return;
     const confirmGeneration=sessionLoadRequestRef.current;
     const confirmSessionId=active.session_id;
     const stillCurrent=()=>isCurrentSessionLoad(confirmGeneration,sessionLoadRequestRef.current);
@@ -1834,6 +1838,7 @@ export function App(){
   }
   async function saveSessionReview(finalize=false){
     if(!active||sessionReviewSavingRef.current)return;
+    if(finalize&&!allowCustomEditorTransition('completing the session review'))return;
     if(finalize && blockMissing(sessionReviewRequiredIssues(requirementOverrides,{
       'sessionReview.wentWell':srWentWell,
       'sessionReview.nextImprovement':srNextImprovement,
@@ -1878,6 +1883,7 @@ export function App(){
   }
   async function saveReview(finalize=false){
     if(!activeTrade||reviewSavingRef.current)return;
+    if(finalize&&!allowCustomEditorTransition('completing the trade review'))return;
     if(reviewOwnerTradeId!==activeTrade.metrics.trade_id||reviewVerifiedTradeId!==activeTrade.metrics.trade_id){setReviewFeedback('Review status is not verified. Reopen this trade before saving.');return;}
     if(isCompletedReviewForTrade(tradeReview,reviewOwnerTradeId,activeTrade.metrics.trade_id)){setReviewFeedback('Review already completed and locked.');return;}
     const savingTradeId=activeTrade.metrics.trade_id;
@@ -1973,9 +1979,9 @@ export function App(){
         <button onClick={newSession}><JournalIcon name="session"/>New session</button>
         <button onClick={()=>{setShowAnalysis(false);refresh()}}><JournalIcon name="refresh"/>Refresh sessions</button>
         <button className={showAnalysis?'activeMode':''} onClick={openAnalysis}><JournalIcon name="analytics"/>Analyze</button>
-        <button className={showSafety?'activeMode':''} onClick={async()=>{setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}}><JournalIcon name="safety"/>Safety</button>
+        <button className={showSafety?'activeMode':''} onClick={async()=>{if(!allowCustomEditorTransition('opening Safety'))return;setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}}><JournalIcon name="safety"/>Safety</button>
         <button className={showSettings?'activeMode':''} onClick={()=>{setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}><JournalIcon name="settings"/>Settings</button>
-        <button onClick={async()=>{setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}} disabled={backupBusy}><JournalIcon name="backup"/>Backup location &amp; create</button>
+        <button onClick={async()=>{if(!allowCustomEditorTransition('opening Backup'))return;setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}} disabled={backupBusy}><JournalIcon name="backup"/>Backup location &amp; create</button>
         <div className="panel" aria-label="Windows quick shortcut diagnosis" style={{padding:9,overflowWrap:'anywhere'}}>
           <strong>Quick shortcut</strong>
           <p className="subtle">{quickShortcutReport===null?'Checking Windows registration…':quickShortcutReport.registered?'Ctrl+Alt+J: registered with Windows':'Ctrl+Alt+J: unavailable'}</p>
@@ -1983,7 +1989,7 @@ export function App(){
           <button type="button" onClick={()=>void refreshQuickShortcutReport()}><JournalIcon name="help"/>Check shortcut status</button>
         </div>
 
-        <button className={showRoadmap?'activeMode':''} onClick={()=>{setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}><JournalIcon name="plan"/>Feature Roadmap</button>
+        <button className={showRoadmap?'activeMode':''} onClick={()=>{if(!allowCustomEditorTransition('opening Feature Roadmap'))return;setShowRoadmap(true);setShowSettings(false);setShowAnalysis(false);setShowSafety(false);window.scrollTo(0,0);}}><JournalIcon name="plan"/>Feature Roadmap</button>
         <div className="recent"><strong id="ptj-recent-heading">Recent</strong><div className="recentList" role="region" aria-labelledby="ptj-recent-heading" tabIndex={0}>{lastOpenedSessionId&&sessions.some(s=>s.session_id===lastOpenedSessionId)&&<button type="button" className="sessionLink" onClick={()=>{const previous=sessions.find(s=>s.session_id===lastOpenedSessionId);if(previous)void loadActive(previous);}}>{active?.session_id===lastOpenedSessionId?"Current session":"Resume last opened session"}<small>{sessions.find(s=>s.session_id===lastOpenedSessionId)?.session_date} · {sessions.find(s=>s.session_id===lastOpenedSessionId)?.instrument_symbol} · {lastOpenedSessionId.slice(-6)}</small></button>}{sessions.map(s=><button className={active?.session_id===s.session_id?'sessionLink activeMode':'sessionLink'} key={s.session_id} aria-current={active?.session_id===s.session_id?'true':undefined} onClick={()=>loadActive(s)}>{s.session_date} · {s.instrument_symbol}<small>{s.status} · {s.session_id.slice(-6)}{active?.session_id===s.session_id?' · OPEN NOW':lastOpenedSessionId===s.session_id?' · LAST OPENED':''}</small></button>)}</div></div>
         <details className="guidedMore" aria-label="Reviews pending across sessions">
           <summary>Review backlog {crossSessionReviewQueue!==null?'· '+crossSessionReviewQueue.length+(crossSessionReviewQueue.length===250?'+':''):''}</summary>
