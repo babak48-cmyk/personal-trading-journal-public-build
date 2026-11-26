@@ -185,6 +185,24 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
+// Compare complete regular-file inventories and hashes, not merely counts.
+// Keep rollback snapshots if verification cannot establish restored identity.
+fn attachment_inventory(root: &Path) -> Result<std::collections::BTreeMap<PathBuf,String>,AppError> {
+    let mut result=std::collections::BTreeMap::new();
+    if !root.exists() { return Ok(result); }
+    for entry in walkdir::WalkDir::new(root) {
+        let entry=entry.map_err(|e| AppError::Validation(format!("Attachment verification failed: {e}")))?;
+        if entry.file_type().is_dir() { continue; }
+        if !entry.file_type().is_file() {
+            return Err(AppError::Validation("Unsupported attachment file type".into()));
+        }
+        let rel=entry.path().strip_prefix(root)
+            .map_err(|e| AppError::Validation(e.to_string()))?.to_owned();
+        result.insert(rel,sha256_bytes(&fs::read(entry.path())?));
+    }
+    Ok(result)
+}
+
 pub fn replace_live_from_backup(paths: &AppPaths, backup_path: &Path) -> Result<RestoreResult, AppError> {
     replace_live_from_backup_with_postcheck(paths,backup_path,|_|Ok(()))
 }
@@ -214,6 +232,17 @@ where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
     let original_attachments_existed = paths.attachments.exists();
     if original_db_existed { fs::copy(&live_db, rollback_root.join("journal.db"))?; }
     if original_attachments_existed { copy_dir_recursive(&paths.attachments, &rollback_root.join("attachments"))?; }
+    let original_inventory=attachment_inventory(&paths.attachments)?;
+    if attachment_inventory(&rollback_root.join("attachments"))? != original_inventory {
+        return Err(AppError::Validation("Rollback attachment snapshot verification failed; live data not replaced".into()));
+    }
+    let original_db_hash=if original_db_existed { Some(sha256_bytes(&fs::read(&live_db)?)) } else { None };
+    if let Some(expected)=&original_db_hash {
+        if &sha256_bytes(&fs::read(rollback_root.join("journal.db"))?) != expected {
+            return Err(AppError::Validation("Rollback database snapshot verification failed; live data not replaced".into()));
+        }
+    }
+    let staged_inventory=attachment_inventory(&staged_attachments)?;
 
     let apply_result: Result<String, AppError> = (|| {
         // Replace database file only after staged integrity has passed.
@@ -224,6 +253,9 @@ where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
         if paths.attachments.exists() { fs::remove_dir_all(&paths.attachments)?; }
         fs::create_dir_all(&paths.attachments)?;
         copy_dir_recursive(&staged_attachments, &paths.attachments)?;
+        if attachment_inventory(&paths.attachments)? != staged_inventory {
+            return Err(AppError::Validation("Restored attachment bytes differ from staged archive".into()));
+        }
 
         // Re-open using normal application initialization/migration rules and verify integrity again.
         let conn = db::open_database(&live_db)?;
@@ -270,6 +302,21 @@ where F:FnOnce(&rusqlite::Connection)->Result<(),AppError> {
                 if original_attachments_existed {
                     fs::create_dir_all(&paths.attachments)?;
                     copy_dir_recursive(&rollback_root.join("attachments"), &paths.attachments)?;
+                }
+                if paths.attachments.exists()!=original_attachments_existed ||
+                   attachment_inventory(&paths.attachments)?!=original_inventory {
+                    return Err(AppError::Validation("Rollback attachment verification failed".into()));
+                }
+                if let Some(expected)=&original_db_hash {
+                    if &sha256_bytes(&fs::read(&live_db)?)!=expected {
+                        return Err(AppError::Validation("Rollback database byte verification failed".into()));
+                    }
+                    let c=rusqlite::Connection::open_with_flags(&live_db,OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+                    if db::integrity_check(&c)?!="ok" || db::foreign_key_violation_count(&c)?>0 {
+                        return Err(AppError::Validation("Rollback database integrity verification failed".into()));
+                    }
+                } else if live_db.exists() {
+                    return Err(AppError::Validation("Rollback did not restore original database absence".into()));
                 }
                 Ok(())
             })();
