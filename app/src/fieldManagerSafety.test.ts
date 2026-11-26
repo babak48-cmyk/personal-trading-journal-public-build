@@ -23,7 +23,7 @@ describe('Field Manager integration safety', () => {
     expect(new Set(ACTIVE_VISIBILITY_FIELD_IDS).size).toBe(ACTIVE_VISIBILITY_FIELD_IDS.length);
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
     const protectedSetup=["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"];
-    const presentationOnly=['psychology.emotionAffected','psychology.state','psychology.stage','candidate.trendRelationship'];
+    const presentationOnly=['psychology.emotionAffected','psychology.state','psychology.stage','candidate.trendRelationship','session.date', 'session.instrument', 'session.environment', 'candidate.intent', 'candidate.priceMode', 'trade.entryPrice', 'trade.stopPrice', 'trade.quantity'];
     expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...protectedSetup,...presentationOnly]));
     for(const id of presentationOnly){
       expect(inventory.get(id)?.formalFieldId).toBe(id);
