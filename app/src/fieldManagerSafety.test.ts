@@ -23,7 +23,14 @@ describe('Field Manager integration safety', () => {
     expect(new Set(ACTIVE_VISIBILITY_FIELD_IDS).size).toBe(ACTIVE_VISIBILITY_FIELD_IDS.length);
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
     const protectedSetup=["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"];
-    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...protectedSetup]));
+    const presentationOnly=['psychology.emotionAffected','psychology.state','psychology.stage','candidate.trendRelationship'];
+    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...protectedSetup,...presentationOnly]));
+    for(const id of presentationOnly){
+      expect(inventory.get(id)?.formalFieldId).toBe(id);
+      expect(FIELD_DEFINITION_BY_ID[id]).toBeDefined();
+      expect(ACTIVE_VISIBILITY_FIELD_IDS.some(x=>x===id)).toBe(false);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+    }
     for(const id of protectedSetup){
       expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(true);
       expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
