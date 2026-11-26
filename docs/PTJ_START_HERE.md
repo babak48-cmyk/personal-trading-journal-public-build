@@ -1,3 +1,9 @@
+## Planning terminology implementation — 2026-11-26
+
+User prioritized previously approved Market Outlook and Planning/Opportunity Zones clarification. PUBLIC PR #17 on `feature/ptj-c-transfer-integrity-2026-11-23`, source `52cf18f76cbb97c842fa76e71a047b41e9f287a7`, canonical checkpoint `PTJ-PLANNING-OUTLOOK-TERMINOLOGY-IMPLEMENTATION-2026-11-26` commit `79b942249f5926ec009a3a9723744d38fa2a03dc`. Five source/test files independently read back. Display mapping preserves stored bias codes; Planning aggregate distinct from Opportunity Zones; actual trade direction unchanged. CI UNKNOWN (no runs returned yet), Windows/user acceptance OPEN. Next verify CI, audit remaining raw outlook labels and timeline/export regression coverage, then resume Full Field Manager and Quick Workflow. D scoped ACCEPTED retained; all 12 categories and C gates preserved. No separate installer, schema/data change, merge or PRIVATE write.
+
+---
+
 ## Package D scoped ACCEPTED — remaining approved workflow — 2026-11-26
 
 User explicitly approved closure of tested D batch and continuation. PUBLIC PR #17, branch `feature/ptj-c-transfer-integrity-2026-11-23`, canonical checkpoint `PTJ-D-SCOPED-USER-ACCEPTANCE-AND-NEXT-GATE-2026-11-26` commit `53d31cda8532c976adc42233a74980288911b17d`. Tested source `cbb5352f889008bca79cf0eee24d837b048c52b6`, CI 45737796278 PASS, installed DEMO scoped Windows PASS and USER ACCEPTED. Category #12 broader unverified release/transfer limitations remain open. Cohesive Delivery Policy defines A–D only; next: approved remaining All-Inputs Field Manager (#3/#4) and Quick Workflow (#1–5) gap inventory and coherent missing slice; preserve A/B accepted evidence and C outstanding gates. #10 PROPOSED, #11 CONDITIONAL. No merge, PRIVATE writes, real-data replacement or new scope. Reverify live state.
