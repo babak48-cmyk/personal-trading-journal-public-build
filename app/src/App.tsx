@@ -4,7 +4,7 @@ import { evidenceRequiredIssues, evidenceSelectionIssues, showAdvancedEvidenceRo
 import { quickValidationRoute,requiredQuickZoneOwner } from './quickValidationRoute';
 import { reconcileActiveSession, isCurrentSessionLoad, shouldKeepUnsavedActiveDraft } from './sessionLifecycleSync';
 import {customEditorKey,hasUnsubmittedCustomTypedDraft,hasUnsubmittedCustomSelectionDraft,hasUnsavedCustomEditors,hasUnsavedCustomZoneInputs} from './customUnsavedEditorGuard';
-import { openRequiredFieldDisclosures } from './requiredFieldFocus';
+import { openRequiredFieldDisclosures,isCurrentRequiredFocus,type RequiredFocusContext } from './requiredFieldFocus';
 import { tradeEntryIssues } from './tradeEntryValidation';
 import { sameZoneReentryIssue } from './sameZoneReentryGuard';
 import { reviewReadbackOwnerIssue } from './reviewReadbackIntegrity';
@@ -151,6 +151,8 @@ export function App(){
   // Monotonic ownership token for async Session/Draft/Plan reads. A previous
   // Session must never paint its late response into the newly opened Session.
   const sessionLoadRequestRef=useRef(0);
+  const requiredFocusRequestRef=useRef(0);
+  const requiredFocusTargetRef=useRef('');
   const dirtyCustomEditorsRef=useRef<Set<string>>(new Set());
   function reportCustomEditorDraft(key:string,dirty:boolean){
     if(dirty)dirtyCustomEditorsRef.current.add(key);
@@ -551,9 +553,15 @@ export function App(){
   function missingRequired(pairs:Array<[string,boolean]>):ValidationIssue[]{
     return pairs.filter(([id,present])=>isUserRequired(id,requirementOverrides)&&!present).map(([id])=>({id,label:FIELD_DEFINITION_BY_ID[id]?.label??id}));
   }
-  function clearValidation(id:string){setValidationErrors(v=>v.filter(x=>x!==id));}
+  function clearValidation(id:string){if(requiredFocusTargetRef.current===id)requiredFocusRequestRef.current++;setValidationErrors(v=>v.filter(x=>x!==id));}
   function invalidClass(id:string){return validationErrors.includes(id)?'validationFieldError':'';}
+  const requiredFocusContext:RequiredFocusContext={sessionId:active?.session_id??null,generation:sessionLoadRequestRef.current,page:notebookPage,draftStep,draftPlanPage,draftZonePage,zoneId:quickZoneId,quickMode,evidenceId:evidenceCandidate?.candidate_id??null,decisionId:decisionCandidate?.candidate_id??null};
+  const requiredFocusContextRef=useRef(requiredFocusContext);
+  requiredFocusContextRef.current=requiredFocusContext;
+  useEffect(()=>()=>{requiredFocusRequestRef.current++;},[]);
   function jumpToRequiredField(id:string){
+    const request=++requiredFocusRequestRef.current;
+    requiredFocusTargetRef.current=id;
     const route=quickValidationRoute(id,active?.status==='DRAFT',!!plan);
     // The shared router respects the actual Session/Plan lifecycle. Do not
     // override it for custom fields: a draft has no confirmed Execution/Review
@@ -569,7 +577,11 @@ export function App(){
     if(route.draftPlanPage!==null)setDraftPlanPage(route.draftPlanPage);
     if(route.draftZonePage!==null)setDraftZonePage(route.draftZonePage);
     if(targetPage==='REVIEW')setShowSessionReview(true);
+    const expected:RequiredFocusContext={...requiredFocusContext,page:targetPage??notebookPage,draftStep:route.draftStep??draftStep,draftPlanPage:route.draftPlanPage??draftPlanPage,draftZonePage:route.draftZonePage??draftZonePage,zoneId:ownerZone??quickZoneId,
+      evidenceId:targetPage!==null&&targetPage!==notebookPage&&notebookPage==='EVIDENCE'?null:requiredFocusContext.evidenceId,
+      decisionId:targetPage!==null&&targetPage!==notebookPage&&notebookPage==='DECISION'?null:requiredFocusContext.decisionId};
     const focusVisible=(attempt:number)=>{
+      if(!isCurrentRequiredFocus(request,requiredFocusRequestRef.current,expected,{...requiredFocusContextRef.current,generation:sessionLoadRequestRef.current}))return;
       const candidates=[
         ...Array.from(document.querySelectorAll<HTMLElement>('[data-validation-id]')).filter(el=>el.dataset.validationId===id),
         ...Array.from(document.querySelectorAll<HTMLElement>('[id]')).filter(el=>el.id===id)
@@ -589,7 +601,7 @@ export function App(){
     window.setTimeout(()=>focusVisible(0),90);
   }
   function blockMissing(issues:ValidationIssue[]){
-    if(!issues.length){setValidationErrors([]);return false;}
+    if(!issues.length){requiredFocusRequestRef.current++;setValidationErrors([]);return false;}
     const unique=issues.filter((issue,index,all)=>all.findIndex(x=>x.id===issue.id)===index);
     setValidationErrors(unique.map(x=>x.id));
     setValidationIssueLabels(v=>({...v,...Object.fromEntries(unique.map(x=>[x.id,x.label]))}));
