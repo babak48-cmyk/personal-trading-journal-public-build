@@ -26,6 +26,7 @@ export type RequiredFocusContext = Readonly<{
  sessionId:string|null; generation:number; page:string; draftStep:number;
  draftPlanPage:number; draftZonePage:number; zoneId:string; quickMode:boolean;
  evidenceId:string|null; decisionId:string|null;
+ tradeId?:string|null; sessionReviewId?:string|null; reviewGeneration?:number;
 }>;
 export function isCurrentRequiredFocus(
  request:number,currentRequest:number,expected:RequiredFocusContext,current:RequiredFocusContext,
@@ -35,5 +36,7 @@ export function isCurrentRequiredFocus(
   && expected.draftStep===current.draftStep && expected.draftPlanPage===current.draftPlanPage
   && expected.draftZonePage===current.draftZonePage && expected.zoneId===current.zoneId
   && expected.quickMode===current.quickMode && expected.evidenceId===current.evidenceId
-  && expected.decisionId===current.decisionId;
+  && expected.decisionId===current.decisionId
+  && expected.tradeId===current.tradeId && expected.sessionReviewId===current.sessionReviewId
+  && expected.reviewGeneration===current.reviewGeneration;
 }
