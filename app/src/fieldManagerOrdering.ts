@@ -1,4 +1,4 @@
-import {orderFieldIdsWithinSection} from './fieldInventory';
+import {orderFieldIdsWithinSection, FIELD_CONTROL_INVENTORY, RENDERED_FIELD_TEXT_IDS, isActiveVisibilityControl, isEditableRequirementControl, fieldConnectionReport} from './fieldInventory';
 import {DECISION_DETAILS_ORDER} from './visibleOrderedDecisionFields';
 import {EVIDENCE_DETAILS_ORDER} from './visibleOrderedEvidenceFields';
 import {SETUP_DEFINITION_FIELD_IDS} from './setupFieldManager';
@@ -28,4 +28,19 @@ export function managerOrderPosition(id:string, ranks:Readonly<Record<string,num
  if(!section)return null;
  const ids=orderFieldIdsWithinSection(section.ids,ranks);
  return {label:section.label,ids,position:ids.indexOf(id)};
+}
+
+
+/** Actual editability is per capability, not the legacy aggregate status. */
+export function fieldManagerCapabilities(id:string) {
+ const requirement=isEditableRequirementControl(id);
+ const visibility=isActiveVisibilityControl(id);
+ const text=RENDERED_FIELD_TEXT_IDS.some(x=>x===id);
+ const order=FIELD_MANAGER_ORDER_SECTIONS.some(section=>section.ids.some(x=>x===id));
+ const item=FIELD_CONTROL_INVENTORY.find(x=>x.id===id);
+ const status=fieldConnectionReport().find(x=>x.id===id)?.status;
+ return {requirement,visibility,placement:visibility,text,order,
+   editable:requirement||visibility||text||order,
+   protected:status==='PROTECTED',
+   pending:!!item&&status==='PENDING'};
 }
