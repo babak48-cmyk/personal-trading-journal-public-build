@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {FIELD_MANAGER_ORDER_SECTIONS,managerOrderPosition} from './fieldManagerOrdering';
+import {FIELD_MANAGER_ORDER_SECTIONS,managerOrderPosition,fieldManagerCapabilities} from './fieldManagerOrdering';
 import {FIELD_CONTROL_INVENTORY,orderFieldIdsWithinSection} from './fieldInventory';
 
 describe('Package A connected Field Manager ordering',()=>{
@@ -26,5 +26,20 @@ describe('Package A connected Field Manager ordering',()=>{
   expect(row?.position).toBe(0);
   expect(new Set(row!.ids)).toEqual(new Set(['evidence.direction','evidence.price','evidence.note']));
   expect(orderFieldIdsWithinSection(['decision.quality','decision.note'],{})).toEqual(['decision.quality','decision.note']);
+ });
+});
+
+
+describe('Field Manager actual capability filters',()=>{
+ it('includes protected Setup criteria in editable settings without unlocking requirements or visibility',()=>{
+  expect(fieldManagerCapabilities('setup.marketContext')).toMatchObject({editable:true,protected:true,requirement:false,visibility:false,placement:false,text:true,order:true});
+ });
+ it('distinguishes visibility-only controls from Required/Optional controls',()=>{
+  expect(fieldManagerCapabilities('review.mistakes')).toMatchObject({editable:true,requirement:false,visibility:true,placement:true,text:true});
+  expect(fieldManagerCapabilities('psychology.emotionAffected')).toMatchObject({editable:true,requirement:true,visibility:false,placement:false});
+ });
+ it('keeps execution identities protected and unknown IDs noneditable',()=>{
+  expect(fieldManagerCapabilities('trade.entryPrice')).toMatchObject({protected:true,editable:false,requirement:false,visibility:false,order:false,text:false});
+  expect(fieldManagerCapabilities('unknown.field').editable).toBe(false);
  });
 });
