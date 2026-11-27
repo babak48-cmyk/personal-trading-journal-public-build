@@ -278,6 +278,55 @@ pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)-
     Ok(ExportResult{path:path.to_string_lossy().to_string(),row_count:rows.len(),created_at:created.to_rfc3339()})
 }
 
+ 
+/// One row per saved decision, independent of trades. Preserve the existing
+/// trade CSV schema and filter scope; never create artificial financial results.
+pub fn export_decision_csv(conn:&Connection,paths:&AppPaths,filter:JournalFilterInput)->Result<ExportResult,AppError>{
+    verify_export_audit_chains(conn)?;
+    let fields=crate::custom_fields::list_custom_fields(conn)?;
+    let mut stmt=conn.prepare(
+        "SELECT cd.decision_id,cd.session_id,cd.candidate_id,cd.decision_type,cd.occurred_at,cd.reason_code,cd.reason_note,s.session_date,COALESCE(s.instrument_symbol_snapshot,i.symbol)
+         FROM candidate_decisions cd JOIN sessions s ON s.session_id=cd.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         WHERE cd.decision_type IN ('NO_TRADE','MISSED')
+           AND (?1 IS NULL OR s.session_date>=?1)
+           AND (?2 IS NULL OR s.session_date<=?2)
+           AND (?3 IS NULL OR COALESCE(s.instrument_symbol_snapshot,i.symbol)=?3)
+         ORDER BY cd.occurred_at DESC,cd.decision_id"
+    )?;
+    let rows=stmt.query_map(rusqlite::params![filter.date_from,filter.date_to,filter.instrument_symbol],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,
+        r.get::<_,Option<String>>(5)?,r.get::<_,Option<String>>(6)?,r.get::<_,String>(7)?,r.get::<_,String>(8)?
+    )))?.collect::<Result<Vec<_>,_>>()?;
+    // Spreadsheet formula injection guard for externally editable text cells.
+    fn safe_text(s:&str)->String{
+        if s.trim_start().starts_with(['=','+','-','@']) || s.starts_with(['\t','\r','\n']){
+            csv_cell(&format!("'{}",s))
+        }else{csv_cell(s)}
+    }
+    let mut out=String::from("decision_id,session_id,candidate_id,decision_type,occurred_at,session_date,instrument,reason_code,reason_note,custom_field_answers_json\n");
+    for (id,session,candidate,kind,at,code,note,date,instrument) in &rows{
+        let mut answers=Vec::new();
+        for field in &fields{
+            if !crate::custom_analytics::decision_stage(&field.stage){continue;}
+            let owner_id=if matches!(field.stage.as_str(),"session"|"premarket-plan"){Some(session.clone())}else{candidate.clone()};
+            let answer=match owner_id.as_deref(){
+                Some(owner)=>crate::custom_analytics::read_answer(conn,field,owner,Some(at))?,
+                None=>None,
+            };
+            answers.push(ExportCustomAnswer{field_id:field.field_id.clone(),current_label:field.label.clone(),stage:field.stage.clone(),active:field.active,
+                timing:"AT_OR_BEFORE_DECISION".into(),owner_id,answer});
+        }
+        let vals=[safe_text(id),safe_text(session),safe_text(candidate.as_deref().unwrap_or("")),csv_cell(kind),safe_text(at),safe_text(date),safe_text(instrument),safe_text(code.as_deref().unwrap_or("")),safe_text(note.as_deref().unwrap_or("")),csv_cell(&serde_json::to_string(&answers)?)];
+        out.push_str(&vals.join(","));out.push('\n');
+    }
+    fs::create_dir_all(&paths.exports)?;
+    let created=Utc::now();
+    let path=paths.exports.join(format!("TradingJournal_Decisions_{}_{}.csv",created.format("%Y%m%d_%H%M%S"),Uuid::new_v4()));
+    write_new_report(&path,out.as_bytes())?;
+    Ok(ExportResult{path:path.to_string_lossy().to_string(),row_count:rows.len(),created_at:created.to_rfc3339()})
+}
+
 
 #[cfg(test)]
 mod decision_only_html_export_tests{
@@ -351,6 +400,15 @@ mod decision_only_html_export_tests{
           "GC decisions cannot enter an ES-only report");
         assert!(html.contains("<span>R sample / closed</span><b>0/0</b>"));
         assert!(html.contains("<span>Win rate</span><b>—</b>"));
+        let decisions=export_decision_csv(&conn,&paths,JournalFilterInput{instrument_symbol:Some("ES".into()),..JournalFilterInput::default()}).unwrap();
+        assert_eq!(decisions.row_count,2);
+        let csv=std::fs::read_to_string(&decisions.path).unwrap();
+        assert!(csv.contains("NO_TRADE")&&csv.contains("MISSED"));
+        assert!(csv.contains("Opportunity needs review"));
+        assert!(!csv.contains("s-gc"));
+        assert!(!csv.lines().next().unwrap().contains("realized_r"));
+        assert!(csv.lines().next().unwrap().contains("custom_field_answers_json"));
+
         std::fs::remove_dir_all(root).unwrap();
     }
 }
