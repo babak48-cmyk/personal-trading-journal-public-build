@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
-import type {CustomTradeAnalysis,CustomAnalysisAnswer} from './services/localApi';
-import {summarizeCustomTradeAnalysis} from './customTradeAnalytics';
+import type {CustomTradeAnalysis,CustomAnalysisAnswer,CustomDecisionAnalysis} from './services/localApi';
+import {summarizeCustomTradeAnalysis,summarizeCustomDecisionAnalysis} from './customTradeAnalytics';
 const answer=(patch:Partial<CustomAnalysisAnswer>):CustomAnalysisAnswer=>({event_id:'e',recorded_at:'2026-11-27T00:00:00Z',value_type:'NUMBER',text_value:null,number_value:null,boolean_value:null,date_value:null,options:[],...patch});
 const result=(kind:string,rows:CustomTradeAnalysis['rows']):CustomTradeAnalysis=>({field:{field_id:'f',stage:'zone',field_type:kind,label:'Field',help_text:'',required:false,active:false,display_order:0},timing:'AT_OR_BEFORE_DECISION',rows});
 describe('custom trade cohorts',()=>{
@@ -28,5 +28,18 @@ describe('custom trade cohorts',()=>{
   const row={trade_id:'a',owner_id:'z',status:'CLOSED',realized_r:-1,answer:answer({value_type:'BOOLEAN',boolean_value:false})};
   expect(summarizeCustomTradeAnalysis(result('BOOLEAN',[row])).groups[0].label).toBe('No');
   expect(()=>summarizeCustomTradeAnalysis(result('BOOLEAN',[row,row]))).toThrow('Duplicate trade');
+ });
+});
+
+describe('independent decision-only cohorts',()=>{
+ const row=(id:string,kind:'NO_TRADE'|'MISSED',owner:string|null,value:CustomAnalysisAnswer|null):CustomDecisionAnalysis['rows'][number]=>({decision_id:id,decision_type:kind,owner_id:owner,answer:value,occurred_at:'2026-11-27T01:00:00Z',reason_code:null,reason_note:null});
+ it('counts both decision types independently, retains zero and unavailable values, and never assigns R',()=>{
+  const data:CustomDecisionAnalysis={field:result('NUMBER',[]).field,rows:[row('a','NO_TRADE','z',answer({number_value:0})),row('b','MISSED','z',answer({number_value:0})),row('c','MISSED',null,null)]};
+  const summary=summarizeCustomDecisionAnalysis(data);
+  expect(summary).toMatchObject({total:3,missing:1});
+  expect(summary.groups[0]).toMatchObject({label:'0',noTrade:1,missed:1,ownerCount:1});
+  expect(summary.groups[1]).toMatchObject({key:'missing',noTrade:0,missed:1});
+  expect(summary.groups[0]).not.toHaveProperty('netR');
+  expect(()=>summarizeCustomDecisionAnalysis({...data,rows:[data.rows[0],data.rows[0]]})).toThrow('duplicate');
  });
 });
