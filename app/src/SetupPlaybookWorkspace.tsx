@@ -241,10 +241,10 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
        <label>{fieldText['setup.evidenceRole']?.label?.trim()||"Evidence priority role"} {fieldText['setup.evidenceRole']?.help&&<small title={fieldText['setup.evidenceRole'].help}>ⓘ</small>}<select value={evidenceRole} onChange={e=>{setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role']);setEditorDirty(true);}}>
         {roles.map(role=><option value={role} key={role}>{role}</option>)}
        </select></label>):(
-       {shown('setup.evidenceHelp',!!evidenceHelp.trim())&&<label>{labelFor('setup.evidenceHelp','Optional evidence explanation')}
+       shown('setup.evidenceHelp',!!evidenceHelp.trim())&&<label>{labelFor('setup.evidenceHelp','Optional evidence explanation')}
          {fieldText['setup.evidenceHelp']?.help&&<small title={fieldText['setup.evidenceHelp'].help}>ⓘ</small>}
          <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
-       </label>})}</div>)}
+       </label>)}</div>)}
        <button type="button" onClick={addEvidence} disabled={!newEvidence.trim()}><JournalIcon name="evidence"/>Add evidence requirement</button>
      </fieldset>
      {hasUncommittedEditorChanges&&<p role="status" className="subtle">Unsaved Setup editor changes. Save a NEW version before switching or closing this editor.</p>}
