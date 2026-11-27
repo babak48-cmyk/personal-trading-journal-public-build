@@ -89,10 +89,14 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('trade.stopPrice','Initial protective stop','execution','journal-field',false,'trade.stopPrice','Initial risk baseline'),
   entry('trade.quantity','Entry quantity','execution','journal-field',false,'trade.quantity','Contracts/shares and P&L'),
   entry('trade.plannedTarget','Planned target','execution','journal-field',true,'trade.plannedTarget'),
+  entry('trade.entryCommission','Entry commission (total)','execution','journal-field',false,undefined,'Execution cost integrity: blank is unknown; zero is explicit'),
+  entry('trade.entryFees','Entry other fees (total)','execution','journal-field',false,undefined,'Execution cost integrity: blank is unknown; zero is explicit'),
   entry('fill.action','Fill action','execution','journal-field',false,undefined,'Immutable execution event type'),
   entry('fill.price','Fill price','execution','journal-field',false,undefined,'Real execution price'),
   entry('fill.quantity','Fill quantity','execution','journal-field',false,undefined,'Position accounting'),
   entry('fill.reason','Fill reason','execution','journal-field',true,'fill.reason'),
+  entry('fill.commission','Fill commission (total)','execution','journal-field',false,undefined,'Execution cost integrity: blank is unknown; zero is explicit'),
+  entry('fill.fees','Fill other fees (total)','execution','journal-field',false,undefined,'Execution cost integrity: blank is unknown; zero is explicit'),
   entry('management.newStop','Revised stop','execution','conditional-journal-field',false,undefined,'Stop event integrity'),
   entry('management.reason','Management reason','execution','journal-field',true,'management.reason'),
   entry('review.decisionQuality','Reviewed decision quality','post-trade-review','journal-field',true,'review.decisionQuality'),
@@ -142,6 +146,8 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('appearance.fontSize','Font size','settings','appearance-preference',false),
   entry('appearance.fontFamily','Font family','settings','appearance-preference',false),
   entry('appearance.backgroundTone','Background tone','settings','appearance-preference',false),
+  entry('appearance.accent','Accent color','settings','appearance-preference',false),
+  entry('appearance.visualMode','Visual display mode','settings','appearance-preference',false),
 ] as const;
 
 /** True when inventory references a canonical formal field identifier that does not exist. */
