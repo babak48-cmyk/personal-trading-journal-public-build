@@ -2617,7 +2617,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
       const eligible=eligibleCustomFields(defs,ownerStage,'select');
       const pairs=await Promise.all(eligible.map(async f=>{
         const [opts,current]=await Promise.all([localApi.listCustomFieldOptions(f.field_id),localApi.currentCustomFieldSelection(ownerStage,ownerId,f.field_id)]);
-        return {id:f.field_id,opts,value:current?.options.map(o=>o.option_id)||[],
+        return {id:f.field_id,opts,value:current?.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.option_id)||[],
           valid:isUsableCustomSelection(current,f.field_type as 'SINGLE_SELECT'|'MULTI_SELECT'),
           historical:current?.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.label_at_selection).join(', ')||''};
       }));
@@ -2653,7 +2653,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
     busyRef.current=true;setBusy(true);onDraftDirtyChange?.(customEditorKey('select',ownerStage,ownerId),true);
     try{
       const current=await localApi.currentCustomFieldSelection(ownerStage,ownerId,fieldId);
-      const restored=current?.options.map(o=>o.option_id)||[];
+      const restored=current?.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.option_id)||[];
       setSelected(v=>({...v,[fieldId]:restored}));setOriginal(v=>({...v,[fieldId]:restored}));
       setPersistedValid(v=>({...v,[fieldId]:isUsableCustomSelection(current,field.field_type as 'SINGLE_SELECT'|'MULTI_SELECT')}));
       setHistoricalLabels(v=>({...v,[fieldId]:current?.options.slice().sort((a,b)=>a.ordinal-b.ordinal).map(o=>o.label_at_selection).join(', ')||''}));
@@ -2672,7 +2672,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
       setFieldFeedback(v=>({...v,[fieldId]:'Select a valid set of distinct active options (exactly one for Single Select) before saving.'}));
       return;
     }
-    if(persistedValid[fieldId]&&values.length===(original[fieldId]||[]).length&&values.every(v=>(original[fieldId]||[]).includes(v))){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
+    if(persistedValid[fieldId]&&!hasUnsubmittedCustomSelectionDraft(selected,original,[fieldId])){setFieldFeedback(v=>({...v,[fieldId]:'No change to save.'}));return;}
     busyRef.current=true;setBusy(true);onDraftDirtyChange?.(customEditorKey('select',ownerStage,ownerId),true);setFieldFeedback(v=>({...v,[fieldId]:'Saving selection…'}));
     const request={event_id:crypto.randomUUID(),field_id:fieldId,owner_stage:ownerStage,owner_id:ownerId,option_ids:[...values]};
     let writeAttempted=false;
@@ -2697,6 +2697,8 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
     finally{busyRef.current=false;setBusy(false);}
   }
   const visibleFields=safeVisibleCustomFields(fields,quickMode,presentation,presentationReady);
+  // Keep edited/uncertain fields reachable when switching Quick/Detailed.
+  for(const field of fields)if(!visibleFields.some(f=>f.field_id===field.field_id)&&(uncertainWrites.includes(field.field_id)||hasUnsubmittedCustomSelectionDraft(selected,original,[field.field_id])))visibleFields.push(field);
   if(!visibleFields.length&&!notice)return null;
   const missing=visibleFields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(!presentationReady&&visibleFields.some(f=>f.required))||(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
@@ -2706,7 +2708,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
     {visibleFields.map(field=>{
       const values=selected[field.field_id]||[];
       const available=options[field.field_id]||[];
-      const same=values.length===(original[field.field_id]||[]).length&&values.every(v=>(original[field.field_id]||[]).includes(v));
+      const same=!hasUnsubmittedCustomSelectionDraft(selected,original,[field.field_id]);
       const valid=(!same||!persistedValid[field.field_id])&&validCustomSelectionDraft(field.field_type,values,available);
       return <div id={customFieldFocusId(ownerStage,ownerId,field.field_id)} key={field.field_id} className={'requirementGroup '+(validationErrors.includes(customFieldFocusId(ownerStage,ownerId,field.field_id))||localErrors.includes(field.field_id)?'validationFieldError':'')}>
         <b>{field.label}{field.required?' · Required':''}</b>{field.help_text&&<p className="subtle">{field.help_text}</p>}
@@ -2825,6 +2827,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
     finally{busyRef.current=false;setBusy(false);}
   }
   const visibleFields=safeVisibleCustomFields(fields,quickMode,presentation,presentationReady);
+  for(const field of fields)if(!visibleFields.some(f=>f.field_id===field.field_id)&&(uncertainWrites.includes(field.field_id)||hasUnsubmittedCustomTypedDraft(values,original,[field.field_id])))visibleFields.push(field);
   if(!visibleFields.length&&!message)return null;
   const missing=visibleFields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(!presentationReady&&visibleFields.some(f=>f.required))||(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
