@@ -2696,9 +2696,7 @@ function OwnerCustomSelections({ownerId,ownerStage,quickMode,presentation,presen
     }
     finally{busyRef.current=false;setBusy(false);}
   }
-  const visibleFields=safeVisibleCustomFields(fields,quickMode,presentation,presentationReady);
-  // Keep edited/uncertain fields reachable when switching Quick/Detailed.
-  for(const field of fields)if(!visibleFields.some(f=>f.field_id===field.field_id)&&(uncertainWrites.includes(field.field_id)||hasUnsubmittedCustomSelectionDraft(selected,original,[field.field_id])))visibleFields.push(field);
+  const visibleFields=safeVisibleCustomFields(fields,quickMode,presentation,presentationReady,id=>uncertainWrites.includes(id)||hasUnsubmittedCustomSelectionDraft(selected,original,[id]));
   if(!visibleFields.length&&!notice)return null;
   const missing=visibleFields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(!presentationReady&&visibleFields.some(f=>f.required))||(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom fields {missing.length>0?`· ${missing.length} required missing`:''}</summary>
@@ -2826,8 +2824,7 @@ function OwnerTypedCustomFields({ownerId,ownerStage,quickMode,presentation,prese
     }
     finally{busyRef.current=false;setBusy(false);}
   }
-  const visibleFields=safeVisibleCustomFields(fields,quickMode,presentation,presentationReady);
-  for(const field of fields)if(!visibleFields.some(f=>f.field_id===field.field_id)&&(uncertainWrites.includes(field.field_id)||hasUnsubmittedCustomTypedDraft(values,original,[field.field_id])))visibleFields.push(field);
+  const visibleFields=safeVisibleCustomFields(fields,quickMode,presentation,presentationReady,id=>uncertainWrites.includes(id)||hasUnsubmittedCustomTypedDraft(values,original,[id]));
   if(!visibleFields.length&&!message)return null;
   const missing=visibleFields.filter(f=>f.required&&!persistedValid[f.field_id]);
   return <details className="guidedMore" data-field-group={ownerStage} open={(!presentationReady&&visibleFields.some(f=>f.required))||(quickMode&&missing.length>0)||fields.some(f=>validationErrors.includes(customFieldFocusId(ownerStage,ownerId,f.field_id)))}><summary>{ownerStage==='post-trade-review'?'Post-trade review':ownerStage==='trade'?'Trade':ownerStage==='candidate'?'Candidate':ownerStage==='zone'?'Zone':ownerStage==='premarket-plan'?'Pre-market plan':ownerStage==='session-review'?'Session review':'Session'} custom text, number, date and yes/no {missing.length>0?`· ${missing.length} required missing`:''}</summary>
