@@ -15,6 +15,8 @@ export const FIELD_MANAGER_ORDER_SECTIONS = [
  {label:'Setup definition criteria (protected)',ids:SETUP_DEFINITION_FIELD_IDS},
  {label:'Plan scenarios',ids:['plan.mainScenario','plan.alternativeScenario']},
  {label:'Pre-session readiness',ids:['plan.preSessionState','plan.preSessionStateIntensity']},
+ {label:'Zone identity and context',ids:["candidate.label","candidate.intent","candidate.trendRelationship"]},
+ {label:'Setup evidence editor',ids:["setup.evidenceName","setup.evidenceRole","setup.evidenceHelp"]},
  {label:'Zone planned conditions',ids:['candidate.requiredConditions','candidate.invalidationConditions']},
  {label:'Observed evidence details',ids:[...EVIDENCE_DETAILS_ORDER]},
  {label:'Decision details',ids:[...DECISION_DETAILS_ORDER]},
