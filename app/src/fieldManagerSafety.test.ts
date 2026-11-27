@@ -327,3 +327,15 @@ describe('Protected financial and management input ordering',()=>{
     expect(isFieldPresented(first,true,{[first]:false},{[first]:'DETAILED_ONLY'},{})).toBe(true);
   });
 });
+
+describe('Revision, psychology and fill ordering',()=>{
+ it.each([
+  ['planRevision.bias','planRevision.reason','planRevision.evidence'],
+  ['psychology.state','psychology.stage','psychology.intensity'],
+  ['fill.action','fill.price','fill.quantity','fill.reason']
+ ])('reorders existing fields without removing any identities',(...ids)=>{
+   const ranks=Object.fromEntries(ids.map((id,index)=>[id,ids.length-index]));
+   expect(orderFieldIdsWithinSection(ids,ranks)).toEqual([...ids].reverse());
+   expect(new Set(orderFieldIdsWithinSection(ids,ranks))).toEqual(new Set(ids));
+ });
+});
