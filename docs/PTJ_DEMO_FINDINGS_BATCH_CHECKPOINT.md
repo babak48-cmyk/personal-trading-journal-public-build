@@ -1,3 +1,14 @@
+## 2026-11-27 — Set 1 custom-answer navigation and recovery integrity
+Checkpoint ID: PTJ-SET1-CUSTOM-DRAFT-GUARDS-2026-11-27
+Authorization: existing concentrated Sets 1/2/3; user requested autonomous cohesive delivery with reports only at material delivery/blockers. No separate installer delivery for incremental changes.
+PUBLIC branch: feature/ptj-c-transfer-integrity-2026-11-23; PR #17 independently verified open/draft/unmerged before latest source change.
+Source commits: 234d602584edf454a7001d2f4d6fbd65e035c42f (guard transitions that would discard custom answers); 4d3c44e2dfcb0649a8088fb32f618ce35c0fc8c9 (read-only reload of persisted answer, explicit discard of local draft, disabled inputs during saves/uncertain outcomes); fd8dda839efd8a13821f3633db7a5b8de8c72fc5 (ordinal-aware equality and sorted persisted selections, retain unfinished fields across Quick/Detailed). All modify app/src/App.tsx only. Final source blob 175c799ff4f814ba1e43045766ea1c2751a211d3 independently read back.
+Evidence: exact source 4d3c44e2dfcb0649a8088fb32f618ce35c0fc8c9 run 45911678030 COMPLETED SUCCESS; independently checked frontend regression/build, Rust check/targeted/full regression, Windows isolated NSIS build/isolation/hash step/upload all SUCCESS. Latest source fd8dda839efd8a13821f3633db7a5b8de8c72fc5 CI UNKNOWN (no run returned yet). No new targeted UI regression tests yet; existing ordinal helper test preserved. Installed Windows and user acceptance OPEN. No installer delivered, no independent binary hash or backup verified.
+Design choice: block potentially destructive navigation until custom draft saved or explicitly reloaded; read-only recovery does not append an event. Conservative global guard may block unrelated owner transitions until all drafts resolved; verify usability and asynchronous admin/read-back races, stale UI, selection history, focus and unmount cases before acceptance. Retain previous scoped PASS and all outstanding gates in preceding entry. No production data, migration, merge, or PRIVATE changes.
+NEXT: check latest source CI; complete targeted UI regression coverage for custom draft recovery/order/mode switch and administration race; audit remaining all-input coverage and Quick Workflow under existing approved scope. No DEMO until integrated package ready.
+
+---
+
 ## 2026-11-27 — Supplemental Set 1 reconciliation after execution-chat transfer
 Checkpoint ID: PTJ-SET1-SUPPLEMENTAL-RECONCILED-2026-11-27
 Authority: approved concentrated Set 1 Field Manager/Custom Fields, Set 2 Quick Workflow, Set 3 one consolidated isolated Windows DEMO. No scope change.
