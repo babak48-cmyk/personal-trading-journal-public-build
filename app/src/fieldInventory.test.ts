@@ -350,3 +350,14 @@ describe('Actual execution costs and appearance controls are inventoried',()=>{
   for(const id of ['appearance.accent','appearance.visualMode'])expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toMatchObject({category:'appearance-preference',candidateForCustomization:false});
  });
 });
+
+
+describe('Protected execution and revision presentation bindings',()=>{
+ it('keeps newly connected label-only controls protected from visibility and required overrides',()=>{
+  for(const id of ["planRevision.bias","planRevision.reason","zoneRevision.reason","liveZone.reason","fill.action","fill.price","fill.quantity","management.stop","decision.direction","decision.mismatchReason","trade.entryCommission","trade.entryFees","fill.commission","fill.fees"]){
+   expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toBeDefined();
+   expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+   expect(isEditableRequirementControl(id)).toBe(false);
+  }
+ });
+});
