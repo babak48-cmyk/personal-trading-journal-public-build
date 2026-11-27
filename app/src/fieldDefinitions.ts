@@ -24,6 +24,20 @@ export type FieldDefinition = {
 };
 
 export const FIELD_DEFINITIONS:FieldDefinition[] = [
+  {"id":"fill.fees","group":"Trade","label":"Fill other fees (total)","defaultRequirement":"OPTIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Total other fees for this fill. Blank is unknown; zero is explicit.","helpExample":"0.50"},
+  {"id":"fill.commission","group":"Trade","label":"Fill commission (total)","defaultRequirement":"OPTIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Total commission for this fill. Blank is unknown; zero is explicit.","helpExample":"2.00"},
+  {"id":"trade.entryFees","group":"Trade","label":"Entry other fees (total)","defaultRequirement":"OPTIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Total other fees for the entry fill. Blank is unknown; zero is explicit.","helpExample":"0.50"},
+  {"id":"trade.entryCommission","group":"Trade","label":"Entry commission (total)","defaultRequirement":"OPTIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Total commission for the entry fill. Blank is unknown; zero is explicit.","helpExample":"2.00"},
+  {"id":"decision.mismatchReason","group":"Decision","label":"Opposite-plan explanation","defaultRequirement":"CONDITIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Explain why the intended trade opposes the plan when applicable.","helpExample":"New evidence."},
+  {"id":"decision.direction","group":"Decision","label":"Intended trade direction","defaultRequirement":"CONDITIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Explicit long or short intent for a TRADE decision.","helpExample":"LONG"},
+  {"id":"management.newStop","group":"Trade","label":"Revised stop","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Record the new stop for a management event, not the original risk.","helpExample":"Move stop to 7400."},
+  {"id":"fill.quantity","group":"Trade","label":"Fill quantity","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Actual quantity executed.","helpExample":"1 contract"},
+  {"id":"fill.price","group":"Trade","label":"Fill price","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Actual executed market price.","helpExample":"7402.25"},
+  {"id":"fill.action","group":"Trade","label":"Fill action","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Record an actual entry or exit fill.","helpExample":"Partial exit."},
+  {"id":"liveZone.reason","group":"Candidate","label":"New live zone reason","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Explain why a zone is added during the active session.","helpExample":"New liquidity information."},
+  {"id":"candidateRevision.reason","group":"Candidate","label":"Zone revision reason","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Explain the change to an existing zone.","helpExample":"New structure changed the zone boundary."},
+  {"id":"planRevision.reason","group":"Plan","label":"Plan revision reason","defaultRequirement":"SYSTEM_REQUIRED","systemLocked":true,"requirementManaged":false,"helpShort":"Explain why the plan changed; retain the original revision.","helpExample":"New evidence invalidated the original scenario."},
+  {"id":"planRevision.bias","group":"Plan","label":"Revised market outlook","defaultRequirement":"OPTIONAL","systemLocked":true,"requirementManaged":false,"helpShort":"Change the outlook or retain the existing one.","helpExample":"Keep current when only the evidence changes."},
   // Approval-critical Setup semantics are enforced by Rust; Field Manager may
   // rename/reorder these visible inputs, never weaken their validation or hide them.
   {id:'setup.marketContext',group:'Setup',label:'Market regime/context',defaultRequirement:'CONDITIONAL',systemLocked:true,requirementManaged:false,
