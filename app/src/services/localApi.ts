@@ -7,6 +7,7 @@ export type HistoricalCustomSelection = CustomSelection & {recorded_at:string};
 export type HistoricalCustomTypedValue = CustomTypedValue & {recorded_at:string};
 export type CustomAnalysisAnswer=HistoricalCustomTypedValue & {options:CustomSelection['options']};
 export type CustomAnalysisRow={trade_id:string;owner_id:string|null;status:string;realized_r:number|null;answer:CustomAnalysisAnswer|null};
+export type CustomDecisionAnalysis={field:CustomFieldDefinition;rows:{decision_id:string;owner_id:string|null;decision_type:'NO_TRADE'|'MISSED';occurred_at:string;reason_code:string|null;reason_note:string|null;answer:CustomAnalysisAnswer|null}[]};
 export type CustomTradeAnalysis={field:CustomFieldDefinition;timing:'AT_OR_BEFORE_DECISION'|'LATEST_RECORDED_RETROSPECTIVE';rows:CustomAnalysisRow[]};
 export type CustomSelectionInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;option_ids:string[]};
 export type CustomFieldCleanupPreflight = {field_id:string;label:string;stage:string;option_count:number;event_count:number;snapshot_count:number;eligible_unused_definition:boolean};
@@ -357,6 +358,7 @@ export const localApi = {
   saveSessionReview: (input:SaveSessionReviewInput) => invoke<SessionReview>('save_session_review',{input}),
   getSessionReview: (sessionId:string) => invoke<SessionReview|null>('get_session_review',{sessionId}),
   listJournalTrades: (filter:JournalFilter={}) => invoke<JournalTradeRow[]>('list_journal_trades',{filter}),
+  analyzeCustomDecisionField: (filter:JournalFilter,fieldId:string) => invoke<CustomDecisionAnalysis>('analyze_custom_decision_field',{filter,fieldId}),
   analyzeCustomTradeField: (filter:JournalFilter,fieldId:string) => invoke<CustomTradeAnalysis>('analyze_custom_trade_field',{filter,fieldId}),
 
   listWeeklyActions: (weekStart:string,filterSnapshotJson:string) => invoke<WeeklyActionEvent[]>('list_weekly_actions',{weekStart,filterSnapshotJson}),
