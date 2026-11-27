@@ -81,3 +81,13 @@ it('preserves zone price geometry and setup priority semantics while ordering on
  expect(managerOrderPosition('setup.evidenceRole',{'setup.evidenceRole':0})?.ids).toEqual(['setup.evidenceRole','setup.evidenceName','setup.evidenceHelp']);
  for(const id of ['candidate.intent','candidate.trendRelationship','setup.evidenceName','setup.evidenceRole']) expect(fieldManagerCapabilities(id)).toMatchObject({order:true,visibility:false,placement:false,requirement:false});
 });
+
+
+it('reorders screenshot metadata and trade Decision inputs while keeping their semantic protections',()=>{
+ expect(managerOrderPosition('attachment.caption',{'attachment.caption':0})?.ids)
+   .toEqual(['attachment.caption','attachment.stage']);
+ expect(managerOrderPosition('decision.mismatchReason',{'decision.mismatchReason':0})?.ids)
+   .toEqual(['decision.mismatchReason','decision.direction']);
+ for(const id of ['attachment.stage','decision.direction','decision.mismatchReason'])
+   expect(fieldManagerCapabilities(id)).toMatchObject({order:true,visibility:false,placement:false,requirement:false});
+});

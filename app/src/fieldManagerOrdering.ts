@@ -11,6 +11,9 @@ import {SETUP_DEFINITION_FIELD_IDS} from './setupFieldManager';
 export const SESSION_REVIEW_REFLECTION_ORDER = ['sessionReview.wentWell','sessionReview.nextImprovement','sessionReview.overall'] as const;
 
 /** Preserve old two-field preferences: an unranked Overall stays last. */
+export const ATTACHMENT_METADATA_ORDER = ['attachment.stage','attachment.caption'] as const;
+export const TRADE_DECISION_ORDER = ['decision.direction','decision.mismatchReason'] as const;
+
 export const FIELD_MANAGER_ORDER_SECTIONS = [
  {label:'Setup definition criteria (protected)',ids:SETUP_DEFINITION_FIELD_IDS},
  {label:'Plan scenarios',ids:['plan.mainScenario','plan.alternativeScenario']},
@@ -20,6 +23,8 @@ export const FIELD_MANAGER_ORDER_SECTIONS = [
  {label:'Zone planned conditions',ids:['candidate.requiredConditions','candidate.invalidationConditions']},
  {label:'Observed evidence details',ids:[...EVIDENCE_DETAILS_ORDER]},
  {label:'Decision details',ids:[...DECISION_DETAILS_ORDER]},
+ {label:'Trade decision',ids:TRADE_DECISION_ORDER},
+ {label:'Screenshot metadata',ids:ATTACHMENT_METADATA_ORDER},
  {label:"Session identity",ids:["session.date","session.instrument","session.environment"]},
  {label:"Trade entry",ids:["trade.entryPrice","trade.stopPrice","trade.quantity","trade.plannedTarget"]},
  {label:"Entry costs",ids:["trade.entryCommission","trade.entryFees"]},
