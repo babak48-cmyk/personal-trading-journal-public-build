@@ -73,6 +73,9 @@ export const FIELD_CONTROL_INVENTORY: readonly InventoryEntry[] = [
   entry('planRevision.bias','Revised bias','plan-revision','journal-field',false,undefined,'Immutable timestamped plan revision'),
   entry('planRevision.reason','Reason for revision','plan-revision','journal-field',false,undefined,'Plan revision audit integrity'),
   entry('planRevision.evidence','Revision evidence summary','plan-revision','journal-field',true,'planRevision.evidence'),
+  entry('liveZone.reason','Why is this new zone being added?','plan-revision','journal-field',false,undefined,'Required audit explanation'),
+  entry('zoneRevision.reason','Reason for revision','plan-revision','journal-field',false,undefined,'Zone revision audit'),
+  entry('management.stop','New stop','execution','journal-field',false,undefined,'Risk snapshot integrity'),
   entry('candidateRevision.reason','Zone revision reason','plan-revision','journal-field',false,undefined,'Zone history audit'),
   entry('evidence.type','Observed evidence type','live-evidence','journal-field',false,undefined,'Evidence provenance'),
   entry('evidence.role','Evidence role','live-evidence','journal-field',false,undefined,'Evidence classification semantics'),
@@ -263,6 +266,7 @@ export const ACTIVE_VISIBILITY_FIELD_IDS = [
  * Restrict editable text settings to verifiably consumed UI controls.
  * Other inventoried controls remain visible for audit, without fake customization. */
 export const RENDERED_FIELD_TEXT_IDS = [
+  "planRevision.bias","planRevision.reason","zoneRevision.reason","liveZone.reason","fill.action","fill.price","fill.quantity","management.stop","decision.direction","decision.mismatchReason","trade.entryCommission","trade.entryFees","fill.commission","fill.fees",
   'plan.bias','candidate.price','decision.type','decision.reason',
   'session.date', 'session.instrument', 'session.environment', 'candidate.intent', 'candidate.priceMode', 'trade.entryPrice', 'trade.stopPrice', 'trade.quantity',
   // Presentation only: preserve required/conditional and visibility protections.
