@@ -953,6 +953,13 @@ pub fn export_journal_csv(app: AppHandle, filter: JournalFilterInput) -> Result<
 }
 
 #[tauri::command]
+pub fn export_journal_decisions_csv(app: AppHandle, filter: JournalFilterInput) -> Result<exports::ExportResult, AppError> {
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    exports::export_decision_csv(&conn, &paths, filter)
+}
+
+#[tauri::command]
 pub fn open_export_folder(app: AppHandle) -> Result<(), AppError> {
     // Only the application-owned export directory may be opened; no caller-supplied path.
     let paths = AppPaths::from_app(&app)?;
