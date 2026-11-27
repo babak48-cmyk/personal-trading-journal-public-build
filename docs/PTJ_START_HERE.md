@@ -1,3 +1,15 @@
+## Set 1 integrated custom analysis and export checkpoint — 2026-11-27
+
+Checkpoint PTJ-SET1-CUSTOM-ANALYSIS-EXPORT-2026-11-27. PUBLIC PR #17 verified HEAD c047e3677e42dc60e5f1c2383b46f5d93027b2c8, development branch feature/ptj-c-transfer-integrity-2026-11-23. All source changes independently read back in preceding execution turns. User authorized completing Set 1 autonomously.
+
+Field Manager: 14 additional protected text bindings, canonical revision/stop IDs, formal field definitions and inventory links; fixes to two failing frontend coverage tests. Previous run 45929182543 FAIL (622/624 frontend tests, Rust PASS), superseded by exact-source run 45930743799 SUCCESS at f5033fe5ff29f6bd0b2b358be5aee2d10a37bd48 (includes independent No Trade/Missed custom analysis and tests). Quick entry autofocus source cfe1c96390259cfbe65c98263de823fe94aed1a6; installed behavior still UNKNOWN.
+
+Reports: custom answer identity, current field title, historical option labels, decision-time vs retrospective timing, missing values, inactive fields in HTML and trade CSV (4039bbd386374d05d9d7b18267baf05324ce1b95); independent decision CSV (2a653b55d3f3398d039ca9699914a3abb7347b24), native export fixture (c047e3677e42dc60e5f1c2383b46f5d93027b2c8). Latest run 45932850891 IN_PROGRESS, no PASS inferred. Decision CSV uses date/instrument only, no financial metrics; spreadsheet text escaping applies to new decision CSV, existing trade CSV not changed in that respect. Reports expose selected as-of/latest answers, not a complete event-history archive. No migration or production data edits. No new installer delivery, merge or PRIVATE writes. All prior scoped Windows acceptance preserved.
+
+NEXT: verify export CI, reconcile remaining All-Inputs capabilities against approved requirements (including actual ordering/presentation bindings and custom stage integration); address substantive gaps as cohesive changes; then Set 2 Quick Workflow, then one Set 3 integrated DEMO. Set 1 OPEN, not accepted. No known unsaved source from preceding batch. Preserve all earlier roadmap categories and outstanding C safety/release gates.
+
+---
+
 ## Execution management — user approved 2026-11-27
 
 User explicitly directs maximum substantive implementation per conversational turn and minimal user round trips. Do not request renewed authorization for approved scope. Work in cohesive functional slices; group related source/test changes and verify remote persistence. While CI runs, perform independent approved work, not repetitive status polling. Prioritize missing usable capabilities over repeated minor safeguards; record smaller findings and address them together. Do not end a turn solely with a status check if substantive work remains feasible. Report only material delivery, real blockers requiring user input, or a concise continuation cue if runtime limits prevent further work. No background work promises. Preserve existing approved Sets 1/2/3, all 12 roadmap families, scoped acceptance, governing policies, safety gates and no-merge/PRIVATE restrictions. No premature DEMO or unsupported acceptance claims.
