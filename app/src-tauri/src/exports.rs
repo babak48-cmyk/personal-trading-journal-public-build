@@ -373,7 +373,7 @@ mod decision_only_html_export_tests{
             VALUES('s-es','w','i-es','2026-11-23','DEMO','now','CLOSED','now','now'),
                   ('s-gc','w','i-gc','2026-11-23','DEMO','now','CLOSED','now','now');
           INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,reason_code,reason_note)
-            VALUES('no','s-es','2026-11-23T10:00:00Z','NO_TRADE','NO_CONFIRMATION',NULL),
+            VALUES('no','s-es','2099-01-01T00:00:00Z','NO_TRADE','NO_CONFIRMATION',NULL),
                   ('missed','s-es','2026-11-23T10:01:00Z','MISSED',NULL,'Opportunity needs review'),
                   ('other','s-gc','2026-11-23T10:02:00Z','MISSED',NULL,NULL);
         ").unwrap();
@@ -388,8 +388,6 @@ mod decision_only_html_export_tests{
           event_id:"answer-zero".into(),field_id:"custom-export-zero".into(),owner_stage:"session".into(),owner_id:"s-es".into(),
           text_value:None,number_value:Some(0.0),boolean_value:None,date_value:None
         }).unwrap();
-        // These are synthetic fixture Decisions only, not journal corrections.
-        conn.execute("UPDATE candidate_decisions SET occurred_at='2099-01-01T00:00:00Z' WHERE decision_id='no'",[]).unwrap();
         let root=std::env::temp_dir().join(format!("ptj-decision-export-{}",uuid::Uuid::new_v4()));
         let paths=AppPaths{
           data:root.join("data"),attachments:root.join("attachments"),
