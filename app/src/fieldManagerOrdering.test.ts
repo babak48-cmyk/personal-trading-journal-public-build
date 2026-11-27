@@ -11,7 +11,7 @@ describe('Package A connected Field Manager ordering',()=>{
    expect(managerOrderPosition(id,{})).not.toBeNull();
   }
   expect(managerOrderPosition('trade.entryPrice',{})?.position).toBe(0);
-  expect(managerOrderPosition('candidate.trendRelationship',{})).toBeNull();
+  expect(managerOrderPosition('candidate.trendRelationship',{})?.position).toBe(2);
  });
  it('reports persisted reordered positions for a filtered inventory row',()=>{
   const before=managerOrderPosition('plan.alternativeScenario',{});
@@ -40,7 +40,7 @@ describe('Field Manager actual capability filters',()=>{
  });
  it('keeps execution identities protected and unknown IDs noneditable',()=>{
   for(const id of ['session.date','session.instrument','session.environment','candidate.intent','candidate.priceMode','plan.bias','candidate.price','decision.type','decision.reason','trade.entryPrice','trade.stopPrice','trade.quantity']){
-   expect(fieldManagerCapabilities(id),id).toMatchObject({protected:true,editable:true,requirement:false,visibility:false,placement:false,text:true,order:['session.date','session.instrument','session.environment','trade.entryPrice','trade.stopPrice','trade.quantity'].includes(id)});
+   expect(fieldManagerCapabilities(id),id).toMatchObject({protected:true,editable:true,requirement:false,visibility:false,placement:false,text:true,order:['session.date','session.instrument','session.environment','trade.entryPrice','trade.stopPrice','trade.quantity','candidate.intent'].includes(id)});
   }
   expect(fieldManagerCapabilities('unknown.field').editable).toBe(false);
  });
@@ -62,7 +62,7 @@ describe('Session review overall assessment ordering',()=>{
 
 describe('Protected psychology and trend presentation preferences',()=>{
  it.each(['psychology.state','psychology.stage','candidate.trendRelationship'])('preserves protected semantics for %s while permitting supported presentation',id=>{
-  expect(fieldManagerCapabilities(id)).toMatchObject({editable:true,text:true,protected:true,requirement:false,visibility:false,placement:false,order:id!=='candidate.trendRelationship'});
+  expect(fieldManagerCapabilities(id)).toMatchObject({editable:true,text:true,protected:true,requirement:false,visibility:false,placement:false,order:true});
  });
  it('retains required-only semantics of the emotion gate while enabling text',()=>{
   expect(fieldManagerCapabilities('psychology.emotionAffected')).toMatchObject({editable:true,text:true,requirement:true,visibility:false,placement:false,order:false});
@@ -72,4 +72,12 @@ describe('Protected psychology and trend presentation preferences',()=>{
 it('keeps session and entry ordering within their own sections',()=>{
  expect(managerOrderPosition('session.instrument',{'session.instrument':0,'session.date':1})?.ids).toEqual(['session.instrument','session.date','session.environment']);
  expect(managerOrderPosition('trade.plannedTarget',{'trade.plannedTarget':0})?.ids).toEqual(['trade.plannedTarget','trade.entryPrice','trade.stopPrice','trade.quantity']);
+});
+
+it('preserves zone price geometry and setup priority semantics while ordering only independent controls',()=>{
+ expect(managerOrderPosition('candidate.label',{'candidate.intent':0})?.ids).toEqual(['candidate.intent','candidate.label','candidate.trendRelationship']);
+ expect(managerOrderPosition('candidate.priceMode',{})).toBeNull();
+ expect(managerOrderPosition('candidate.price',{})).toBeNull();
+ expect(managerOrderPosition('setup.evidenceRole',{'setup.evidenceRole':0})?.ids).toEqual(['setup.evidenceRole','setup.evidenceName','setup.evidenceHelp']);
+ for(const id of ['candidate.intent','candidate.trendRelationship','setup.evidenceName','setup.evidenceRole']) expect(fieldManagerCapabilities(id)).toMatchObject({order:true,visibility:false,placement:false,requirement:false});
 });
