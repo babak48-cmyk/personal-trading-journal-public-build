@@ -1730,13 +1730,17 @@ export function App(){
   function loadReviewPending(){setReviewQueueRefreshToken(v=>v+1);}
   function focusQuickEntryInput(){
     const owner=active?.session_id,generation=sessionLoadRequestRef.current;
-    window.requestAnimationFrame(()=>{
+    window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
       if(!owner||activeSessionIdRef.current!==owner||sessionLoadRequestRef.current!==generation)return;
       const panel=document.getElementById('journal-quick-entry');
       if(!panel?.getClientRects().length)return;
-      panel?.scrollIntoView({behavior:'smooth',block:'start'});
-      panel?.querySelector<HTMLInputElement>('[data-validation-id="trade.entryPrice"] input')?.focus({preventScroll:true});
-    });
+      const input=panel.querySelector<HTMLInputElement>('[data-validation-id="trade.entryPrice"] input');
+      if(!input||input.disabled)return;
+      // Avoid stealing focus from a user who already started editing this panel.
+      if(panel.contains(document.activeElement))return;
+      panel.scrollIntoView({behavior:'smooth',block:'start'});
+      input.focus({preventScroll:true});
+    }));
   }
   function resumeUnexecutedTradeDecision(decision:CandidateDecision){
     if(!active||active.status!=='ACTIVE'||decision.decision_type!=='TRADE'||!['LONG','SHORT'].includes(decision.intended_direction??'')){
