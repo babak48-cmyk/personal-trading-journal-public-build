@@ -209,7 +209,7 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
      <p className="subtle">Changing the editor and saving produces a NEW version. Old facts and linked trades remain associated with the original version.</p>
    </details>}
    {expanded&&<div className="formGrid">
-     <label>Setup name <input value={input.name} onChange={e=>update('name',e.target.value)} maxLength={120} placeholder="e.g. Rejection at Value Boundary"/></label>
+     <label>{fieldText['setup.name']?.label?.trim()||"Setup name"} {fieldText['setup.name']?.help&&<small title={fieldText['setup.name'].help}>ⓘ</small>} <input value={input.name} onChange={e=>update('name',e.target.value)} maxLength={120} placeholder="e.g. Rejection at Value Boundary"/></label>
      {shown('setup.sourceTrade',!!seedTrade)&&<label>{labelFor('setup.sourceTrade','Seed from saved CLOSED trade')} (optional; not automatically attributed)
        {fieldText['setup.sourceTrade']?.help&&<small title={fieldText['setup.sourceTrade'].help}>ⓘ</small>}
        <select value={seedTrade} onChange={e=>setSeedTrade(e.target.value)}>
@@ -236,10 +236,10 @@ export function SetupPlaybookWorkspace({rows,quickMode,visibility,placements,fie
           <span>{e.priority_role}: {e.evidence_label}</span>
           <button type="button" onClick={()=>{setEditorDirty(true);setInput(p=>({...p,evidence_priorities:p.evidence_priorities.filter((_,j)=>i!==j)}));}}>Remove from NEXT version</button>
        </div>)}
-       <input value={newEvidence} maxLength={120} placeholder="Evidence name, e.g. DOM pressure" onChange={e=>setNewEvidence(e.target.value)}/>
-       <select value={evidenceRole} onChange={e=>{setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role']);setEditorDirty(true);}}>
+       <label>{fieldText['setup.evidenceName']?.label?.trim()||"Evidence name"} {fieldText['setup.evidenceName']?.help&&<small title={fieldText['setup.evidenceName'].help}>ⓘ</small>}<input value={newEvidence} maxLength={120} placeholder="Evidence name, e.g. DOM pressure" onChange={e=>setNewEvidence(e.target.value)}/></label>
+       <label>{fieldText['setup.evidenceRole']?.label?.trim()||"Evidence priority role"} {fieldText['setup.evidenceRole']?.help&&<small title={fieldText['setup.evidenceRole'].help}>ⓘ</small>}<select value={evidenceRole} onChange={e=>{setEvidenceRole(e.target.value as SetupEvidencePriority['priority_role']);setEditorDirty(true);}}>
         {roles.map(role=><option value={role} key={role}>{role}</option>)}
-       </select>
+       </select></label>
        {shown('setup.evidenceHelp',!!evidenceHelp.trim())&&<label>{labelFor('setup.evidenceHelp','Optional evidence explanation')}
          {fieldText['setup.evidenceHelp']?.help&&<small title={fieldText['setup.evidenceHelp'].help}>ⓘ</small>}
          <input value={evidenceHelp} maxLength={500} placeholder="Optional explanation" onChange={e=>setEvidenceHelp(e.target.value)}/>
