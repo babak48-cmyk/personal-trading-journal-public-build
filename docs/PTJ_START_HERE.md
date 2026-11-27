@@ -1,3 +1,19 @@
+## Set 2 re-entry and Review navigation / integrated Windows DEMO — 2026-11-27
+
+[PTJ-SET2-REENTRY-REVIEW-NAVIGATION-2026-11-27](https://github.com/babak48-cmyk/personal-trading-journal-public-build/blob/442f1824a8297a013e2b24fc7f309854c93da8a5/docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md#ptj-set2-reentry-review-navigation-2026-11-27) is independently read back on PUBLIC PR #17. App source `013b859e93aa3469804476c786199b45d09798e9`; checkpoint and CI head `442f1824a8297a013e2b24fc7f309854c93da8a5` have identical app trees. Local build and 640 frontend tests PASS. [Run 46000524529](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/46000524529) completed SUCCESS (frontend, Rust and isolated NSIS build). [One integrated Package C DEMO](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/46000524529/artifacts/15198182165) available through 2026-12-04 23:44 Sydney (artifact archive digest `sha256:8474c2784b52dba0d1d656eade6ae2b0eb4b553da3c124f7c05b088e2ef81b4a`; local download/hash and installation unverified). Windows acceptance OPEN. Keep previously accepted evidence; retain other roadmap and C gates. Re-entry uses distinct Decisions/Trades under the same Zone. The previous Trade ID is used to isolate the in-memory draft; a persistent prior-Trade relationship is not added.
+
+### Integrated Windows acceptance for changed paths
+
+Use Package C DEMO data only. Keep a verified backup of any existing DEMO data worth retaining, then install the isolated NSIS package from the ZIP. Check the Package C identity in Safety before recording test data. Preserve existing passed scenarios.
+
+1. In Field Manager, move a text Custom Field past a selection field in one stage. Check the order in Quick and Detailed. Make one Required and verify it is reachable in Quick. Save a selection, rename its option, and check that the historical answer retains its original label.
+2. In a DEMO session, open two saved unexecuted TRADE Decisions. Type distinct quantity/cost values, including 0, and switch A → B → A while the app stays open. Verify values stay associated with the original Decision. Save a new TRADE Decision with the entry editor clear and check Entry Price receives keyboard focus.
+3. Record a trade with quantity 2. Exit 1 and confirm it remains open. Exit the remaining 1 and confirm it appears in Review Pending. From the closed trade, start a separate attempt in the same live Zone; confirm no old notes/entry values are copied and the first Trade and fills remain separate.
+4. Open a pending Review from another session via Review backlog. Verify the exact Trade and rules; complete it, reopen from the session trade list, and verify read-only. Restart the app and verify persisted Decisions, fills and review status. Unsaved entry drafts are in-memory for the running app only.
+5. Record PASS/FAIL per case and preserve screenshots/logs only when needed. Approval still requires installed Windows evidence. No production replacement, merge, or PRIVATE write.
+
+---
+
 ## Set 2 exit to Review Pending — 2026-11-27
 
 [PTJ-SET2-EXIT-REVIEW-HANDOFF-2026-11-27](https://github.com/babak48-cmyk/personal-trading-journal-public-build/blob/822ae78154092691fe224221a040e8dd3990f86d/docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md#ptj-set2-exit-review-handoff-2026-11-27) recorded on PUBLIC PR #17 HEAD `822ae78154092691fe224221a040e8dd3990f86d`, app source `daa9c9bbab791f4fc3759426049e580004d999f6`. Independent Git fetch verified the source and checkpoint application trees match. Local build and 639 frontend tests PASS. [CI 45961711084](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45961711084) completed SUCCESS for frontend, Rust and isolated Windows build. Installed validation OPEN for Set 3. Continue Set 2 with same-Zone independent re-entry and pending/completed Review owner navigation. Prior Set 1 and scoped Windows evidence preserved.
