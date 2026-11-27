@@ -1,3 +1,9 @@
+## Set 2 exit to Review Pending — 2026-11-27
+
+[PTJ-SET2-EXIT-REVIEW-HANDOFF-2026-11-27](https://github.com/babak48-cmyk/personal-trading-journal-public-build/blob/822ae78154092691fe224221a040e8dd3990f86d/docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md#ptj-set2-exit-review-handoff-2026-11-27) recorded on PUBLIC PR #17 HEAD `822ae78154092691fe224221a040e8dd3990f86d`, app source `daa9c9bbab791f4fc3759426049e580004d999f6`. Independent Git fetch verified the source and checkpoint application trees match. Local build and 639 frontend tests PASS. [CI 45961711084](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45961711084) completed SUCCESS for frontend, Rust and isolated Windows build. Installed validation OPEN for Set 3. Continue Set 2 with same-Zone independent re-entry and pending/completed Review owner navigation. Prior Set 1 and scoped Windows evidence preserved.
+
+---
+
 ## Set 2 saved-entry draft continuity — 2026-11-27
 
 [Checkpoint PTJ-SET2-SAVED-ENTRY-DRAFT-SWITCH-2026-11-27](https://github.com/babak48-cmyk/personal-trading-journal-public-build/blob/ed389c3da8ca86afc111e25cebf41f990d7fb59a/docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md#ptj-set2-saved-entry-draft-switch-2026-11-27) is independently verified at PR #17 HEAD `ed389c3da8ca86afc111e25cebf41f990d7fb59a`; app source `a89c7e41591dfefa8deae0a05f62161e4e15f053` independently matched. Local build and 637 frontend tests PASS. [CI 45960235817](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/45960235817) completed SUCCESS on the checkpoint, including frontend, Rust and isolated Windows build. Installed behavior acceptance OPEN for Set 3. Continue Set 2 from entry through management and Review Pending. Prior Set 1 and scoped Windows evidence remain recorded.
