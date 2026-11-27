@@ -156,6 +156,12 @@ export function App(){
   const requiredFocusRequestRef=useRef(0);
   const requiredFocusTargetRef=useRef('');
   const dirtyCustomEditorsRef=useRef<Set<string>>(new Set());
+  const customAdminLockedRef=useRef(false);
+  function allowCustomAdminLeave():boolean{
+    if(!customAdminLockedRef.current)return true;
+    setMessage('Custom Field settings are saving or not verified. Finish the operation or Refresh custom fields before leaving Settings.');
+    return false;
+  }
   function reportCustomEditorDraft(key:string,dirty:boolean){
     if(dirty)dirtyCustomEditorsRef.current.add(key);
     else dirtyCustomEditorsRef.current.delete(key);
@@ -663,6 +669,7 @@ export function App(){
     setAnalyticsLoading(false);
   }
   function allowCustomEditorTransition(context:string):boolean{
+    if(!allowCustomAdminLeave())return false;
     if(!hasUnsavedCustomEditors(dirtyCustomEditorsRef.current))return true;
     setMessage('Finish saving Custom Field answers or resolve their uncertain save outcome before '+context+'. Your current inputs have been retained.');
     return false;
@@ -715,6 +722,7 @@ export function App(){
   }
 
   async function loadActive(s:SessionSummary, requestedTradeId?:string, fromAnalytics=false){
+    if(!allowCustomAdminLeave())return;
     // A Recent session click is also navigation. Re-selecting the current session
     // must exit Roadmap/Analytics/Safety/Settings WITHOUT reloading or discarding drafts.
     if(s.session_id===active?.session_id && !requestedTradeId){
@@ -1980,7 +1988,7 @@ export function App(){
         <button onClick={()=>{setShowAnalysis(false);refresh()}}><JournalIcon name="refresh"/>Refresh sessions</button>
         <button className={showAnalysis?'activeMode':''} onClick={openAnalysis}><JournalIcon name="analytics"/>Analyze</button>
         <button className={showSafety?'activeMode':''} onClick={async()=>{if(!allowCustomEditorTransition('opening Safety'))return;setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}}><JournalIcon name="safety"/>Safety</button>
-        <button className={showSettings?'activeMode':''} onClick={()=>{setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}><JournalIcon name="settings"/>Settings</button>
+        <button className={showSettings?'activeMode':''} onClick={()=>{if(!allowCustomAdminLeave())return;setShowAnalysis(false);setShowSafety(false);setSettingsSection('APPEARANCE');setShowSettings(true);window.scrollTo(0,0)}}><JournalIcon name="settings"/>Settings</button>
         <button onClick={async()=>{if(!allowCustomEditorTransition('opening Backup'))return;setShowAnalysis(false);setShowSettings(false);setShowSafety(true);window.scrollTo(0,0);await refreshSafety();}} disabled={backupBusy}><JournalIcon name="backup"/>Backup location &amp; create</button>
         <div className="panel" aria-label="Windows quick shortcut diagnosis" style={{padding:9,overflowWrap:'anywhere'}}>
           <strong>Quick shortcut</strong>
@@ -2018,7 +2026,7 @@ export function App(){
             ?<InstrumentManager onClose={()=>setShowSettings(false)} onSwitch={()=>setSettingsSection('SOURCES')} onRequirements={()=>setSettingsSection('REQUIREMENTS')} onAppearance={()=>setSettingsSection('APPEARANCE')} onChanged={refreshInstruments}/>
             :settingsSection==='SOURCES'
               ?<LevelSourceManager onClose={()=>setShowSettings(false)} onSwitch={()=>setSettingsSection('INSTRUMENTS')} onRequirements={()=>setSettingsSection('REQUIREMENTS')} onAppearance={()=>setSettingsSection('APPEARANCE')} onChanged={async()=>setSources(await localApi.listLevelSources())}/>
-              :<FieldRequirementManager onClose={()=>setShowSettings(false)} onInstruments={()=>setSettingsSection('INSTRUMENTS')} onSources={()=>setSettingsSection('SOURCES')} onAppearance={()=>setSettingsSection('APPEARANCE')} overrides={requirementOverrides} visibility={fieldVisibility} placements={fieldPlacements} order={fieldOrder} fieldText={fieldText} onFieldTextChanged={async()=>setFieldText(await localApi.getFieldTextPreferences())} onOrderChanged={async()=>setFieldOrder(await localApi.getFieldOrderPreferences())} onPlacementChanged={async()=>setFieldPlacements(await localApi.getFieldPlacementPreferences())} onVisibilityChanged={async()=>setFieldVisibility(await localApi.getFieldVisibilityPreferences())} customPresentation={customPresentation} customPresentationReady={customPresentationReady} customPresentationError={customPresentationError} customCatalogBlocked={customCatalogBlocked} onCustomPresentationChanged={async()=>{const p=await localApi.getCustomFieldPresentation();setCustomPresentation(p);setCustomPresentationReady(true);setCustomPresentationError('');if(!dirtyCustomEditorsRef.current.size)setCustomCatalogRevision(v=>v+1);}} onChanged={refreshRequirements}/>)} 
+               :<FieldRequirementManager onCustomAdminLockChanged={locked=>{customAdminLockedRef.current=locked;}} onClose={()=>{if(allowCustomAdminLeave())setShowSettings(false)}} onInstruments={()=>{if(allowCustomAdminLeave())setSettingsSection('INSTRUMENTS')}} onSources={()=>{if(allowCustomAdminLeave())setSettingsSection('SOURCES')}} onAppearance={()=>{if(allowCustomAdminLeave())setSettingsSection('APPEARANCE')}} overrides={requirementOverrides} visibility={fieldVisibility} placements={fieldPlacements} order={fieldOrder} fieldText={fieldText} onFieldTextChanged={async()=>setFieldText(await localApi.getFieldTextPreferences())} onOrderChanged={async()=>setFieldOrder(await localApi.getFieldOrderPreferences())} onPlacementChanged={async()=>setFieldPlacements(await localApi.getFieldPlacementPreferences())} onVisibilityChanged={async()=>setFieldVisibility(await localApi.getFieldVisibilityPreferences())} customPresentation={customPresentation} customPresentationReady={customPresentationReady} customPresentationError={customPresentationError} customCatalogBlocked={customCatalogBlocked} onCustomPresentationChanged={async()=>{const p=await localApi.getCustomFieldPresentation();setCustomPresentation(p);setCustomPresentationReady(true);setCustomPresentationError('');if(!dirtyCustomEditorsRef.current.size)setCustomCatalogRevision(v=>v+1);}} onChanged={refreshRequirements}/>)} 
         {showSettings&&<div className="panel" aria-label="Backup location and drive selection">
         <div className="panelTitle"><div><h2><JournalIcon name="backup"/>Backup folder and drive</h2>
           <p className="subtle">Choose any existing accessible folder on C:, D:, E: or an external drive. Each backup also retains a separate internal recovery copy.</p></div></div>
@@ -2884,7 +2892,7 @@ function CompletedCustomFieldAnswers({ownerId,scope}:{ownerId:string;scope:'trad
   </details>;
 }
 
-function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation:CustomFieldPresentationMap;onPresentationChanged:()=>Promise<void>}){
+function CustomFieldDiscovery({presentation,onPresentationChanged,onAdminLockChanged}:{presentation:CustomFieldPresentationMap;onPresentationChanged:()=>Promise<void>;onAdminLockChanged:(locked:boolean)=>void}){
   const [fields,setFields]=useState<import('./services/localApi').CustomFieldDefinition[]>([]);
   const [options,setOptions]=useState<Record<string,import('./services/localApi').CustomFieldOption[]>>({});
   const [notice,setNotice]=useState('Refresh to load definitions. Changes require an existing schema v9 database.');
@@ -2892,6 +2900,8 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
   const customAdminBusyRef=useRef(false);
   const [uncertainAdmin,setUncertainAdmin]=useState(false);
   const uncertainAdminRef=useRef(false);
+  function beginAdmin(){customAdminBusyRef.current=true;onAdminLockChanged(true);setBusy(true);}
+  function finishAdmin(){customAdminBusyRef.current=false;setBusy(false);onAdminLockChanged(uncertainAdminRef.current);}
   const [filter,setFilter]=useState('');
   const [showInactive,setShowInactive]=useState(false);
   const [newField,setNewField]=useState({label:'',stage:'session',field_type:'SINGLE_SELECT',help_text:''});
@@ -2906,8 +2916,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
     [field.label,field.field_id,field.stage,field.field_type].some(value=>value.toLowerCase().includes(filter.toLowerCase().trim())));
   async function refresh(){
     if(customAdminBusyRef.current)return;
-    customAdminBusyRef.current=true;
-    setBusy(true);
+    beginAdmin();
     try{
       const definitions=await localApi.listCustomFieldDefinitions();
       const currentOptionGroups=optionBearingFieldIds(definitions);
@@ -2918,12 +2927,11 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
       uncertainAdminRef.current=false;setUncertainAdmin(false);
       setNotice('Definitions and displayed options reloaded from saved data. Confirm the expected state before continuing.');
     }catch(e){setNotice('Refresh unsuccessful: '+String(e)+' — changes remain blocked until successfully reloaded.');}
-    finally{customAdminBusyRef.current=false;setBusy(false);}
+    finally{finishAdmin();}
   }
   async function runChange(action:()=>Promise<void>,verify?:()=>Promise<boolean>,refreshOptionsFor?:string,onVerified?:()=>void){
     if(customAdminBusyRef.current||uncertainAdminRef.current)return;
-    customAdminBusyRef.current=true;
-    setBusy(true);setNotice('Saving custom field settings…');
+    beginAdmin();setNotice('Saving custom field settings…');
     let attempted=false;
     try{
       attempted=true;
@@ -2947,12 +2955,11 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
       setNotice(validation
         ? e.message
         : (attempted?'Save outcome uncertain; edits blocked until Refresh and inspection: ':'Change not performed: ')+String(e));
-    }finally{customAdminBusyRef.current=false;setBusy(false);}
+    }finally{finishAdmin();}
   }
   async function moveOption(fieldId:string,optionId:string,direction:-1|1){
     if(customAdminBusyRef.current||uncertainAdminRef.current)return;
-    customAdminBusyRef.current=true;
-    setBusy(true);
+    beginAdmin();
     try{
       const original=await localApi.listCustomFieldOptions(fieldId);
       const before=original.map(o=>o.option_id);
@@ -2970,12 +2977,12 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
         ?'Option order saved and independently verified. Historical selection labels are unchanged.'
         :'Option order could not be verified. Changes are blocked until Refresh and inspection.');
     }catch(e){uncertainAdminRef.current=true;setUncertainAdmin(true);setNotice('Option order uncertain; changes are blocked until Refresh and inspection: '+String(e));}
-    finally{customAdminBusyRef.current=false;setBusy(false);}
+    finally{finishAdmin();}
   }
   async function setPresentation(field:import('./services/localApi').CustomFieldDefinition,property:'visible'|'placement'){
     if(customAdminBusyRef.current||uncertainAdminRef.current||field.required||!field.active)return;
     const next=compactCustomPresentation(nextCustomPresentation(field,presentation,property),fields);
-    customAdminBusyRef.current=true;setBusy(true);
+    beginAdmin();
     let attempted=false;
     try{
       attempted=true;
@@ -2988,7 +2995,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
     }catch(e){
       if(attempted){uncertainAdminRef.current=true;setUncertainAdmin(true);}
       setNotice('Custom Field presentation result not verified: '+String(e)+'. Refresh and inspect settings before retrying.');
-    }finally{customAdminBusyRef.current=false;setBusy(false);}
+    }finally{finishAdmin();}
   }
   function newId(){return crypto.randomUUID();}
   return <details className="guidedMore"><summary>Custom Fields & Options — management (beta)</summary>
@@ -3061,7 +3068,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
       );}}>{field.active?'Deactivate':'Reactivate'}</button>
       <button type="button" disabled={busy||uncertainAdmin} onClick={async()=>{
         if(customAdminBusyRef.current||uncertainAdminRef.current)return;
-        customAdminBusyRef.current=true;setBusy(true);
+        beginAdmin();
         setCleanupPreflight(null);setCleanupConfirmText('');
         try{
           const report=await localApi.customFieldCleanupPreflight(field.field_id);
@@ -3074,7 +3081,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
             setNotice('Cleanup preflight passed for an unused definition only. Review the details and type DELETE to approve a new checked operation.');
           }
         }catch(e){setNotice('Cleanup preflight unavailable: '+String(e));}
-        finally{customAdminBusyRef.current=false;setBusy(false);}
+        finally{finishAdmin();}
       }}>Controlled cleanup</button>
       {cleanupPreflight?.field_id===field.field_id&&<div className="requirementGroup" role="group" aria-label={'Permanent cleanup confirmation for '+field.label}>
         <strong>Permanent deletion: unused custom field and its options</strong>
@@ -3088,7 +3095,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
             if(customAdminBusyRef.current||uncertainAdminRef.current||cleanupConfirmText!=='DELETE')return;
             const snapshot=cleanupPreflight;
             if(!snapshot)return;
-            customAdminBusyRef.current=true;setBusy(true);
+            beginAdmin();
             setCleanupPreflight(null);setCleanupConfirmText('');
             let attempted=false;
             try{
@@ -3111,7 +3118,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
             }catch(e){
               if(attempted){uncertainAdminRef.current=true;setUncertainAdmin(true);}
               setNotice('Controlled cleanup not confirmed. Do not retry before reloading saved records and inspecting the backup: '+String(e));
-            }finally{customAdminBusyRef.current=false;setBusy(false);}
+            }finally{finishAdmin();}
           }}>Confirm permanent cleanup</button>
         </div>
       </div>}
@@ -3207,7 +3214,7 @@ function CustomFieldDiscovery({presentation,onPresentationChanged}:{presentation
   </details>;
 }
 
-function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,overrides,visibility,placements,order,fieldText,onFieldTextChanged,onOrderChanged,onPlacementChanged,onVisibilityChanged,customPresentation,customPresentationReady,customPresentationError,customCatalogBlocked,onCustomPresentationChanged,onChanged}:{onClose:()=>void;onInstruments:()=>void;onSources:()=>void;onAppearance:()=>void;overrides:RequirementOverrides;visibility:Record<string,boolean>;placements:Record<string,FieldPlacement>;order:Record<string,number>;fieldText:Record<string,{label?:string;help?:string}>;onFieldTextChanged:()=>Promise<void>;onOrderChanged:()=>Promise<void>;onPlacementChanged:()=>Promise<void>;onVisibilityChanged:()=>Promise<void>;customPresentation:CustomFieldPresentationMap;customPresentationReady:boolean;customPresentationError:string;customCatalogBlocked:boolean;onCustomPresentationChanged:()=>Promise<void>;onChanged:()=>Promise<void>}){
+function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,overrides,visibility,placements,order,fieldText,onFieldTextChanged,onOrderChanged,onPlacementChanged,onVisibilityChanged,customPresentation,customPresentationReady,customPresentationError,customCatalogBlocked,onCustomPresentationChanged,onCustomAdminLockChanged,onChanged}:{onClose:()=>void;onInstruments:()=>void;onSources:()=>void;onAppearance:()=>void;overrides:RequirementOverrides;visibility:Record<string,boolean>;placements:Record<string,FieldPlacement>;order:Record<string,number>;fieldText:Record<string,{label?:string;help?:string}>;onFieldTextChanged:()=>Promise<void>;onOrderChanged:()=>Promise<void>;onPlacementChanged:()=>Promise<void>;onVisibilityChanged:()=>Promise<void>;customPresentation:CustomFieldPresentationMap;customPresentationReady:boolean;customPresentationError:string;customCatalogBlocked:boolean;onCustomPresentationChanged:()=>Promise<void>;onCustomAdminLockChanged:(locked:boolean)=>void;onChanged:()=>Promise<void>}){
   const [draft,setDraft]=useState<RequirementOverrides>(overrides);
   const [msg,setMsg]=useState('');
   const [fieldSearch,setFieldSearch]=useState('');
@@ -3363,7 +3370,7 @@ function FieldRequirementManager({onClose,onInstruments,onSources,onAppearance,o
     <div className="panelTitle"><div><h2><JournalIcon name="checklist"/>Field Requirements</h2><p className="subtle">Choose which optional fields must be completed. System and conditional requirements are locked to protect workflow integrity.</p></div><div className="headerActions"><button onClick={onAppearance}>Appearance</button><button onClick={onInstruments}>Instruments</button><button onClick={onSources}>Level sources</button><button onClick={onClose}>Close</button></div></div>
     {msg&&<p role="status" aria-live="polite" className="subtle">{msg}</p>}
     {customCatalogBlocked?<div className="warningBox" role="status">Save or resolve unfinished custom answers in the journal before changing Custom Fields &amp; Options. Existing drafts remain open and are not discarded.</div>:customPresentationReady
-      ?<CustomFieldDiscovery presentation={customPresentation} onPresentationChanged={onCustomPresentationChanged}/>
+      ?<CustomFieldDiscovery presentation={customPresentation} onPresentationChanged={onCustomPresentationChanged} onAdminLockChanged={onCustomAdminLockChanged}/>
       :<div className="warningBox" role="alert">Custom Field presentation settings are not loaded. Editing is blocked until read-back succeeds. {customPresentationError}<button type="button" onClick={()=>void onCustomPresentationChanged()}>Reload saved settings</button></div>}
     {requiredPresentationGaps.length>0&&<p role="alert" className="warningBox">Required fields are not visible in both input modes: {requiredPresentationGaps.join(', ')}. Review your settings; these fields must remain accessible in Quick and Detailed.</p>}
     <details className="guidedMore" open><summary>All-input Field Manager · search and configure ({FIELD_CONTROL_INVENTORY.length} inputs)</summary>
