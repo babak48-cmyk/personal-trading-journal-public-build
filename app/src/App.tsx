@@ -295,6 +295,7 @@ export function App(){
   const [candidateEvidence,setCandidateEvidence]=useState<Record<string,EvidenceObservation[]>>({});
   const [quickMode,setQuickMode]=useState(true);
   const [decisionCandidate,setDecisionCandidate]=useState<CurrentCandidate|null>(null);
+  const [reentryFromTradeId,setReentryFromTradeId]=useState<string|null>(null);
   const [decisionClosePrompt,setDecisionClosePrompt]=useState(false);
   const [pendingDecisionPage,setPendingDecisionPage]=useState<'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'|null>(null);
   const [pendingDirectEvidenceZone,setPendingDirectEvidenceZone]=useState<CurrentCandidate|null>(null);
@@ -834,7 +835,7 @@ export function App(){
     const target=(requestedReviewTarget.fromAnalytics?findJournalTradeTarget:findClosedReviewTarget)(requestedReviewTarget.sessionId,requestedReviewTarget.tradeId,sessionTrades);
     if(!target)return;
     setRequestedReviewTarget(null);
-    void openTradeDetail(target);
+    void openTradeDetail(target,!requestedReviewTarget.fromAnalytics);
   },[requestedReviewTarget,active?.session_id,sessionTrades]);
 
   async function refreshPlan(){
@@ -1386,8 +1387,8 @@ export function App(){
       if(activeSessionIdRef.current===owner&&request===historyReadRequestRef.current)setHistoryOnlyLoading(false);
     }
   }
-  function decisionDraftKey(candidateId:string,type:string):string{
-    return scopedQuickDraftKey(active?.session_id??'', 'DECISION', candidateId, type);
+  function decisionDraftKey(candidateId:string,type:string,priorTradeId=reentryFromTradeId):string{
+    return scopedQuickDraftKey(active?.session_id??'', priorTradeId?'REENTRY':'DECISION', candidateId, type, priorTradeId);
   }
   function requestCloseDecisionEditor(){
     if(decisionSavingRef.current||decisionSaving){setMessage('Decision save is in progress.');return;}
@@ -1428,18 +1429,23 @@ export function App(){
     }
     return !decisionEditorHasUnsavedInput()||window.confirm('Discard UN-SAVED Decision details? The existing saved Decision history will remain intact.');
   }
-  async function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE'){
+  function openDecision(c:CurrentCandidate,type:'TRADE'|'NO_TRADE'|'MISSED'='TRADE',priorTradeId:string|null=null):boolean{
     // Evidence-to-Decision buttons also navigate away; protect unfinished capture.
-    if(notebookPage==='EVIDENCE'&&evidenceCandidate&&!closeEvidenceEditor())return;
-    if(!confirmCloseDecisionEditor())return;
-    const savedDraft=decisionDraftsRef.current[decisionDraftKey(c.candidate_id,type)];
+    if(notebookPage==='EVIDENCE'&&evidenceCandidate&&!closeEvidenceEditor())return false;
+    if(!confirmCloseDecisionEditor())return false;
+    const savedDraft=decisionDraftsRef.current[decisionDraftKey(c.candidate_id,type,priorTradeId)];
+    setReentryFromTradeId(priorTradeId);
     setDecisionClosePrompt(false);setPendingDecisionPage(null);
     setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c);
     setDecisionType(savedDraft?.decisionType??type);setDecisionInitialType(type);
     setDecisionReason(savedDraft?.reason??'');setDecisionNote(savedDraft?.note??'');
     setDecisionQuality(savedDraft?.quality??'');setMismatchReason(savedDraft?.mismatchReason??'');
     setDecisionDirection(savedDraft?.direction??directionFromZoneIntent(c.directional_intent));
-    try{const rows=await localApi.listCandidateDecisions(c.candidate_id);setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));}catch{}
+    const generation=sessionLoadRequestRef.current;
+    void localApi.listCandidateDecisions(c.candidate_id).then(rows=>{
+      if(sessionLoadRequestRef.current===generation)setCandidateDecisions(v=>({...v,[c.candidate_id]:rows}));
+    }).catch(()=>{}); // History can be refreshed from the Zone without affecting the draft.
+    return true;
   }
   async function saveDecision(){
     if(!active||!decisionCandidate||decisionSavingRef.current||hasUncertainWrite(decisionSaveUncertainZoneId,decisionCandidate.candidate_id))return;
@@ -1825,11 +1831,10 @@ export function App(){
       return;
     }
     if(!confirmDiscardUnsavedTradeCapture('to a same-Zone re-entry'))return;
+    if(!openDecision(zone,'TRADE',t.trade_id))return;
     resetManagementCapture();
     reviewSelectionRequestRef.current++;
-    setActiveTrade(null);applyReview(null,null);setReviewVerifiedTradeId(null);setReviewFeedback('');
-    setQuickZoneId(zone.candidate_id);
-    void openDecision(zone,'TRADE');
+    setActiveTrade(null);applyReview(null,null);applyRuleCheck(null);setReviewVerifiedTradeId(null);setReviewFeedback('');
   }
   function revealVerifiedPostTradeReview(tradeId:string,request:number){
     // React must mount the newly selected Trade before scrolling. The second
@@ -2247,7 +2252,7 @@ export function App(){
             {!historyOnlyLoading&&historyOnlyZoneId&&!historyOnlyError&&candidateDecisions[historyOnlyZoneId]&&<DecisionHistoryList rows={candidateDecisions[historyOnlyZoneId]}/>}
           </div>}
           {lastDecisionNotice&&!decisionCandidate&&<p role="status" className="okBox">{lastDecisionNotice}</p>}
-          {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision"><div className="panelTitle"><div><h2><JournalIcon name="checklist"/>Decision · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button type="button" onClick={requestCloseDecisionEditor}>Close</button></div>
+          {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision"><div className="panelTitle"><div><h2><JournalIcon name="checklist"/>{reentryFromTradeId?'New attempt':'Decision'} · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button type="button" onClick={requestCloseDecisionEditor}>Close</button></div>
             <div className="fieldHelpLine"><b>{fieldText['decision.type']?.label?.trim()||'Decision'}</b>{fieldText['decision.type']?.help&&<small title={fieldText['decision.type'].help}>ⓘ</small>}<FieldHelp id="decision.type" value={decisionType}/></div><div className="decisionChoice"><button className={decisionType==='TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='TRADE'){setDecisionType('TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}><JournalIcon name="open"/>TRADE</button><button className={decisionType==='NO_TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='NO_TRADE'){setDecisionType('NO_TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}><JournalIcon name="noTrade"/>NO-TRADE</button><button className={decisionType==='MISSED'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='MISSED'){setDecisionType('MISSED');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}><JournalIcon name="missed"/>MISSED</button></div>
             {decisionType==='TRADE'&&<div className="formGrid">{orderFieldIdsWithinSection(TRADE_DECISION_ORDER,fieldOrder).map(id=>
               id==='decision.direction' ? <label key={id} data-validation-id="decision.direction" className={invalidClass('decision.direction')}>{fieldText['decision.direction']?.label?.trim()||"Direction"} {fieldText['decision.direction']?.help&&<small title={fieldText['decision.direction'].help}>ⓘ</small>} <small>{decisionCandidate.directional_intent==='LONG'||decisionCandidate.directional_intent==='SHORT'?'From the saved Zone intent; change only if you intend the opposite side.':'Choose explicitly — the Zone has no committed LONG/SHORT direction.'}</small><select value={decisionDirection} onChange={e=>{setDecisionDirection(e.target.value as ExplicitTradeDirection);setMismatchReason('');clearValidation('decision.mismatchReason');clearValidation('decision.direction');}}><option value="">Choose direction</option><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select></label>
@@ -2299,7 +2304,7 @@ export function App(){
   <span><b>Net R of known closed trades</b>{pulse.knownRTrades?pulse.sumKnownR.toFixed(2)+' R':'—'}</span>
 </div>})()}
   {(()=>{const pulse=summarizeSessionTradeExecution(sessionTrades);return pulse.unknownRClosedTrades>0?<p className="subtle" role="status">{pulse.unknownRClosedTrades} closed trade(s) have unknown net R due to missing cost, initial risk, or accounting evidence; excluded from known-R sum. This is not a zero result.</p>:null})()}
-  <div className="tradeList">{sessionTrades.map(t=><button className="tradeRow" key={t.trade_id} onClick={()=>openTradeDetail(t)}><b>{t.direction}</b><span>{t.status}</span><span>Qty open {t.open_quantity}</span><span>{t.realized_r==null?'R —':`${t.realized_r.toFixed(2)}R`}</span></button>)}</div></div>}
+  <div className="tradeList">{sessionTrades.map(t=><button className="tradeRow" key={t.trade_id} onClick={()=>void openTradeDetail(t,t.status==='CLOSED')}><b>{t.direction}</b><span>{t.status}{t.status==='CLOSED'?' · Open review':''}</span><span>Qty open {t.open_quantity}</span><span>{t.realized_r==null?'R —':`${t.realized_r.toFixed(2)}R`}</span></button>)}</div></div>}
 
           {activeTrade&&<div className="panel executionPanel"><div className="panelTitle"><div><h2><JournalIcon name="closed"/>Open trade / execution</h2><p className="subtle">{activeTrade.metrics.direction} · {activeTrade.metrics.status}</p><p className="subtle" role="note"><strong>Setup at decision (read-only): </strong>{activeTrade.setup_at_decision ? (activeTrade.setup_at_decision.name??'Historical Setup')+' · '+(activeTrade.setup_at_decision.version_number==null?'version unknown':'v'+activeTrade.setup_at_decision.version_number) : 'No Setup version recorded at decision'}<small> · Historical Trade snapshot, not the current Zone Setup.</small></p></div><button onClick={()=>{if(!confirmDiscardUnsavedTradeCapture('away from this trade',false))return;reviewSelectionRequestRef.current++;setActiveTrade(null);}}>Close</button></div>{activeTrade.metrics.status==='CLOSED'&&activeTrade.metrics.candidate_id&&plan?.candidates.some(c=>c.candidate_id===activeTrade.metrics.candidate_id)&&<div className="rowActions">{(()=>{const zone=plan?.candidates.find(c=>c.candidate_id===activeTrade.metrics.candidate_id);const issue=sameZoneReentryIssue({sessionId:active?.session_id??null,sessionStatus:active?.status??null,tradeSessionId:activeTrade.metrics.session_id,tradeStatus:activeTrade.metrics.status,tradeZoneId:activeTrade.metrics.candidate_id,zoneId:zone?.candidate_id,zoneStatus:zone?.current_status});return <><button type="button" disabled={!!issue} title={issue??'Start a separate Decision'} onClick={()=>beginSameZoneReentry(activeTrade.metrics)}>New independent decision in this Zone</button><small>{issue??'Creates a separate decision; the previous trade and review stay unchanged.'}</small></>;})()}</div>}<div className="summaryStrip"><span><b><JournalIcon name="entry"/>Avg entry</b>{activeTrade.metrics.average_entry?.toFixed(2)??'—'}</span><span><b><JournalIcon name="quantity"/>Open qty</b>{activeTrade.metrics.open_quantity}</span><span><b><JournalIcon name="stop"/>Stop</b>{activeTrade.metrics.latest_stop_price?.toFixed(2)??'—'}</span><span><b><JournalIcon name="risk"/>Initial risk</b>{activeTrade.metrics.initial_risk_dollars==null?'—':`$${activeTrade.metrics.initial_risk_dollars.toFixed(2)}`}</span><span><b><JournalIcon name="ratio"/>Net R (verified costs)</b>{verifiedRealizedMetrics(activeTrade.fills,activeTrade.metrics.total_exit_quantity,activeTrade.metrics.net_realized_pnl,activeTrade.metrics.realized_r).r===null?'Unknown / not yet realized':`${verifiedRealizedMetrics(activeTrade.fills,activeTrade.metrics.total_exit_quantity,activeTrade.metrics.net_realized_pnl,activeTrade.metrics.realized_r).r!.toFixed(2)}R`}</span><span><b>Cost entries</b>{fillCostCoverage(activeTrade.fills).completeFillCount}/{fillCostCoverage(activeTrade.fills).fillCount} complete</span><span><b><JournalIcon name="result"/>Gross realized P&amp;L</b>{activeTrade.metrics.gross_realized_pnl==null?'—':`${activeTrade.metrics.gross_realized_pnl.toFixed(2)} ${active?.instrument_currency??''}`}</span><span><b>All recorded fill costs to date</b>{verifiedFillCostSummary(activeTrade.fills).verifiedTotal===null?'Unknown / unverified':`${verifiedFillCostSummary(activeTrade.fills).verifiedTotal!.toFixed(2)} ${active?.instrument_currency??''}`}</span><span><b>{tradePositionDisclosure(activeTrade.metrics.open_quantity,activeTrade.metrics.total_exit_quantity).label}</b>{verifiedRealizedMetrics(activeTrade.fills,activeTrade.metrics.total_exit_quantity,activeTrade.metrics.net_realized_pnl,activeTrade.metrics.realized_r).net===null?'Unknown / not yet realized':`${verifiedRealizedMetrics(activeTrade.fills,activeTrade.metrics.total_exit_quantity,activeTrade.metrics.net_realized_pnl,activeTrade.metrics.realized_r).net!.toFixed(2)} ${active?.instrument_currency??''}`}</span></div>{tradePositionDisclosure(activeTrade.metrics.open_quantity,activeTrade.metrics.total_exit_quantity).explanation&&<p role="note" className="subtle">{tradePositionDisclosure(activeTrade.metrics.open_quantity,activeTrade.metrics.total_exit_quantity).explanation}</p>}{activeTrade.metrics.total_exit_quantity>0&&verifiedFillCostSummary(activeTrade.fills).verifiedTotal===null&&<p role="status" className="warningBox">Net P&amp;L and R are UNKNOWN and excluded from R-based analysis: {verifiedFillCostSummary(activeTrade.fills).missingFields} missing and {verifiedFillCostSummary(activeTrade.fills).invalidFields} invalid/unrepresentable commission or fee values. Gross P&amp;L remains available. Recording 0 means confirmed zero, not a default.</p>}{executionAccountingCautions(activeTrade.fills).map(caution=><p key={caution} role="alert" className="warningBox">{caution}</p>)}{activeTrade.metrics.status!=='CLOSED'&&<><div className="executionActions"><div><h3>Add fill</h3><div className="formGrid">{orderFieldIdsWithinSection(["fill.action","fill.price","fill.quantity","fill.reason"],fieldOrder).map(id=><div key={id} style={{display:'contents'}}>{id==='fill.action'?(<label>{fieldText['fill.action']?.label?.trim()||"Action"} {fieldText['fill.action']?.help&&<small title={fieldText['fill.action'].help}>ⓘ</small>}<select value={fillAction} onChange={e=>setFillAction(e.target.value as 'ENTRY'|'EXIT')}><option value="EXIT">Partial / full exit</option><option value="ENTRY">Additional entry</option></select></label>):id==='fill.price'?(<label data-validation-id="fill.price" className={invalidClass('fill.price')}>{fieldText['fill.price']?.label?.trim()||"Price"} {fieldText['fill.price']?.help&&<small title={fieldText['fill.price'].help}>ⓘ</small>}<input type="number" step={tickStep} value={fillPrice??''} onChange={e=>{setFillPrice(e.target.value===''?null:Number(e.target.value));clearValidation('fill.price')}}/></label>):id==='fill.quantity'?(<div><label data-validation-id="fill.quantity" className={invalidClass('fill.quantity')}>{fieldText['fill.quantity']?.label?.trim()||"Qty"} {fieldText['fill.quantity']?.help&&<small title={fieldText['fill.quantity'].help}>ⓘ</small>}<input type="number" min="1" step="1" value={fillQty} onChange={e=>{setFillQty(e.target.value===''?0:Number(e.target.value));clearValidation('fill.quantity')}}/></label>{fillAction==='EXIT'&&<button type="button" disabled={fillSaving||activeTrade.metrics.open_quantity<=0} onClick={()=>{setFillQty(activeTrade.metrics.open_quantity);clearValidation('fill.quantity')}}>Use full remaining qty ({activeTrade.metrics.open_quantity})</button>}</div>):(isFieldPresented('fill.reason',quickMode,fieldVisibility,fieldPlacements,requirementOverrides)&&<label data-validation-id="fill.reason" className={invalidClass('fill.reason')}>{fieldText['fill.reason']?.label?.trim()||'Fill reason'} <small>{requirementLabel('fill.reason',requirementOverrides)}</small>{fieldText['fill.reason']?.help&&<small title={fieldText['fill.reason'].help}>ⓘ</small>}<input value={fillReason} onChange={e=>{setFillReason(e.target.value);clearValidation('fill.reason')}} placeholder="Target / risk reduction / other"/></label>)}</div>)}</div><details className="guidedMore"><summary>Commission and fees for this fill (optional)</summary>
             <p className="subtle">Total amounts for this particular fill, not per contract. Blank means unknown; 0 means confirmed zero. These amounts affect net P&L and net R.</p>
