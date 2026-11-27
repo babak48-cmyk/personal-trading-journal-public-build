@@ -256,6 +256,7 @@ pub fn run() {
             commands::delete_attachment,
             commands::export_journal_html,
             commands::export_journal_csv,
+            commands::export_journal_decisions_csv,
             commands::list_weekly_actions,
             commands::save_weekly_action,
             commands::open_export_folder
