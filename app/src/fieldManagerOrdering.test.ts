@@ -10,7 +10,7 @@ describe('Package A connected Field Manager ordering',()=>{
    expect(FIELD_CONTROL_INVENTORY.some(x=>x.id===id)).toBe(true);
    expect(managerOrderPosition(id,{})).not.toBeNull();
   }
-  expect(managerOrderPosition('trade.entryPrice',{})).toBeNull();
+  expect(managerOrderPosition('trade.entryPrice',{})?.position).toBe(0);
   expect(managerOrderPosition('candidate.trendRelationship',{})).toBeNull();
  });
  it('reports persisted reordered positions for a filtered inventory row',()=>{
@@ -40,7 +40,7 @@ describe('Field Manager actual capability filters',()=>{
  });
  it('keeps execution identities protected and unknown IDs noneditable',()=>{
   for(const id of ['session.date','session.instrument','session.environment','candidate.intent','candidate.priceMode','plan.bias','candidate.price','decision.type','decision.reason','trade.entryPrice','trade.stopPrice','trade.quantity']){
-   expect(fieldManagerCapabilities(id),id).toMatchObject({protected:true,editable:true,requirement:false,visibility:false,placement:false,text:true,order:false});
+   expect(fieldManagerCapabilities(id),id).toMatchObject({protected:true,editable:true,requirement:false,visibility:false,placement:false,text:true,order:['session.date','session.instrument','session.environment','trade.entryPrice','trade.stopPrice','trade.quantity'].includes(id)});
   }
   expect(fieldManagerCapabilities('unknown.field').editable).toBe(false);
  });
@@ -61,10 +61,15 @@ describe('Session review overall assessment ordering',()=>{
 
 
 describe('Protected psychology and trend presentation preferences',()=>{
- it.each(['psychology.state','psychology.stage','candidate.trendRelationship'])('allows text customization only for %s',id=>{
-  expect(fieldManagerCapabilities(id)).toMatchObject({editable:true,text:true,protected:true,requirement:false,visibility:false,placement:false,order:false});
+ it.each(['psychology.state','psychology.stage','candidate.trendRelationship'])('preserves protected semantics for %s while permitting supported presentation',id=>{
+  expect(fieldManagerCapabilities(id)).toMatchObject({editable:true,text:true,protected:true,requirement:false,visibility:false,placement:false,order:id!=='candidate.trendRelationship'});
  });
  it('retains required-only semantics of the emotion gate while enabling text',()=>{
   expect(fieldManagerCapabilities('psychology.emotionAffected')).toMatchObject({editable:true,text:true,requirement:true,visibility:false,placement:false,order:false});
  });
+});
+
+it('keeps session and entry ordering within their own sections',()=>{
+ expect(managerOrderPosition('session.instrument',{'session.instrument':0,'session.date':1})?.ids).toEqual(['session.instrument','session.date','session.environment']);
+ expect(managerOrderPosition('trade.plannedTarget',{'trade.plannedTarget':0})?.ids).toEqual(['trade.plannedTarget','trade.entryPrice','trade.stopPrice','trade.quantity']);
 });
