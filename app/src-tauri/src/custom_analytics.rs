@@ -145,6 +145,36 @@ pub fn analyze_decisions(conn:&Connection,filter:JournalFilterInput,field_id:&st
 mod tests{
     use super::*;
     #[test]
+    fn decision_only_filter_and_as_of_values_exclude_trade_and_later_answers(){
+        let db=Connection::open_in_memory().unwrap();
+        db.execute_batch("
+          CREATE TABLE custom_field_definitions(field_id TEXT,stage TEXT,field_type TEXT,label TEXT,help_text TEXT,is_required INTEGER,is_active INTEGER,display_order INTEGER);
+          INSERT INTO custom_field_definitions VALUES('f','zone','NUMBER','Field','',0,0,0),('r','execution','NUMBER','Execution','',0,1,1);
+          CREATE TABLE instruments(instrument_id TEXT,symbol TEXT);
+          INSERT INTO instruments VALUES('i','ES'),('j','GC');
+          CREATE TABLE sessions(session_id TEXT,session_date TEXT,instrument_id TEXT,instrument_symbol_snapshot TEXT);
+          INSERT INTO sessions VALUES('s','2026-11-27','i','ES'),('g','2026-11-27','j','GC');
+          CREATE TABLE candidate_decisions(decision_id TEXT,session_id TEXT,candidate_id TEXT,decision_type TEXT,occurred_at TEXT,reason_code TEXT,reason_note TEXT);
+          INSERT INTO candidate_decisions VALUES
+          ('a','s','z','NO_TRADE','2026-11-27T01:00:00Z','WAIT',NULL),
+          ('b','s','z','MISSED','2026-11-27T01:30:00Z',NULL,'Missed'),
+          ('c','s','z','TRADE','2026-11-27T01:30:00Z',NULL,NULL),
+          ('d','s',NULL,'MISSED','2026-11-27T01:30:00Z',NULL,'No zone'),
+          ('e','g','z2','MISSED','2026-11-27T01:30:00Z',NULL,'Other instrument');
+          CREATE TABLE custom_field_value_events(event_id TEXT,field_id TEXT,owner_stage TEXT,owner_id TEXT,value_type TEXT,text_value TEXT,number_value REAL,boolean_value INTEGER,date_value TEXT,recorded_at TEXT);
+          INSERT INTO custom_field_value_events VALUES
+          ('old','f','zone','z','NUMBER',NULL,0,NULL,NULL,'2026-11-27T00:00:00Z'),
+          ('later','f','zone','z','NUMBER',NULL,9,NULL,NULL,'2026-11-27T02:00:00Z');
+        ").unwrap();
+        let filter:JournalFilterInput=serde_json::from_str(r#"{"instrument_symbol":"ES","direction":"LONG"}"#).unwrap();
+        let result=analyze_decisions(&db,filter.clone(),"f").unwrap();
+        assert_eq!(result.rows.len(),3);
+        assert_eq!(result.rows.iter().filter(|r|r.decision_type=="MISSED").count(),2);
+        assert_eq!(result.rows.iter().filter(|r|r.answer.as_ref().and_then(|a|a.number_value)==Some(0.0)).count(),2);
+        assert!(result.rows.iter().find(|r|r.decision_id=="d").unwrap().answer.is_none());
+        assert!(analyze_decisions(&db,filter,"r").is_err());
+    }
+    #[test]
     fn canonical_owner_and_as_of_answer_do_not_leak_later_or_other_owner_values(){
         let db=Connection::open_in_memory().unwrap();
         // Minimal read-side fixture for temporal and owner SQL, independent of
