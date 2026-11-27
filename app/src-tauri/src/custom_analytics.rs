@@ -28,10 +28,10 @@ pub struct CustomTradeAnalysis {
     pub rows:Vec<CustomTradeAnswer>,
 }
 
-fn decision_stage(stage:&str)->bool{
+pub(crate) fn decision_stage(stage:&str)->bool{
     matches!(stage,"session"|"premarket-plan"|"candidate"|"zone")
 }
-fn read_answer(conn:&Connection,field:&ManagedField,owner:&str,decision_at:Option<&str>)->Result<Option<SavedAnswer>,AppError>{
+pub(crate) fn read_answer(conn:&Connection,field:&ManagedField,owner:&str,decision_at:Option<&str>)->Result<Option<SavedAnswer>,AppError>{
     // Match the journal's existing timestamp semantics: planning answers must
     // have a parseable timestamp at or before the original Decision instant.
     // Later review/execution answers are explicitly retrospective.
@@ -56,7 +56,7 @@ fn read_answer(conn:&Connection,field:&ManagedField,owner:&str,decision_at:Optio
     Ok(None)
 }
 
-fn canonical_owner(conn:&Connection,stage:&str,trade_id:&str)->Result<Option<String>,AppError>{
+pub(crate) fn canonical_owner(conn:&Connection,stage:&str,trade_id:&str)->Result<Option<String>,AppError>{
     // Derive identities from canonical foreign keys, not display names or
     // user-supplied owner IDs. Session review values use review_id, not session_id.
     let query=match stage{
