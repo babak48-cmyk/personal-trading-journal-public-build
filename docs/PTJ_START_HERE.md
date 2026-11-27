@@ -1,3 +1,9 @@
+## Set 1 implementation delivered and Set 2 started — 2026-11-27
+
+See [PTJ-SET1-FIELD-MANAGER-DELIVERY-2026-11-27](https://github.com/babak48-cmyk/personal-trading-journal-public-build/blob/10e411f12ad3886cdd2fac89211df02c86056119/docs/PTJ_DEMO_FINDINGS_BATCH_CHECKPOINT.md#ptj-set1-field-manager-delivery-2026-11-27). PUBLIC PR #17 checkpoint HEAD `10e411f12ad3886cdd2fac89211df02c86056119`; exact app source `3f7eba37725ad62488b32567a4cf7d0115388549`. Local build and 637 frontend tests PASS. Set 1 implementation delivered for tracked scope; latest GitHub CI and installed Windows acceptance are separate. Set 2 pending-entry preservation started. Continue with its Decision → entry → management → Review checks; Set 3 remains the consolidated isolated Windows DEMO.
+
+---
+
 ## PTJ-SET1-CUSTOM-ORDERING-AND-CATALOG-2026-11-27
 
 PUBLIC Draft PR #17, feature/ptj-c-transfer-integrity-2026-11-23, exact independently fetched source `73adff218776a5c932c8990f09d52efe03c341c8` (tree `e2de052859c2bcfc35a70b6a13cb3ebffd294790`). Approved Set 1 / roadmap #3–4. Earlier source `360ae879a84b548d6f2649829bca5a751262da62` passed run 45955510599 (frontend, Rust, isolated Windows build). Changes since that source: `app/src/App.tsx`, `app/src/customFieldStage.ts`, `app/src/customFieldStage.test.ts`, `app/tests/customFieldOwnerIsolation.test.ts`, `app/src/customAdminValidation.ts` and `app/src/customAdminValidation.test.ts`. Select and typed answers share the saved per-stage order at all seven supported owners. Owner/catalog identity, required-field navigation, draft and uncertain-write safeguards, and stored history are retained. New definitions/options append after persisted sibling ranks, including sparse and inactive records; creation readback checks the rank. Configured help now renders for Evidence direction and evidence summary when adding a live Zone. The editor groups types together within the same owner; existing persistence APIs and schema remain in use.
