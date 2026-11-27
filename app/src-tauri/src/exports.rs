@@ -39,6 +39,47 @@ fn verify_export_audit_chains(conn:&Connection)->Result<(),AppError>{
 }
 
 
+#[derive(Serialize)]
+struct ExportCustomAnswer {
+    field_id:String,
+    current_label:String,
+    stage:String,
+    active:bool,
+    timing:String,
+    owner_id:Option<String>,
+    answer:Option<crate::custom_analytics::SavedAnswer>,
+}
+fn custom_trade_answers(conn:&Connection,fields:&[crate::custom_fields::ManagedField],trade_id:&str,decision_at:Option<&str>)->Result<Vec<ExportCustomAnswer>,AppError>{
+    let mut out=Vec::new();
+    for field in fields{
+        if !matches!(field.stage.as_str(),"session"|"premarket-plan"|"candidate"|"zone"|"trade"|"execution"|"post-trade-review"|"session-review"){continue;}
+        let owner_id=crate::custom_analytics::canonical_owner(conn,&field.stage,trade_id)?;
+        let answer=match owner_id.as_deref(){
+            Some(owner)=>crate::custom_analytics::read_answer(conn,field,owner,decision_at)?,
+            None=>None,
+        };
+        out.push(ExportCustomAnswer{field_id:field.field_id.clone(),current_label:field.label.clone(),stage:field.stage.clone(),active:field.active,
+            timing:if crate::custom_analytics::decision_stage(&field.stage){"AT_OR_BEFORE_DECISION"}else{"LATEST_RECORDED_RETROSPECTIVE"}.into(),owner_id,answer});
+    }
+    Ok(out)
+}
+fn answer_display(answer:Option<&crate::custom_analytics::SavedAnswer>)->String{
+    let Some(a)=answer else{return "Not recorded / unavailable".into()};
+    match a.value_type.as_str(){
+        "TEXT"=>a.text_value.clone(),
+        "NUMBER"=>a.number_value.map(|v|v.to_string()),
+        "BOOLEAN"=>a.boolean_value.map(|v|if v{"Yes"}else{"No"}.into()),
+        "DATE"=>a.date_value.clone(),
+        "SINGLE_SELECT"|"MULTI_SELECT" if !a.options.is_empty()=>Some(a.options.iter().map(|o|format!("{} [{}]",o.label_at_selection,o.option_id)).collect::<Vec<_>>().join(" + ")),
+        _=>None,
+    }.unwrap_or_else(||"Not recorded / unavailable".into())
+}
+fn append_custom_html_row(html:&mut String,kind:&str,id:&str,field_id:&str,label:&str,stage:&str,timing:&str,owner:Option<&str>,answer:Option<&crate::custom_analytics::SavedAnswer>){
+    let cells=[kind,id,field_id,label,stage,timing,owner.unwrap_or("Unavailable"),answer.map(|a|a.event_id.as_str()).unwrap_or(""),answer.map(|a|a.recorded_at.as_str()).unwrap_or("")];
+    html.push_str("<tr>");
+    for cell in cells{html.push_str(&format!("<td>{}</td>",esc_html(cell)));}
+    html.push_str(&format!("<td>{}</td></tr>",esc_html(&answer_display(answer))));
+}
 pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)->Result<ExportResult,AppError>{
     verify_export_audit_chains(conn)?;
     let rows=repository::list_journal_trades(conn,filter.clone())?;
@@ -48,7 +89,8 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
     // only date/instrument apply to NO_TRADE/MISSED, never trade-only
     // direction, quality, evidence or level source filters.
     let decision_rows=repository::list_decision_only_analytics(conn,filter.clone())?;
-    let reason_rows=repository::list_decision_reason_analytics(conn,filter)?;
+    let reason_rows=repository::list_decision_reason_analytics(conn,filter.clone())?;
+    let custom_fields=crate::custom_fields::list_custom_fields(conn)?;
     // Compute and validate all audit chains before a report is written.
     // No correction history may be silently dropped from effective-value reports.
     let mut audits:Vec<(String,Vec<CorrectionHistoryEvent>)>=Vec::new();
@@ -131,6 +173,20 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
       html.push_str("<tr><td colspan='5'>No recorded decision reason groups for the selected date/instrument filters.</td></tr>");
     }
     html.push_str("</tbody></table>");
+    html.push_str("<h2>Custom field answers</h2><p>Current field titles, including inactive definitions. Planning/Zone values are as recorded by Decision time; execution and review values are retrospective. Missing answers are unavailable, not zero. Decision-only rows use date/instrument filters only.</p><table><thead><tr><th>Record type</th><th>Record ID</th><th>Field ID</th><th>Current label</th><th>Stage</th><th>Timing</th><th>Owner ID</th><th>Answer event ID</th><th>Recorded at</th><th>Answer</th></tr></thead><tbody>");
+    for row in &rows{
+        for value in custom_trade_answers(conn,&custom_fields,&row.trade_id,row.decision_occurred_at.as_deref())?{
+            append_custom_html_row(&mut html,"TRADE",&row.trade_id,&value.field_id,&value.current_label,&value.stage,&value.timing,value.owner_id.as_deref(),value.answer.as_ref());
+        }
+    }
+    for field in &custom_fields{
+        if !crate::custom_analytics::decision_stage(&field.stage){continue;}
+        let analysis=crate::custom_analytics::analyze_decisions(conn,filter.clone(),&field.field_id)?;
+        for row in analysis.rows{
+            append_custom_html_row(&mut html,&row.decision_type,&row.decision_id,&field.field_id,&field.label,&field.stage,"AT_OR_BEFORE_DECISION",row.owner_id.as_deref(),row.answer.as_ref());
+        }
+    }
+    html.push_str("</tbody></table>");
     html.push_str("<h2>Audited corrections</h2><p>Trade results above use effective recorded values. Every correction retains the original immutable execution event, the previous and replacement values, reason and timestamp. Original values are never rewritten.</p>");
     html.push_str("<table><thead><tr><th>Trade ID</th><th>Execution ID</th><th>Field</th><th>Revision</th><th>Previous</th><th>Replacement</th><th>Reason</th><th>Timestamp (UTC)</th><th>Operator</th><th>Correction ID</th></tr></thead><tbody>");
     let mut any=false;
@@ -201,10 +257,11 @@ pub fn export_html(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)
 pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)->Result<ExportResult,AppError>{
     verify_export_audit_chains(conn)?;
     let rows=repository::list_journal_trades(conn,filter)?;
+    let custom_fields=crate::custom_fields::list_custom_fields(conn)?;
     fs::create_dir_all(&paths.exports)?;
     let created=Utc::now();
     let path=paths.exports.join(format!("TradingJournal_Trades_{}_{}.csv",created.format("%Y%m%d_%H%M%S"),Uuid::new_v4()));
-    let mut out=String::from("session_date,instrument,direction,status,candidate,level_sources,decision_quality,rule_status,mistakes,realized_r_effective,net_pnl_effective,trade_id,audited_correction_count,audited_corrections_json,audited_initial_risk_correction_count,audited_initial_risk_corrections_json,audited_source_type_correction_count,audited_source_type_corrections_json,audited_source_price_correction_count,audited_source_price_corrections_json\n");
+    let mut out=String::from("session_date,instrument,direction,status,candidate,level_sources,decision_quality,rule_status,mistakes,realized_r_effective,net_pnl_effective,trade_id,audited_correction_count,audited_corrections_json,audited_initial_risk_correction_count,audited_initial_risk_corrections_json,audited_source_type_correction_count,audited_source_type_corrections_json,audited_source_price_correction_count,audited_source_price_corrections_json,custom_field_answers_json\n");
     for r in &rows {
         let events=fill_corrections::list_trade_correction_history(conn,&r.trade_id)?;
         let history_json=serde_json::to_string(&events)?;
@@ -214,7 +271,7 @@ pub fn export_csv(conn:&Connection, paths:&AppPaths, filter:JournalFilterInput)-
         let source_history_json=serde_json::to_string(&source_events)?;
         let source_price_events=source_price_corrections::list_for_trade(conn,&r.trade_id)?;
         let source_price_history_json=serde_json::to_string(&source_price_events)?;
-        let vals=[csv_cell(&r.session_date),csv_cell(&r.instrument_symbol),csv_cell(&r.direction),csv_cell(&r.status),csv_cell(r.candidate_label.as_deref().unwrap_or("")),csv_cell(&r.level_sources.join(" | ")),csv_cell(r.decision_quality.as_deref().unwrap_or("")),csv_cell(&r.rule_status),csv_cell(&r.mistakes.join(" | ")),r.realized_r.map(|v|v.to_string()).unwrap_or_default(),r.net_realized_pnl.map(|v|v.to_string()).unwrap_or_default(),csv_cell(&r.trade_id),events.len().to_string(),csv_cell(&history_json),risk_events.len().to_string(),csv_cell(&risk_history_json),source_events.len().to_string(),csv_cell(&source_history_json),source_price_events.len().to_string(),csv_cell(&source_price_history_json)];
+        let vals=[csv_cell(&r.session_date),csv_cell(&r.instrument_symbol),csv_cell(&r.direction),csv_cell(&r.status),csv_cell(r.candidate_label.as_deref().unwrap_or("")),csv_cell(&r.level_sources.join(" | ")),csv_cell(r.decision_quality.as_deref().unwrap_or("")),csv_cell(&r.rule_status),csv_cell(&r.mistakes.join(" | ")),r.realized_r.map(|v|v.to_string()).unwrap_or_default(),r.net_realized_pnl.map(|v|v.to_string()).unwrap_or_default(),csv_cell(&r.trade_id),events.len().to_string(),csv_cell(&history_json),risk_events.len().to_string(),csv_cell(&risk_history_json),source_events.len().to_string(),csv_cell(&source_history_json),source_price_events.len().to_string(),csv_cell(&source_price_history_json),csv_cell(&serde_json::to_string(&custom_trade_answers(conn,&custom_fields,&r.trade_id,r.decision_occurred_at.as_deref())?)?)];
         out.push_str(&vals.join(","));out.push('\n');
     }
     write_new_report(&path,out.as_bytes())?;
