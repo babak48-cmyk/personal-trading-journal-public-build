@@ -336,3 +336,17 @@ describe('Approved market outlook vocabulary', () => {
     expect(isFieldPresented('plan.bias',true,{'plan.bias':false},{'plan.bias':'DETAILED_ONLY'},{})).toBe(true);
   });
 });
+
+
+describe('Actual execution costs and appearance controls are inventoried',()=>{
+ it('protects explicit zero versus unknown execution costs from hide or placement overrides',()=>{
+  for(const id of ['trade.entryCommission','trade.entryFees','fill.commission','fill.fees']){
+   expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toMatchObject({stage:'execution',candidateForCustomization:false});
+   expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+   expect(isEditableRequirementControl(id)).toBe(false);
+  }
+ });
+ it('includes both current appearance selectors without changing journal requirements',()=>{
+  for(const id of ['appearance.accent','appearance.visualMode'])expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toMatchObject({category:'appearance-preference',candidateForCustomization:false});
+ });
+});
