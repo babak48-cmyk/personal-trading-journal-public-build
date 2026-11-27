@@ -320,3 +320,10 @@ describe('Trade Review note field manager integration',()=>{
     }
   });
 });
+
+describe('Protected financial and management input ordering',()=>{
+  it.each([['trade.entryCommission','trade.entryFees'],['fill.commission','fill.fees'],['management.newStop','management.reason']])('reorders %s and %s without changing field identity',(first,second)=>{
+    expect(orderFieldIdsWithinSection([first,second],{[second]:0,[first]:1})).toEqual([second,first]);
+    expect(isFieldPresented(first,true,{[first]:false},{[first]:'DETAILED_ONLY'},{})).toBe(true);
+  });
+});
