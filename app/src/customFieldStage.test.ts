@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CAPTURABLE_CUSTOM_FIELD_STAGES,canCaptureCustomFieldStage,customFieldFocusId,eligibleCustomFields,showSessionCustomFieldsOnPage } from './customFieldStage';
+import { CAPTURABLE_CUSTOM_FIELD_STAGES,canCaptureCustomFieldStage,customFieldFocusId,eligibleCustomFields,orderCustomFieldEntries,showSessionCustomFieldsOnPage } from './customFieldStage';
 import type { CustomFieldDefinition } from './services/localApi';
 
 const entry=(field_id:string,stage:string,field_type:string,display_order:number,active=true):CustomFieldDefinition=>({
@@ -40,6 +40,23 @@ describe('canonical owner-stage custom-field capture',()=>{
     expect(eligibleCustomFields(fields,'post-trade-review','select').map(f=>f.field_id)).toEqual(['review-select']);
     expect(eligibleCustomFields(fields,'session-review','typed').map(f=>f.field_id)).toEqual(['session-review-note']);
     expect(eligibleCustomFields(fields,'session-review','select').map(f=>f.field_id)).toEqual(['session-review-select']);
+  });
+  it('uses the shared catalog order across selection and typed fields',()=>{
+    const catalog=[
+      entry('note','zone','TEXT',0),
+      entry('choice','zone','SINGLE_SELECT',1),
+      entry('size','zone','NUMBER',2),
+      entry('retired','zone','MULTI_SELECT',0,false),
+      entry('elsewhere','trade','TEXT',0),
+    ];
+    const present=()=>orderCustomFieldEntries([
+      ...eligibleCustomFields(catalog,'zone','select'),
+      ...eligibleCustomFields(catalog,'zone','typed'),
+    ].map(field=>({field}))).map(({field})=>field.field_id);
+    expect(present()).toEqual(['note','choice','size']);
+    catalog[0].display_order=1;
+    catalog[1].display_order=0;
+    expect(present()).toEqual(['choice','note','size']);
   });
   it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('%s cannot conflate hyphenated owner and field identifiers',(stage)=>{
     const first=customFieldFocusId(stage,'a-b','c');
