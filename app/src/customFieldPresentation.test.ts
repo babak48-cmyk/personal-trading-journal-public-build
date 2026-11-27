@@ -73,3 +73,20 @@ describe('Required Custom Fields remain available when display preferences fail 
   expect(safeVisibleCustomFields([optional],false,hidden,true)).toEqual([]);
  });
 });
+
+
+describe('Unfinished answer recovery across Quick / Detailed',()=>{
+ it.each(CAPTURABLE_CUSTOM_FIELD_STAGES)('retains only the edited or uncertain active %s answer in Quick',(stage)=>{
+  const edited=def(stage), clean={...edited,field_id:'clean'}, retired={...edited,field_id:'retired',active:false};
+  const prefs=Object.fromEntries([edited,clean,retired].map(f=>[f.field_id,{visible:true,placement:'DETAILED_ONLY' as const}]));
+  const dirty=new Set([edited.field_id,retired.field_id]);
+  expect(safeVisibleCustomFields([edited,clean,retired],true,prefs,true,id=>dirty.has(id))).toEqual([edited]);
+  expect(safeVisibleCustomFields([edited,clean,retired],false,prefs,true,id=>dirty.has(id))).toEqual([edited,clean]);
+  dirty.clear();
+  expect(safeVisibleCustomFields([edited,clean,retired],true,prefs,true,id=>dirty.has(id))).toEqual([]);
+ });
+ it('retains an unfinished active answer during preference read failure without exposing other optional answers',()=>{
+  const edited=def('zone'), clean=def('trade'), required=def('session',true);
+  expect(safeVisibleCustomFields([edited,clean,required],true,{},false,id=>id===edited.field_id)).toEqual([edited,required]);
+ });
+});
