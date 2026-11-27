@@ -1,3 +1,4 @@
+import {nextCustomDisplayOrder} from './customAdminValidation';
 import {describe,it,expect} from 'vitest';
 import {assertCustomFieldTextUnchanged,customFieldTextReadbackMatches,CustomAdminValidationError,isPreWriteCustomAdminValidation,validateNewCustomFieldDefinition} from './customAdminValidation';
 describe('custom admin uncertain-write distinction',()=>{
@@ -41,5 +42,15 @@ describe('Custom field text edit safety',()=>{
   for(const mismatch of [{field_id:'other'},{label:'Old'},{help_text:'Old help'},{stage:'zone'},{field_type:'NUMBER'},{required:false},{active:false},{display_order:3}]){
    expect(customFieldTextReadbackMatches(expected,{...expected,...mismatch})).toBe(false);
   }
+ });
+});
+
+describe('new custom field and option ordering',()=>{
+ it('appends after sparse saved positions and starts an empty list at zero',()=>{
+  expect(nextCustomDisplayOrder([])).toBe(0);
+  expect(nextCustomDisplayOrder([{display_order:2},{display_order:17},{display_order:4}])).toBe(18);
+ });
+ it('rejects ranks that cannot be safely extended',()=>{
+  expect(()=>nextCustomDisplayOrder([{display_order:Number.MAX_SAFE_INTEGER}])).toThrow('cannot be extended');
  });
 });

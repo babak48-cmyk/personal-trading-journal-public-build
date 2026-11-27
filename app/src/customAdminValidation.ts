@@ -53,3 +53,11 @@ export function customFieldTextReadbackMatches(
  actual.field_type===expected.field_type&&actual.required===expected.required&&
  actual.active===expected.active&&actual.display_order===expected.display_order;
 }
+
+/** Append after all saved siblings, including inactive records and sparse ranks. */
+export function nextCustomDisplayOrder(siblings:readonly {display_order:number}[]):number {
+ const next=siblings.reduce((max,row)=>Math.max(max,row.display_order),-1)+1;
+ if(!Number.isSafeInteger(next))
+   throw new CustomAdminValidationError('Saved display order cannot be extended. Reorder the existing fields or options first.');
+ return next;
+}
