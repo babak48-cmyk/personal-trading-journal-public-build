@@ -91,6 +91,56 @@ pub fn analyze(conn:&Connection,filter:JournalFilterInput,field_id:&str)->Result
     Ok(CustomTradeAnalysis{field,timing,rows})
 }
 
+#[derive(Debug,Serialize)]
+pub struct CustomDecisionAnswer {
+    pub decision_id:String,
+    pub owner_id:Option<String>,
+    pub decision_type:String,
+    pub occurred_at:String,
+    pub reason_code:Option<String>,
+    pub reason_note:Option<String>,
+    pub answer:Option<SavedAnswer>,
+}
+#[derive(Debug,Serialize)]
+pub struct CustomDecisionAnalysis {
+    pub field:ManagedField,
+    pub rows:Vec<CustomDecisionAnswer>,
+}
+
+/// Same date/instrument scope as the standard decision-only analytics.
+/// No trade metrics or retrospective execution/review fields.
+pub fn analyze_decisions(conn:&Connection,filter:JournalFilterInput,field_id:&str)->Result<CustomDecisionAnalysis,AppError>{
+    let field=custom_fields::list_custom_fields(conn)?.into_iter().find(|f|f.field_id==field_id)
+        .ok_or_else(||AppError::Validation("custom analysis field not found".into()))?;
+    if !decision_stage(&field.stage){
+        return Err(AppError::Validation("decision-only analysis requires a planning or Zone field".into()));
+    }
+    let mut stmt=conn.prepare(
+        "SELECT cd.decision_id,cd.session_id,cd.candidate_id,cd.decision_type,cd.occurred_at,cd.reason_code,cd.reason_note
+         FROM candidate_decisions cd JOIN sessions s ON s.session_id=cd.session_id
+         JOIN instruments i ON i.instrument_id=s.instrument_id
+         WHERE cd.decision_type IN ('NO_TRADE','MISSED')
+           AND (?1 IS NULL OR s.session_date>=?1)
+           AND (?2 IS NULL OR s.session_date<=?2)
+           AND (?3 IS NULL OR COALESCE(s.instrument_symbol_snapshot,i.symbol)=?3)
+         ORDER BY cd.occurred_at DESC,cd.decision_id"
+    )?;
+    let base=stmt.query_map(params![filter.date_from,filter.date_to,filter.instrument_symbol],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,
+        r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<String>>(5)?,r.get::<_,Option<String>>(6)?
+    )))?.collect::<Result<Vec<_>,_>>()?;
+    let mut rows=Vec::with_capacity(base.len());
+    for (decision_id,session,candidate,decision_type,occurred_at,reason_code,reason_note) in base{
+        let owner_id=if matches!(field.stage.as_str(),"session"|"premarket-plan"){Some(session)}else{candidate};
+        let answer=match owner_id.as_deref(){
+            Some(owner)=>read_answer(conn,&field,owner,Some(&occurred_at))?,
+            None=>None,
+        };
+        rows.push(CustomDecisionAnswer{decision_id,owner_id,decision_type,occurred_at,reason_code,reason_note,answer});
+    }
+    Ok(CustomDecisionAnalysis{field,rows})
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;
