@@ -373,6 +373,7 @@ export const localApi = {
   replaceAttachmentFile: (input:ReplaceAttachmentFileInput) => invoke<Attachment>('replace_attachment_file',{input}),
   deleteAttachment: (attachmentId:string) => invoke<void>('delete_attachment',{attachmentId}),
   exportJournalHtml: (filter:JournalFilter={}) => invoke<ExportResult>('export_journal_html',{filter}),
+  exportJournalDecisionsCsv: (filter:JournalFilter={}) => invoke<ExportResult>('export_journal_decisions_csv',{filter}),
   exportJournalCsv: (filter:JournalFilter={}) => invoke<ExportResult>('export_journal_csv',{filter}),
   openExportFolder: () => invoke<void>('open_export_folder'),
 };
