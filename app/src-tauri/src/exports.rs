@@ -377,6 +377,19 @@ mod decision_only_html_export_tests{
                   ('missed','s-es','2026-11-23T10:01:00Z','MISSED',NULL,'Opportunity needs review'),
                   ('other','s-gc','2026-11-23T10:02:00Z','MISSED',NULL,NULL);
         ").unwrap();
+        // Native writes establish typed history. Decisions use future/past
+        // synthetic instants relative to the saved event, without editing it.
+        let mut conn=conn;
+        crate::custom_fields::create_custom_field(&mut conn,&crate::custom_fields::CustomFieldDefinitionInput{
+          field_id:"custom-export-zero".into(),stage:"session".into(),field_type:"NUMBER".into(),
+          label:"Readiness <test>".into(),help_text:"".into(),required:false,display_order:0
+        }).unwrap();
+        crate::custom_fields::record_typed_value(&mut conn,&crate::custom_fields::TypedValueInput{
+          event_id:"answer-zero".into(),field_id:"custom-export-zero".into(),owner_stage:"session".into(),owner_id:"s-es".into(),
+          text_value:None,number_value:Some(0.0),boolean_value:None,date_value:None
+        }).unwrap();
+        // These are synthetic fixture Decisions only, not journal corrections.
+        conn.execute("UPDATE candidate_decisions SET occurred_at='2099-01-01T00:00:00Z' WHERE decision_id='no'",[]).unwrap();
         let root=std::env::temp_dir().join(format!("ptj-decision-export-{}",uuid::Uuid::new_v4()));
         let paths=AppPaths{
           data:root.join("data"),attachments:root.join("attachments"),
@@ -408,6 +421,16 @@ mod decision_only_html_export_tests{
         assert!(!csv.contains("s-gc"));
         assert!(!csv.lines().next().unwrap().contains("realized_r"));
         assert!(csv.lines().next().unwrap().contains("custom_field_answers_json"));
+        assert!(html.contains("Readiness &lt;test&gt;"));
+        assert!(html.contains("answer-zero"));
+        assert!(html.contains("Not recorded / unavailable"));
+        assert!(csv.contains("answer-zero"));
+        let no_line=csv.lines().find(|line|line.starts_with("\"no\",")).unwrap();
+        let missed_line=csv.lines().find(|line|line.starts_with("\"missed\",")).unwrap();
+        assert!(no_line.contains("answer-zero"));
+        assert!(no_line.contains("\"\"number_value\"\":0.0"));
+        assert!(!missed_line.contains("answer-zero"),"later answers must not appear on historical missed decisions");
+
 
         std::fs::remove_dir_all(root).unwrap();
     }
