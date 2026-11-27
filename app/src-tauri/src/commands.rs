@@ -126,6 +126,14 @@ pub fn analyze_custom_trade_field(app:AppHandle,filter:JournalFilterInput,field_
     tx.commit()?;
     Ok(result)
 }
+#[tauri::command]
+pub fn analyze_custom_decision_field(app:AppHandle,filter:JournalFilterInput,field_id:String)->Result<crate::custom_analytics::CustomDecisionAnalysis,AppError>{
+    let mut conn=open_custom_fields_readonly(&app)?;
+    let tx=conn.transaction()?;
+    let result=crate::custom_analytics::analyze_decisions(&tx,filter,&field_id)?;
+    tx.commit()?;
+    Ok(result)
+}
 #[derive(Serialize)]
 pub struct DatabaseHealth {
     schema_version: u32,
