@@ -18,6 +18,8 @@ export const FIELD_MANAGER_ORDER_SECTIONS = [
  {label:'Zone planned conditions',ids:['candidate.requiredConditions','candidate.invalidationConditions']},
  {label:'Observed evidence details',ids:[...EVIDENCE_DETAILS_ORDER]},
  {label:'Decision details',ids:[...DECISION_DETAILS_ORDER]},
+ {label:"Session identity",ids:["session.date","session.instrument","session.environment"]},
+ {label:"Trade entry",ids:["trade.entryPrice","trade.stopPrice","trade.quantity","trade.plannedTarget"]},
  {label:"Entry costs",ids:["trade.entryCommission","trade.entryFees"]},
  {label:"Fill costs",ids:["fill.commission","fill.fees"]},
  {label:"Stop management",ids:["management.newStop","management.reason"]},
