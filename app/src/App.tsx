@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2403,6 +2403,31 @@ export function App(){
 }
 
 
+/** Local, keyboard-accessible chart and table share the same metric rows. */
+function WeeklyMetricChart({title,metrics,scope,rows,openTrade,unit}:{title:string;metrics:readonly WeeklyInteractiveMetric[];scope:string;rows:readonly JournalTradeRow[];openTrade:(id:string)=>void;unit:string}){
+  const [view,setView]=useState<'chart'|'table'>('chart');
+  const [selection,setSelection]=useState<{scope:string;key:string}|null>(null);
+  const selected=selection?.scope===scope?metrics.find(g=>g.key===selection.key):undefined;
+  const maximum=Math.max(1e-9,...metrics.map(g=>Math.abs(g.value??0)));
+  const display=(v:number|null)=>v===null?'UNKNOWN':unit==='R'?v.toFixed(2)+'R':String(v);
+  const byId=new Map(rows.map(row=>[row.trade_id,row]));
+  return <section className="weeklyBreakdown" aria-label={title}>
+    <h3>{title}</h3>
+    <div className="headerActions"><button aria-pressed={view==='chart'} onClick={()=>setView('chart')}>Chart</button><button aria-pressed={view==='table'} onClick={()=>setView('table')}>Table</button></div>
+    {metrics.length===0?<p>No matching recorded groups.</p>:view==='chart'?metrics.map(g=><button key={g.key} aria-pressed={selected===g} onClick={()=>setSelection({scope,key:g.key})} style={{display:'grid',gridTemplateColumns:'minmax(110px,1fr) minmax(70px,2fr) auto',gap:8,alignItems:'center',textAlign:'left',width:'100%'}}>
+      <span>{g.label}<small style={{display:'block'}}>{g.sample}</small></span>
+      <span aria-hidden="true" style={{display:'block',position:'relative',height:16,borderInlineStart:'1px solid currentColor'}}>
+        {g.value!==null&&<span style={{position:'absolute',height:12,top:2,left:g.value<0?(50-50*Math.abs(g.value)/maximum)+'%':'50%',width:(50*Math.abs(g.value)/maximum)+'%',background:g.value<0?'#b84b4b':'#477fa5',borderRadius:2}}/>}
+        <span style={{position:'absolute',left:'50%',height:16,borderInlineStart:'1px solid currentColor'}}/>
+      </span><strong>{display(g.value)}</strong>
+    </button>):<table><thead><tr><th>Group</th><th>Sample</th><th>Value</th></tr></thead><tbody>{metrics.map(g=><tr key={g.key}><td>{g.label}</td><td>{g.sample}</td><td><button aria-pressed={selected===g} onClick={()=>setSelection({scope,key:g.key})}>{display(g.value)} · Inspect</button></td></tr>)}</tbody></table>}
+    {selected&&<div className="weeklyBreakdown" aria-label={title+' contributing Trades'}>
+      <h4>{selected.label} · {display(selected.value)}</h4><p>{selected.sample} · {selected.tradeIds.length} contributing Trades</p><button onClick={()=>setSelection(null)}>Clear selection</button>
+      {selected.tradeIds.length===0?<p>No eligible contributing Trades for this value.</p>:selected.tradeIds.map(id=>{const trade=byId.get(id);return trade?<div className="weeklyBreakdownRow" key={id}><strong>{trade.session_date} · {trade.instrument_symbol} · {trade.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · {trade.direction}</strong><span>{trade.candidate_label||'No Zone label'} · Net R {trade.realized_r==null?'UNKNOWN':trade.realized_r.toFixed(2)}</span><button onClick={()=>openTrade(id)}>Open original Trade</button></div>:<p key={id}>Original Trade unavailable.</p>})}
+    </div>}
+  </section>;
+}
+
 function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,patchFilter,apply,rows,instruments,decisionOnlyRows,decisionReasonRows,decisionOnlyError,summary,mistakes,sources,evidenceTypes,openTrade,quickMode,fieldVisibility,fieldPlacements,fieldText,fieldOrder}:{filter:JournalFilter;appliedFilter:JournalFilter;analyticsLoading:boolean;analyticsError:string;patchFilter:(p:Partial<JournalFilter>)=>void;apply:()=>void;rows:JournalTradeRow[];instruments:Instrument[];decisionOnlyRows:DecisionOnlyAnalyticsRow[];decisionReasonRows:DecisionReasonAnalyticsRow[];decisionOnlyError:string;summary:AnalyticsSummary|null;mistakes:MistakeSummary[];sources:LevelSourceType[];evidenceTypes:EvidenceType[];openTrade:(id:string)=>void;quickMode:boolean;fieldVisibility:Record<string,boolean>;fieldPlacements:Record<string,FieldPlacement>;fieldText:Record<string,{label?:string;help?:string}>;fieldOrder:Record<string,number>}){
   const [exportMessage,setExportMessage]=useState('');
   const filtersPending=JSON.stringify(filter)!==JSON.stringify(appliedFilter);
@@ -2420,6 +2445,9 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const sessionBreakdown=activeWeek?weeklySessionBreakdown(rows,activeWeek):[];
   const tradeNumberBreakdown=activeWeek?weeklyTradeNumberBreakdown(rows,activeWeek):[];
   const mistakeOutcomes=activeWeek?weeklyMistakeOutcomes(rows,activeWeek):[];
+  const mistakeFrequencyMetrics=activeWeek?weeklyMistakeChartMetrics(rows,activeWeek,'frequency'):[];
+  const mistakeLossMetrics=activeWeek?weeklyMistakeChartMetrics(rows,activeWeek,'loss'):[];
+  const tradeNumberMetrics=activeWeek?weeklyTradeNumberChartMetrics(rows,activeWeek):[];
   const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
   const outcomeGroups=activeWeek?weeklyDecisionOutcomeGroups(rows,activeWeek):[];
   const [outcomeView,setOutcomeView]=useState<'chart'|'table'>('chart');
@@ -2567,6 +2595,12 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded violation(s)</small>
           </div>)}</div>
+        </details>
+        <details className="guidedMore"><summary>Interactive mistake and trade-number charts</summary>
+          <p className="subtle">Selected week and applied filters. Counts and R use the same underlying weekly groups; associated loss is not causal cost. Mistake groups may overlap. Unknown values are not zero. Chart selection shows exact contributing Trades, not unrelated tagged records.</p>
+          <WeeklyMetricChart title="Recorded mistake frequency" metrics={mistakeFrequencyMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="count"/>
+          <WeeklyMetricChart title="Recorded mistake associated negative R magnitude" metrics={mistakeLossMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
+          <WeeklyMetricChart title="Average eligible R by original Session Trade number" metrics={tradeNumberMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
         </details>
         <details className="guidedMore"><summary>Recorded mistakes · frequency and associated losses</summary>
           <p className="subtle">Counts use distinct tagged Trades within this week's filters. Negative R sums only known losing closed Trades; this is not the causal cost of a mistake. Tags may overlap; never add groups. Missing R is not zero, and untagged Trades are not necessarily mistake-free.</p>
