@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -511,5 +511,29 @@ describe('interactive context chart integrity',()=>{
     expect(weeklyContextChartMetrics(rows,'2026-11-09','rules').map(g=>[g.key,g.value,g.tradeIds])).toEqual([
       ['FOLLOWED',1,['a']],['VIOLATED',1,['b']],['UNCHECKED',2,['c','d']],
     ]);
+  });
+});
+
+describe('interactive provenance chart integrity',()=>{
+  it('uses original version identity and exact overlapping evidence and source memberships',()=>{
+    const rows=[
+      row('a','2026-11-09',{setup_version_id:'first-12345678',setup_version_name:'Reclaim',setup_version_number:1,setup_attribution:'AT_ENTRY',level_sources:['High','VWAP'],level_source_snapshot_missing:false,evidence_observed_at_decision:['SUPPORT: Delta','CONTRARY: Absorption'],realized_r:2}),
+      row('b','2026-11-10',{setup_version_id:'second-12345678',setup_version_name:'Reclaim',setup_version_number:1,setup_attribution:'AT_ENTRY',level_sources:['High'],level_source_snapshot_missing:false,evidence_observed_at_decision:['SUPPORT: Delta'],realized_r:-1}),
+      row('c','2026-11-10',{setup_version_id:'first-12345678',setup_version_name:'Reclaim',setup_version_number:1,setup_attribution:'RETROSPECTIVE',level_sources:['High'],level_source_snapshot_missing:true,evidence_observed_at_decision:[],evidence_post_decision_count:1,realized_r:3}),
+      row('d','2026-11-11',{level_sources:['High'],level_source_snapshot_missing:false,evidence_observed_at_decision:['SUPPORT: Delta'],realized_r:null}),
+      row('outside','2026-11-16',{level_sources:['High'],realized_r:100}),
+    ];
+    const setup=weeklyProvenanceChartMetrics(rows,'2026-11-09','setup');
+    expect(setup.find(g=>g.key==='At entry:first-12345678')).toMatchObject({value:2,tradeIds:['a']});
+    expect(setup.find(g=>g.key==='At entry:second-12345678')).toMatchObject({value:-1,tradeIds:['b']});
+    expect(setup.find(g=>g.key==='Retrospective:first-12345678')).toMatchObject({value:3,tradeIds:['c']});
+    expect(new Set(setup.map(g=>g.label)).size).toBe(setup.length);
+    const source=weeklyProvenanceChartMetrics(rows,'2026-11-09','source');
+    expect(source.find(g=>g.key==='High')).toMatchObject({value:.5,tradeIds:['a','b']});
+    expect(source.find(g=>g.key==='Decision-time provenance unknown')).toMatchObject({value:3,tradeIds:['c']});
+    const evidence=weeklyProvenanceChartMetrics(rows,'2026-11-09','evidence');
+    expect(evidence.find(g=>g.key==='SUPPORT: Delta')).toMatchObject({value:.5,tradeIds:['a','b']});
+    expect(evidence.find(g=>g.key==='CONTRARY: Absorption')).toMatchObject({value:2,tradeIds:['a']});
+    expect(evidence.find(g=>g.key.startsWith('Evidence recorded after'))).toMatchObject({value:3,tradeIds:['c']});
   });
 });
