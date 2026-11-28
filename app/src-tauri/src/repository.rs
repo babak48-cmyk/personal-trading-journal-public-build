@@ -1998,6 +1998,8 @@ pub struct JournalTradeRowDto {
     pub session_date: String,
     /// Original Decision instant; not entry/exit time or planned event.
     pub decision_occurred_at: Option<String>,
+    /// Final actual EXIT instant, normalized to UTC with fixed nanosecond precision; None if any exit clock is invalid.
+    pub final_exit_utc: Option<String>,
     /// IANA timezone stored for the Session; never use device timezone.
     pub session_timezone_id: Option<String>,
     pub instrument_symbol: String,
@@ -2429,10 +2431,11 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
           ))
         )?;
         let mistake_refs=trade_mistake_refs(conn,&metrics.trade_id)?;
+        let final_exit_utc=if status=="CLOSED"{complete_exit_instant(conn,&trade_id)?.map(|at|at.to_rfc3339_opts(chrono::SecondsFormat::Nanos,true))}else{None};
         out.push(JournalTradeRowDto{
             session_trade_number:numbers.get(&trade_id).copied(),
             trade_id,session_id,session_date,
-            decision_occurred_at:decision_at,session_timezone_id,
+            decision_occurred_at:decision_at,final_exit_utc,session_timezone_id,
             instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
@@ -2488,6 +2491,20 @@ mod extra_analytics_metric_tests {
         assert_eq!(known_pnl_expectancy(&[]),None);
         assert_eq!(known_pnl_expectancy(&[292.0,f64::NAN]),None);
     }
+}
+
+/// All actual exit timestamps must be known; never substitute Session or Decision time.
+fn complete_exit_instant(conn:&Connection,trade_id:&str)->Result<Option<chrono::DateTime<chrono::Utc>>,AppError>{
+    let mut query=conn.prepare("SELECT occurred_at FROM execution_fills WHERE trade_id=?1 AND action='EXIT' ORDER BY rowid")?;
+    let events=query.query_map([trade_id],|item|item.get::<_,Option<String>>(0))?;
+    let mut last:Option<chrono::DateTime<chrono::Utc>>=None;
+    for event in events{
+        let Some(raw)=event? else{return Ok(None);};
+        let Ok(stamp)=chrono::DateTime::parse_from_rfc3339(&raw) else{return Ok(None);};
+        let instant=stamp.with_timezone(&chrono::Utc);
+        last=Some(last.map_or(instant,|old|old.max(instant)));
+    }
+    Ok(last)
 }
 
 /// Sequence analytics are available only for an entirely date-ordered,
@@ -2603,24 +2620,10 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
         let Some(r)=row.realized_r.filter(|v|v.is_finite()) else{
             sequence_complete=false;break;
         };
-        let mut query=conn.prepare(
-            "SELECT occurred_at FROM execution_fills
-             WHERE trade_id=?1 AND action='EXIT' ORDER BY rowid"
-        )?;
-        let events=query.query_map([&row.trade_id],|item|item.get::<_,Option<String>>(0))?;
-        let mut last:Option<chrono::DateTime<chrono::Utc>>=None;
-        let mut any=false;
-        for observed in events{
-            any=true;
-            let Some(raw)=observed? else{sequence_complete=false;break;};
-            let Ok(stamp)=chrono::DateTime::parse_from_rfc3339(&raw) else{
-                sequence_complete=false;break;
-            };
-            let instant=stamp.with_timezone(&chrono::Utc);
-            last=Some(last.map_or(instant,|old|old.max(instant)));
-        }
-        if !sequence_complete||!any{sequence_complete=false;break;}
-        sequence.push((last.expect("at least one parsed exit timestamp"),r));
+        let Some(at)=row.final_exit_utc.as_deref().and_then(|v|chrono::DateTime::parse_from_rfc3339(v).ok()) else{
+            sequence_complete=false;break;
+        };
+        sequence.push((at.with_timezone(&chrono::Utc),r));
     }
     let chronological=if sequence_complete{
         complete_realized_r_sequence(sequence)
