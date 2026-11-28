@@ -1,3 +1,4 @@
+import {shortRecordId,zoneIdentity} from './workflowDestination';
 import { JournalIcon } from './JournalIcon';
 import type {CandidateDecision} from './services/localApi';
 
@@ -36,14 +37,15 @@ export function DecisionHistoryList({rows,limit=12}:{rows:readonly CandidateDeci
 }
 
 /** A TRADE Decision without execution is not an executed Trade or Fill. */
-export function PendingTradeDecisionRow({decision,current,onResume,disabled=false}:{
-  decision:CandidateDecision;current:boolean;disabled?:boolean;onResume:()=>void;
+export function PendingTradeDecisionRow({decision,current,onResume,disabled=false,zoneLabel}:{
+  decision:CandidateDecision;current:boolean;disabled?:boolean;onResume:()=>void;zoneLabel?:string|null;
 }){
   return <div className="pendingDecisionRecord">
     <div className="pendingDecisionInfo">
       <SavedDecisionTime timestamp={decision.occurred_at}/>
-      <strong>{decision.intended_direction??'Unknown direction'} · Zone {decision.candidate_id??'Unplanned'}</strong>
-      <small>Decision ID: {decision.decision_id}{decision.reason_code?' · '+decision.reason_code:''}</small>
+      <strong>{decision.intended_direction??'Unknown direction'} · {zoneIdentity(decision.candidate_id,zoneLabel)}</strong>
+      <small title={decision.decision_id}>Decision ID: {shortRecordId(decision.decision_id)} · Awaiting entry{decision.reason_code?' · '+decision.reason_code:''}</small>
+      {decision.reason_note&&<span>{decision.reason_note}</span>}
     </div>
     <button type="button" disabled={disabled||current} onClick={onResume} ><JournalIcon name={current?'closed':'reentry'}/>{current?'Current entry':'Resume original Decision'}</button>
   </div>;
