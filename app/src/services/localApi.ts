@@ -72,9 +72,10 @@ export type AddTradeFillInput = {
   commission?:number|null; fees?:number|null; note?:string|null;
 };
 export type MoveStopInput = { trade_id:string; stop_price:number; reason?:string|null; was_rule_compliant?:boolean|null };
-export type CrossSessionPendingReview = {trade_id:string;direction:string;review_status:'NONE'|'DRAFT';session:SessionSummary};
+export type TradeRecordIdentity = {decision_id:string|null;candidate_id:string|null;zone_label:string|null;decision_note:string|null;decision_occurred_at:string|null};
+export type CrossSessionPendingReview = {trade_id:string;direction:string;review_status:'NONE'|'DRAFT';session:SessionSummary;identity?:TradeRecordIdentity};
 export type TradeMetrics = {
-  trade_id:string; session_id:string; candidate_id?:string|null; direction:string; status:string; average_entry?:number|null;
+  trade_id:string; session_id:string; candidate_id?:string|null; identity?:TradeRecordIdentity; direction:string; status:string; average_entry?:number|null;
   total_entry_quantity:number; total_exit_quantity:number; open_quantity:number; latest_stop_price?:number|null; initial_risk_dollars?:number|null;
   gross_realized_pnl?:number|null; net_realized_pnl?:number|null; realized_r?:number|null; fill_count:number;
 };

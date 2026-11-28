@@ -22,7 +22,7 @@ export function DecisionHistoryList({rows,limit=12}:{rows:readonly CandidateDeci
         <summary>
           <SavedDecisionTime timestamp={d.occurred_at}/>
           <strong>{d.decision_type}{d.intended_direction?' · '+d.intended_direction:''}</strong>
-          <span className="savedDecisionReason">{d.reason_code||d.plan_alignment||'—'}</span>
+          <span className="savedDecisionReason" title={d.decision_id}>Decision {shortRecordId(d.decision_id)} · {d.reason_note||d.reason_code||d.plan_alignment||'—'}</span>
         </summary>
         <div className="savedDecisionDetails">
           <p><b>Decision ID:</b> <span>{d.decision_id}</span></p>

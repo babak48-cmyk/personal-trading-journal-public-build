@@ -8,5 +8,6 @@ export function filterCrossSessionPendingReviews(
   if(!Number.isInteger(max)||max<1)return [];
   return rows.filter(row=>!term||[
     row.session.session_date,row.session.instrument_symbol,row.session.environment,row.direction,row.trade_id,
-  ].some(value=>value.toLocaleLowerCase().includes(term))).slice(0,max);
+    row.identity?.decision_id,row.identity?.zone_label,row.identity?.decision_note,row.identity?.decision_occurred_at,
+  ].some(value=>value?.toLocaleLowerCase().includes(term))).slice(0,max);
 }

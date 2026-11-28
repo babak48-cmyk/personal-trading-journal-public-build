@@ -24,3 +24,11 @@ export function tradeIdentity(trade:{trade_id:string;direction:string;average_en
 // bypasses validation: the next save re-runs every required-field check.
 export const entryValidationIds:ReadonlySet<string>=new Set(['trade.entryPrice','trade.stopPrice','trade.quantity','trade.plannedTarget','trade.entryCommission','trade.entryFees']);
 export function removeEntryValidation(ids:readonly string[]):string[]{return ids.filter(id=>!entryValidationIds.has(id));}
+
+export function tradeDecisionContext(identity?:import('./services/localApi').TradeRecordIdentity):string{
+  if(!identity)return 'Decision context unavailable';
+  const parts=[identity.decision_id?'Decision '+shortRecordId(identity.decision_id):'Decision link unavailable',zoneIdentity(identity.candidate_id,identity.zone_label)];
+  if(identity.decision_occurred_at)parts.push(identity.decision_occurred_at);
+  if(identity.decision_note?.trim())parts.push(identity.decision_note);
+  return parts.join(' · ');
+}

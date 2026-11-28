@@ -8,7 +8,7 @@ const session=(session_id:string,symbol:string,date:string):SessionSummary=>({
 });
 const rows:CrossSessionPendingReview[]=[
  {trade_id:'older-trade',direction:'LONG',review_status:'DRAFT',session:session('s1','ES','2026-11-10')},
- {trade_id:'newer-trade',direction:'SHORT',review_status:'NONE',session:session('s2','GC','2026-11-15')},
+ {trade_id:'newer-trade',direction:'SHORT',review_status:'NONE',session:session('s2','GC','2026-11-15'),identity:{decision_id:'decision-b',candidate_id:'zone-b',zone_label:'Resistance B',decision_note:'Second attempt',decision_occurred_at:'2026-11-15T08:10:00Z'}},
 ];
 describe('cross-session Review Pending presentation (server eligibility is authoritative)',()=>{
  it('finds a pending draft in a different session without modifying the original order',()=>{
@@ -24,3 +24,5 @@ describe('cross-session Review Pending presentation (server eligibility is autho
    expect(filterCrossSessionPendingReviews(rows,'no-match')).toEqual([]);
  });
 });
+
+it('finds the saved Decision and Zone without fabricating missing metadata',()=>{expect(filterCrossSessionPendingReviews(rows,'Resistance B').map(x=>x.trade_id)).toEqual(['newer-trade']);expect(filterCrossSessionPendingReviews(rows,'second attempt').map(x=>x.trade_id)).toEqual(['newer-trade']);expect(filterCrossSessionPendingReviews(rows,'decision-b').map(x=>x.trade_id)).toEqual(['newer-trade']);});

@@ -1097,6 +1097,7 @@ pub struct TradeMetricsDto {
     pub trade_id: String,
     pub session_id: String,
     pub candidate_id: Option<String>,
+    pub identity: TradeRecordIdentityDto,
     pub direction: String,
     pub status: String,
     pub average_entry: Option<f64>,
@@ -1286,6 +1287,29 @@ fn trade_execution_ledger(conn:&Connection,trade_id:&str,direction:&str,point_va
     ledger.unknown_cost_fields=unknown_cost_fields;
     Ok(ledger)
 }
+/// Read-only identity from exact persisted owner links. Zone label is the catalog label,
+/// not a fabricated decision-time snapshot. Missing historical metadata stays null.
+#[derive(Debug, Serialize)]
+pub struct TradeRecordIdentityDto {
+    pub decision_id: Option<String>,
+    pub candidate_id: Option<String>,
+    pub zone_label: Option<String>,
+    pub decision_note: Option<String>,
+    pub decision_occurred_at: Option<String>,
+}
+fn trade_record_identity(conn:&Connection,trade_id:&str)->Result<TradeRecordIdentityDto,AppError>{
+    Ok(conn.query_row(
+        "SELECT d.decision_id,t.candidate_id,c.label,d.reason_note,d.occurred_at
+         FROM trades t
+         LEFT JOIN candidate_decisions d ON d.decision_id=t.decision_id AND d.session_id=t.session_id
+         LEFT JOIN candidates c ON c.candidate_id=t.candidate_id AND c.session_id=t.session_id
+         WHERE t.trade_id=?1",
+        [trade_id],|r|Ok(TradeRecordIdentityDto{
+            decision_id:r.get(0)?,candidate_id:r.get(1)?,zone_label:r.get(2)?,
+            decision_note:r.get(3)?,decision_occurred_at:r.get(4)?,
+        })
+    )?)
+}
 fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,AppError> {
     let (session_id,candidate_id,direction,status):(String,Option<String>,String,String)=conn.query_row(
         "SELECT session_id,candidate_id,direction,status FROM trades WHERE trade_id=?1",
@@ -1311,7 +1335,7 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
         [trade_id], |r| r.get(0)
     ).optional()?;
     let rr=match(net,initial_risk){(Some(n),Some(r)) if r>0.0=>Some(n/r),_=>None};
-    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,direction,status,average_entry:state.open_average_entry.or(state.last_average_entry),total_entry_quantity:state.entry_qty,total_exit_quantity:state.exit_qty,open_quantity:state.open_qty,latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count:state.fill_count})
+    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,identity:trade_record_identity(conn,trade_id)?,direction,status,average_entry:state.open_average_entry.or(state.last_average_entry),total_entry_quantity:state.entry_qty,total_exit_quantity:state.exit_qty,open_quantity:state.open_qty,latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count:state.fill_count})
 }
 
 pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionInput)->Result<TradeDetailDto,AppError>{
@@ -1480,6 +1504,7 @@ pub fn list_session_trades(conn:&Connection,session_id:&str)->Result<Vec<TradeMe
 #[derive(Debug, Serialize)]
 pub struct CrossSessionPendingReviewDto {
     pub trade_id: String,
+    pub identity: TradeRecordIdentityDto,
     pub direction: String,
     pub review_status: String,
     pub session: SessionSummary,
@@ -1508,18 +1533,20 @@ pub fn list_cross_session_pending_reviews(
          ORDER BY s.session_date DESC, s.opened_at DESC, t.rowid DESC LIMIT ?1"
     )?;
     let records=stmt.query_map([limit], |r| {
-        Ok(CrossSessionPendingReviewDto{
-            trade_id:r.get(0)?,direction:r.get(1)?,review_status:r.get(2)?,
-            session:SessionSummary{
+        Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,
+            SessionSummary{
                 session_id:r.get(3)?,session_date:r.get(4)?,
                 instrument_symbol:r.get(5)?,instrument_display_name:r.get(6)?,
                 instrument_tick_size:r.get(7)?,instrument_point_value:r.get(8)?,
                 instrument_currency:r.get(9)?,environment:r.get(10)?,
                 status:r.get(11)?,opened_at:r.get(12)?
             },
-        })
+        ))
     })?.collect::<Result<Vec<_>,_>>()?;
-    Ok(records)
+    records.into_iter().map(|(trade_id,direction,review_status,session)|{
+        let identity=trade_record_identity(conn,&trade_id)?;
+        Ok(CrossSessionPendingReviewDto{trade_id,direction,review_status,session,identity})
+    }).collect()
 }
 
 #[cfg(test)]
@@ -1536,16 +1563,20 @@ mod cross_session_review_queue_tests {
             instrument_symbol_snapshot TEXT,instrument_display_name_snapshot TEXT,
             instrument_tick_size_snapshot REAL,instrument_point_value_snapshot REAL,
             instrument_currency_snapshot TEXT);
-          CREATE TABLE trades(trade_id TEXT PRIMARY KEY,session_id TEXT,direction TEXT,status TEXT);
+          CREATE TABLE trades(trade_id TEXT PRIMARY KEY,session_id TEXT,direction TEXT,status TEXT,decision_id TEXT,candidate_id TEXT);
+          CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,reason_note TEXT,occurred_at TEXT);
+          CREATE TABLE candidates(candidate_id TEXT PRIMARY KEY,session_id TEXT,label TEXT);
           CREATE TABLE trade_reviews(trade_id TEXT UNIQUE,status TEXT);
           INSERT INTO instruments VALUES('i','ES','E-mini S&P 500',0.25,50,'USD');
           INSERT INTO sessions(session_id,instrument_id,session_date,environment,status,opened_at)
             VALUES('a','i','2026-11-12','DEMO','ACTIVE','2026-11-12T09:00:00'),
                   ('b','i','2026-11-13','DEMO','CLOSED','2026-11-13T09:00:00');
-          INSERT INTO trades VALUES('a-pending','a','LONG','CLOSED'),
-                                   ('b-draft','b','SHORT','CLOSED'),
-                                   ('b-completed','b','LONG','CLOSED'),
-                                   ('b-open','b','LONG','OPEN');
+          INSERT INTO candidates VALUES('zone-a','a','Support A'),('zone-b','b','Resistance B');
+          INSERT INTO candidate_decisions VALUES('decision-a','a','First attempt','2026-11-12T09:10:00Z'),('decision-b','b','Second attempt','2026-11-13T09:10:00Z');
+          INSERT INTO trades VALUES('a-pending','a','LONG','CLOSED','decision-a','zone-a'),
+                                   ('b-draft','b','SHORT','CLOSED','decision-b','zone-b'),
+                                   ('b-completed','b','LONG','CLOSED',NULL,NULL),
+                                   ('b-open','b','LONG','OPEN',NULL,NULL);
           INSERT INTO trade_reviews VALUES('b-draft','DRAFT'),('b-completed','COMPLETED');
         ").unwrap();
         let result=list_cross_session_pending_reviews(&db,250).unwrap();
@@ -1556,6 +1587,13 @@ mod cross_session_review_queue_tests {
         assert_eq!(result[0].session.session_id,"b");
         assert_eq!(result[1].session.session_id,"a");
         assert_eq!(result[0].session.instrument_symbol,"ES");
+        assert_eq!(result[0].identity.decision_id.as_deref(),Some("decision-b"));
+        assert_eq!(result[0].identity.zone_label.as_deref(),Some("Resistance B"));
+        assert_eq!(result[1].identity.decision_note.as_deref(),Some("First attempt"));
+        assert_eq!(result[1].identity.decision_occurred_at.as_deref(),Some("2026-11-12T09:10:00Z"));
+        db.execute("UPDATE trades SET decision_id='decision-b',candidate_id='zone-b' WHERE trade_id='a-pending'",[]).unwrap();
+        let wrong_owner=trade_record_identity(&db,"a-pending").unwrap();
+        assert!(wrong_owner.decision_id.is_none()&&wrong_owner.decision_note.is_none()&&wrong_owner.zone_label.is_none());
         assert_eq!(list_cross_session_pending_reviews(&db,1).unwrap().len(),1);
         assert!(list_cross_session_pending_reviews(&db,0).is_err());
         let remaining:i64=db.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
