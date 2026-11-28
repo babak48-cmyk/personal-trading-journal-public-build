@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2448,6 +2448,10 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const mistakeFrequencyMetrics=activeWeek?weeklyMistakeChartMetrics(rows,activeWeek,'frequency'):[];
   const mistakeLossMetrics=activeWeek?weeklyMistakeChartMetrics(rows,activeWeek,'loss'):[];
   const tradeNumberMetrics=activeWeek?weeklyTradeNumberChartMetrics(rows,activeWeek):[];
+  const instrumentMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'instrument'):[];
+  const weekdayMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'weekday'):[];
+  const hourMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'hour'):[];
+  const ruleMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'rules'):[];
   const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
   const outcomeGroups=activeWeek?weeklyDecisionOutcomeGroups(rows,activeWeek):[];
   const [outcomeView,setOutcomeView]=useState<'chart'|'table'>('chart');
@@ -2595,6 +2599,13 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded violation(s)</small>
           </div>)}</div>
+        </details>
+        <details className="guidedMore"><summary>Interactive market, time and rule-adherence charts</summary>
+          <p className="subtle">Average R uses eligible closed Trades only. Weekday is the recorded Session date; hour is the original Decision in the saved Session timezone, not the Entry hour. Unknown clocks have no attributed R. Rule counts describe recorded status, not verified compliance or a trading edge.</p>
+          <WeeklyMetricChart title="Average eligible R by instrument" metrics={instrumentMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
+          <WeeklyMetricChart title="Average eligible R by Session weekday" metrics={weekdayMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
+          <WeeklyMetricChart title="Average eligible R by original Decision hour" metrics={hourMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
+          <WeeklyMetricChart title="Recorded rule adherence" metrics={ruleMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="count"/>
         </details>
         <details className="guidedMore"><summary>Interactive mistake and trade-number charts</summary>
           <p className="subtle">Selected week and applied filters. Counts and R use the same underlying weekly groups; associated loss is not causal cost. Mistake groups may overlap. Unknown values are not zero. Chart selection shows exact contributing Trades, not unrelated tagged records.</p>
