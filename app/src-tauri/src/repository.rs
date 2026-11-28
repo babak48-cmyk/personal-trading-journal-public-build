@@ -2009,6 +2009,8 @@ pub struct JournalTradeRowDto {
     pub decision_quality: Option<String>,
     pub rule_status: String,
     pub level_sources: Vec<String>,
+    pub level_source_refs: Vec<JournalLevelSourceRef>,
+    pub evidence_refs: Vec<JournalEvidenceRef>,
     /// True if a historical trade has a Zone but lacks decision-time revision provenance.
     /// Such rows must not be mislabelled as having no Level Sources.
     pub level_source_snapshot_missing: bool,
@@ -2108,6 +2110,35 @@ fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<
 }
 
 #[derive(Debug, Serialize, Clone)]
+pub struct JournalLevelSourceRef {
+    pub source_type_id:String,
+    pub label:String,
+}
+#[derive(Debug, Serialize, Clone)]
+pub struct JournalEvidenceRef {
+    pub evidence_type_id:String,
+    pub label:String,
+    pub role:String,
+    pub timing:String,
+    pub present:bool,
+}
+
+/// Preserve recorded type, role, presence and clock separately. Candidate-level
+/// observations may be shared; a Trade-owned event must never leak to another Trade.
+fn trade_evidence_refs(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,decision_at:Option<&str>)->Result<Vec<JournalEvidenceRef>,AppError>{
+    let mut stmt=conn.prepare("SELECT eo.evidence_type_id,et.label,eo.role,eo.occurred_at,eo.present
+      FROM evidence_observations eo JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
+      WHERE eo.trade_id=?1 OR (eo.trade_id IS NULL AND ?2 IS NOT NULL AND eo.candidate_id=?2)
+      ORDER BY eo.rowid")?;
+    let rows=stmt.query_map(params![trade_id,candidate_id],|r|{
+        let timestamp:Option<String>=r.get(3)?;
+        Ok(JournalEvidenceRef{evidence_type_id:r.get(0)?,label:r.get(1)?,role:r.get(2)?,
+            timing:evidence_timing(timestamp.as_deref(),decision_at).to_string(),present:r.get::<_,i64>(4)?==1})
+    })?.collect::<Result<Vec<_>,_>>()?;
+    Ok(rows)
+}
+
+#[derive(Debug, Serialize, Clone)]
 pub struct JournalMistakeRef {
     pub mistake_type_id:String,
     pub label:String,
@@ -2156,7 +2187,7 @@ fn trade_evidence_temporal_snapshot(
       "SELECT et.label,eo.role,eo.occurred_at
        FROM evidence_observations eo
        JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
-       WHERE eo.present=1 AND (eo.trade_id=?1 OR (?2 IS NOT NULL AND eo.candidate_id=?2))
+       WHERE eo.present=1 AND (eo.trade_id=?1 OR (eo.trade_id IS NULL AND ?2 IS NOT NULL AND eo.candidate_id=?2))
        ORDER BY eo.rowid")?;
     let events=stmt.query_map(params![trade_id,candidate_id],|r|Ok((
         r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?
@@ -2181,7 +2212,7 @@ fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String
     let mut stmt=conn.prepare(
         "SELECT occurred_at FROM evidence_observations
          WHERE evidence_type_id=?1 AND present=1
-           AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))")?;
+           AND (trade_id=?2 OR (trade_id IS NULL AND ?3 IS NOT NULL AND candidate_id=?3))")?;
     let events=stmt.query_map(params![evidence_type_id,trade_id,candidate_id],|r|r.get::<_,Option<String>>(0))?;
     for event in events {
         let timestamp=event?;
@@ -2431,13 +2462,16 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
           ))
         )?;
         let mistake_refs=trade_mistake_refs(conn,&metrics.trade_id)?;
+        let evidence_refs=trade_evidence_refs(conn,&trade_id,&candidate_id,decision_at.as_deref())?;
         let final_exit_utc=if status=="CLOSED"{complete_exit_instant(conn,&trade_id)?.map(|at|at.to_rfc3339_opts(chrono::SecondsFormat::Nanos,true))}else{None};
         out.push(JournalTradeRowDto{
             session_trade_number:numbers.get(&trade_id).copied(),
             trade_id,session_id,session_date,
             decision_occurred_at:decision_at,final_exit_utc,session_timezone_id,
             instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
-            level_sources:sources.into_iter().map(|(_,label)|label).collect(),
+            level_sources:sources.iter().map(|(_,label)|label.clone()).collect(),
+            level_source_refs:sources.into_iter().map(|(source_type_id,label)|JournalLevelSourceRef{source_type_id,label}).collect(),
+            evidence_refs,
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
             mistakes:mistake_refs.iter().map(|m|m.label.clone()).collect(),
             mistake_refs,
