@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendMetrics,dayHourHeatmapMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2428,6 +2428,34 @@ function WeeklyMetricChart({title,metrics,scope,rows,openTrade,unit}:{title:stri
   </section>;
 }
 
+function RealizedRLine({title,points,mode,openTrade}:{title:string;points:NonNullable<ReturnType<typeof realizedRChartSequence>>;mode:'cumulativeR'|'drawdownR';openTrade:(id:string)=>void}){
+  const [view,setView]=useState<'chart'|'table'>('chart');
+  const values=[0,...points.map(p=>p[mode])];const lo=Math.min(...values),hi=Math.max(...values);const range=hi-lo||1;
+  const x=(i:number)=>24+552*i/Math.max(1,points.length);
+  const y=(v:number)=>150-126*(v-lo)/range;
+  return <section className="weeklyBreakdown"><h3>{title}</h3><p className="subtle">Complete filtered closed sequence, ordered by final actual Exit. Not account equity.</p>
+    <div className="headerActions"><button aria-pressed={view==='chart'} onClick={()=>setView('chart')}>Chart</button><button aria-pressed={view==='table'} onClick={()=>setView('table')}>Table</button></div>
+    {view==='chart'&&<svg viewBox="0 0 600 174" width="100%" role="img" aria-label={title}><line x1="24" x2="576" y1={y(0)} y2={y(0)} stroke="currentColor" opacity=".4"/><polyline points={values.map((v,i)=>x(i)+','+y(v)).join(' ')} fill="none" stroke="#477fa5" strokeWidth="2"/>{points.map((p,i)=><circle key={p.tradeId} cx={x(i+1)} cy={y(p[mode])} r="4" fill="#477fa5" onClick={()=>openTrade(p.tradeId)}><title>{p.at} · {p[mode].toFixed(2)}R</title></circle>)}</svg>}
+    <p>Final value: {values[values.length-1].toFixed(2)}R · {points.length} closed Trades</p>
+    <details open={view==='table'}><summary>Exact chronological values / open original Trade</summary><table><thead><tr><th>Final exit UTC</th><th>Value</th><th>Trade</th></tr></thead><tbody>{points.map(p=><tr key={p.tradeId}><td>{p.at}</td><td>{p[mode].toFixed(2)}R</td><td><button onClick={()=>openTrade(p.tradeId)}>Open original Trade</button></td></tr>)}</tbody></table></details>
+  </section>;
+}
+function DecisionHeatmap({metrics,scope,rows,openTrade}:{metrics:readonly WeeklyInteractiveMetric[];scope:string;rows:readonly JournalTradeRow[];openTrade:(id:string)=>void}){
+  const [selection,setSelection]=useState<{scope:string;key:string}|null>(null);
+  const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const cells=metrics.filter(g=>g.key!=='UNKNOWN').map(g=>({g,parts:JSON.parse(g.key) as string[]}));
+  const zones=[...new Set(cells.map(c=>c.parts[0]))].sort();
+  const byKey=new Map(metrics.map(g=>[g.key,g]));
+  const selected=selection?.scope===scope?byKey.get(selection.key):undefined;
+  const byId=new Map(rows.map(row=>[row.trade_id,row]));
+  return <section className="weeklyBreakdown"><h3>Session weekday × original Decision hour</h3><p className="subtle">Average eligible R; separate saved timezones. Empty cells are not zero. Numbers and sign supplement color.</p>
+    {zones.map(zone=><div key={zone} style={{overflowX:'auto'}}><h4>{zone}</h4><table><thead><tr><th>Day</th>{Array.from({length:24},(_,i)=><th key={i}>{String(i).padStart(2,'0')}</th>)}</tr></thead><tbody>{days.map(day=><tr key={day}><th>{day}</th>{Array.from({length:24},(_,i)=>{const key=JSON.stringify([zone,day,String(i).padStart(2,'0')]);const g=byKey.get(key);return <td key={i}>{g?<button title={g.sample} aria-label={g.label+' '+(g.value===null?'UNKNOWN':g.value.toFixed(2)+'R')+' '+g.sample} aria-pressed={selected===g} onClick={()=>setSelection({scope,key})} style={{background:g.value===null?'transparent':g.value<0?'#a63c3c':g.value>0?'#276b49':'#556273',color:g.value===null?undefined:'#fff',padding:4}}>{g.value===null?'?':g.value.toFixed(2)}</button>:'—'}</td>})}</tr>)}</tbody></table></div>)}
+    {byKey.has('UNKNOWN')&&<p>Unknown Session day / Decision clock: {byKey.get('UNKNOWN')?.sample}; no attributed R.</p>}
+    {selected&&<div><h4>{selected.label}</h4><p>{selected.sample}</p><button onClick={()=>setSelection(null)}>Clear selection</button>{selected.tradeIds.map(id=>{const row=byId.get(id);return <div key={id}><button onClick={()=>openTrade(id)}>{row?.session_date} · {row?.instrument_symbol} · {row?.session_trade_number==null?'Trade number unknown':'Trade #'+row.session_trade_number} · Open original Trade</button></div>})}</div>}
+    <details><summary>Accessible chart/table equivalent</summary><WeeklyMetricChart title="Day/hour eligible R" metrics={metrics} scope={scope} rows={rows} openTrade={openTrade} unit="R"/></details>
+  </section>;
+}
+
 function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,patchFilter,apply,rows,instruments,decisionOnlyRows,decisionReasonRows,decisionOnlyError,summary,mistakes,sources,evidenceTypes,openTrade,quickMode,fieldVisibility,fieldPlacements,fieldText,fieldOrder}:{filter:JournalFilter;appliedFilter:JournalFilter;analyticsLoading:boolean;analyticsError:string;patchFilter:(p:Partial<JournalFilter>)=>void;apply:()=>void;rows:JournalTradeRow[];instruments:Instrument[];decisionOnlyRows:DecisionOnlyAnalyticsRow[];decisionReasonRows:DecisionReasonAnalyticsRow[];decisionOnlyError:string;summary:AnalyticsSummary|null;mistakes:MistakeSummary[];sources:LevelSourceType[];evidenceTypes:EvidenceType[];openTrade:(id:string)=>void;quickMode:boolean;fieldVisibility:Record<string,boolean>;fieldPlacements:Record<string,FieldPlacement>;fieldText:Record<string,{label?:string;help?:string}>;fieldOrder:Record<string,number>}){
   const [exportMessage,setExportMessage]=useState('');
   const filtersPending=JSON.stringify(filter)!==JSON.stringify(appliedFilter);
@@ -2455,6 +2483,11 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const setupMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'setup'):[];
   const sourceMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'source'):[];
   const evidenceMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'evidence'):[];
+  const realizedSequence=realizedRChartSequence(rows);
+  const distributionMetrics=realizedRDistribution(rows);
+  const trendMetrics=mistakeTrendMetrics(rows);
+  const heatmapMetrics=dayHourHeatmapMetrics(rows);
+  const historyScope=JSON.stringify(appliedFilter);
   const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
   const outcomeGroups=activeWeek?weeklyDecisionOutcomeGroups(rows,activeWeek):[];
   const [outcomeView,setOutcomeView]=useState<'chart'|'table'>('chart');
@@ -2602,6 +2635,13 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded violation(s)</small>
           </div>)}</div>
+        </details>
+        <details className="guidedMore"><summary>Interactive performance history and time heatmap · all applied filters</summary>
+          <p className="subtle">These history charts use all applied Trade filters, not just the selected week. Unknown chronology or missing R blocks the complete sequence rather than fabricating a curve.</p>
+          {realizedSequence?<><RealizedRLine title="Cumulative realized net R" points={realizedSequence} mode="cumulativeR" openTrade={openTrade}/><RealizedRLine title="Realized R drawdown magnitude" points={realizedSequence} mode="drawdownR" openTrade={openTrade}/></>:<p>Complete cumulative R / drawdown unavailable: no closed Trades, missing R, missing or ambiguous final exit chronology.</p>}
+          <WeeklyMetricChart title="Distribution of realized R" metrics={distributionMetrics} scope={historyScope} rows={rows} openTrade={openTrade} unit="count"/>
+          <WeeklyMetricChart title="Weekly recorded mistake frequency" metrics={trendMetrics} scope={historyScope} rows={rows} openTrade={openTrade} unit="count"/>
+          <DecisionHeatmap metrics={heatmapMetrics} scope={historyScope} rows={rows} openTrade={openTrade}/>
         </details>
         <details className="guidedMore"><summary>Interactive Setup, Level Source and Evidence charts</summary>
           <p className="subtle">Selected week and applied filters. Average R uses eligible closed Trades. Setup versions and attribution are separate; definitions are not observed market context. Level Sources use decision-time provenance. Evidence groups distinguish recorded roles and timing coverage; later or unknown timing is not entry confirmation. Source and evidence memberships may overlap; associations do not establish causation or an edge.</p>
