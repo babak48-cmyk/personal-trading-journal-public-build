@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendMetrics,dayHourHeatmapMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendSeries,dayHourHeatmapMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2440,6 +2440,42 @@ function RealizedRLine({title,points,mode,openTrade}:{title:string;points:NonNul
     <details open={view==='table'}><summary>Exact chronological values / open original Trade</summary><table><thead><tr><th>Final exit UTC</th><th>Value</th><th>Trade</th></tr></thead><tbody>{points.map(p=><tr key={p.tradeId}><td>{p.at}</td><td>{p[mode].toFixed(2)}R</td><td><button onClick={()=>openTrade(p.tradeId)}>Open original Trade</button></td></tr>)}</tbody></table></details>
   </section>;
 }
+function MistakeTrendChart({series,scope,rows,openTrade}:{series:ReturnType<typeof mistakeTrendSeries>;scope:string;rows:readonly JournalTradeRow[];openTrade:(id:string)=>void}){
+  const [selectedKey,setSelectedKey]=useState('');
+  const [view,setView]=useState<'chart'|'table'>('chart');
+  const [selection,setSelection]=useState<{scope:string;key:string;week:string}|null>(null);
+  const current=series.find(g=>g.key===selectedKey)||series[0];
+  const selected=selection?.scope===scope&&selection.key===current?.key?current?.points.find(p=>p.week===selection.week):undefined;
+  const byId=new Map(rows.map(row=>[row.trade_id,row]));
+  const points=current?.points||[];
+  const max=points.reduce((n,p)=>Math.max(n,p.count??0),1);
+  const x=(i:number)=>30+540*i/Math.max(1,points.length-1);
+  const y=(n:number)=>148-120*n/max;
+  const segments:string[][]=[];
+  for(let i=0;i<points.length;i++){
+    const p=points[i];if(p.count===null)continue;
+    if(i===0||points[i-1].count===null)segments.push([]);
+    segments[segments.length-1].push(x(i)+','+y(p.count));
+  }
+  const select=(week:string)=>current&&setSelection({scope,key:current.key,week});
+  return <section className="weeklyBreakdown"><h3>Weekly recorded mistake trend</h3>
+    <p className="subtle">All applied Trade filters. Choose a recorded mistake. Zero means no recorded tag among a nonempty sample, not proof of mistake-free trading. No matching Trades means unknown; gaps are not joined.</p>
+    {!current?<p>No recorded mistake tags in these filtered Trades.</p>:<>
+      <label>Recorded mistake<select value={current.key} onChange={e=>{setSelectedKey(e.target.value);setSelection(null);}}>{series.map(g=><option key={g.key} value={g.key}>{g.label}</option>)}</select></label>
+      <div className="headerActions"><button aria-pressed={view==='chart'} onClick={()=>setView('chart')}>Chart</button><button aria-pressed={view==='table'} onClick={()=>setView('table')}>Table</button></div>
+      {view==='chart'&&<svg viewBox="0 0 600 174" width="100%" role="img" aria-label="Weekly recorded mistake counts, gaps indicate no filtered Trades">
+        <line x1="30" x2="570" y1={y(0)} y2={y(0)} stroke="currentColor" opacity=".4"/>
+        <text x="4" y={y(0)} fill="currentColor" fontSize="11">0</text><text x="4" y={y(max)} fill="currentColor" fontSize="11">{max}</text>
+        {segments.map((segment,i)=><polyline key={i} points={segment.join(' ')} fill="none" stroke="#477fa5" strokeWidth="2"/>)}
+        {points.map((p,i)=>p.count===null?null:<circle key={p.week} cx={x(i)} cy={y(p.count)} r="5" fill="#477fa5" onClick={()=>select(p.week)}><title>{p.week}: {p.count}/{p.tradeCount} tagged Trades</title></circle>)}
+        {points.length>0&&<text x="30" y="170" fill="currentColor" fontSize="10">{points[0].week}</text>}
+        {points.length>1&&<text x="570" y="170" textAnchor="end" fill="currentColor" fontSize="10">{points[points.length-1].week}</text>}
+      </svg>}
+      <details open={view==='table'}><summary>Weekly counts and denominators · accessible selection</summary><table><thead><tr><th>Week starting</th><th>Tagged / filtered Trades</th><th>Inspect</th></tr></thead><tbody>{points.map(p=><tr key={p.week}><td>{p.week}</td><td>{p.count===null?'UNKNOWN · no filtered Trades':p.count+'/'+p.tradeCount}</td><td><button aria-pressed={selected===p} onClick={()=>select(p.week)}>Inspect week</button></td></tr>)}</tbody></table></details>
+      {selected&&<div className="weeklyBreakdown"><h4>{current.label} · {selected.week}</h4><p>{selected.count===null?'No filtered Trades; count unknown.':selected.count+'/'+selected.tradeCount+' recorded tagged Trades'}</p><button onClick={()=>setSelection(null)}>Clear selection</button>{selected.tradeIds.map(id=>{const trade=byId.get(id);return <div key={id}><button onClick={()=>openTrade(id)}>{trade?.session_date} · {trade?.instrument_symbol} · {trade?.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · Open original Trade</button></div>})}</div>}
+    </>}
+  </section>;
+}
 function DecisionHeatmap({metrics,scope,rows,openTrade}:{metrics:readonly WeeklyInteractiveMetric[];scope:string;rows:readonly JournalTradeRow[];openTrade:(id:string)=>void}){
   const [selection,setSelection]=useState<{scope:string;key:string}|null>(null);
   const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -2485,7 +2521,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const evidenceMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'evidence'):[];
   const realizedSequence=realizedRChartSequence(rows);
   const distributionMetrics=realizedRDistribution(rows);
-  const trendMetrics=mistakeTrendMetrics(rows);
+  const mistakeSeries=mistakeTrendSeries(rows);
   const heatmapMetrics=dayHourHeatmapMetrics(rows);
   const historyScope=JSON.stringify(appliedFilter);
   const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
@@ -2640,7 +2676,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <p className="subtle">These history charts use all applied Trade filters, not just the selected week. Unknown chronology or missing R blocks the complete sequence rather than fabricating a curve.</p>
           {realizedSequence?<><RealizedRLine title="Cumulative realized net R" points={realizedSequence} mode="cumulativeR" openTrade={openTrade}/><RealizedRLine title="Realized R drawdown magnitude" points={realizedSequence} mode="drawdownR" openTrade={openTrade}/></>:<p>Complete cumulative R / drawdown unavailable: no closed Trades, missing R, missing or ambiguous final exit chronology.</p>}
           <WeeklyMetricChart title="Distribution of realized R" metrics={distributionMetrics} scope={historyScope} rows={rows} openTrade={openTrade} unit="count"/>
-          <WeeklyMetricChart title="Weekly recorded mistake frequency" metrics={trendMetrics} scope={historyScope} rows={rows} openTrade={openTrade} unit="count"/>
+          <MistakeTrendChart series={mistakeSeries} scope={historyScope} rows={rows} openTrade={openTrade}/>
           <DecisionHeatmap metrics={heatmapMetrics} scope={historyScope} rows={rows} openTrade={openTrade}/>
         </details>
         <details className="guidedMore"><summary>Interactive Setup, Level Source and Evidence charts</summary>
