@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {verifiedRiskCorrectionReadback} from './nonFillCorrectionReadback';
 import {localApi,type TradeDetail,type InitialRiskCorrectionRequest,
   type InitialRiskCorrectionPreview,type InitialRiskCorrectionEvent} from './services/localApi';
 
@@ -30,11 +31,20 @@ export function AuditedInitialRiskCorrectionPanel({trade,readOnly,onApplied}:{
   const signature=(r:InitialRiskCorrectionRequest)=>JSON.stringify(r);
   const clear=()=>{epoch.current++;setPreview(null);setPreviewSignature('');setMessage('');};
   async function reload(){
+    if(busy||saving.current)return;
     const stamp=++epoch.current;
-    setBusy(true);setUncertain(false);setHistory(null);setPreview(null);setPreviewSignature('');
+    setBusy(true);setUncertain(true);setHistory(null);setPreview(null);setPreviewSignature('');
     try{
-      const rows=await localApi.listInitialRiskCorrections(trade.metrics.trade_id);
-      if(stamp===epoch.current){setHistory(rows);setMessage('Audited initial risk history independently re-read.');}
+      const [rows,fresh]=await Promise.all([
+        localApi.listInitialRiskCorrections(trade.metrics.trade_id),
+        localApi.getTradeDetail(trade.metrics.trade_id),
+      ]);
+      if(stamp!==epoch.current)return;
+      if(fresh.metrics.trade_id!==trade.metrics.trade_id)throw new Error('Reload returned a different Trade.');
+      const snapshot=fresh.risk_snapshots.find(x=>x.snapshot_type==='INITIAL');
+      if(snapshot&&(snapshot.risk_dollars??null)!==(fresh.metrics.initial_risk_dollars??null))throw new Error('Effective INITIAL snapshot and risk metric disagree.');
+      onApplied(fresh);setHistory(rows);setUncertain(false);
+      setMessage('Initial-risk history and effective Trade independently re-read. Review current values before retrying.');
     }catch(e){
       if(stamp===epoch.current){setUncertain(true);setMessage('Audit history unavailable; correction locked: '+String(e));}
     }finally{if(stamp===epoch.current)setBusy(false);}
@@ -59,7 +69,7 @@ export function AuditedInitialRiskCorrectionPanel({trade,readOnly,onApplied}:{
       if(result.trade_id!==trade.metrics.trade_id||
          result.risk_snapshot_id!==r.risk_snapshot_id||
          result.current_effective!==r.expected_effective||
-         result.expected_revision!==r.expected_revision)
+         result.expected_revision!==r.expected_revision||result.replacement!==r.replacement||result.reason!==r.reason)
         throw new Error('Risk preview does not belong to this Trade or current revision');
       setPreview(result);setPreviewSignature(signature(r));
       setMessage('Inspect the original, current and proposed initial risk and net R before confirming.');
@@ -79,9 +89,7 @@ export function AuditedInitialRiskCorrectionPanel({trade,readOnly,onApplied}:{
         localApi.listInitialRiskCorrections(trade.metrics.trade_id)
       ]);
       if(stamp!==epoch.current)return;
-      if(updated.metrics.trade_id!==trade.metrics.trade_id||
-         updated.metrics.initial_risk_dollars!==r.replacement||
-         !events.some(e=>e.correction_id===receipt.correction_id))
+      if(!verifiedRiskCorrectionReadback(trade.metrics.trade_id,r,receipt,events,updated))
         throw new Error('Effective risk and audit revision could not both be verified');
       setHistory(events);onApplied(updated);setPreview(null);setPreviewSignature('');
       setAmount('');setReason('');setMessage('Confirmed and verified. Original INITIAL risk snapshot retained; new immutable audit event appended.');

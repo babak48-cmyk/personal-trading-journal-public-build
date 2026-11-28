@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {verifiedSourcePriceReadback} from './nonFillCorrectionReadback';
 import {localApi,type HistoricalSourceReadout,type SourcePriceCorrectionEvent,
  type SourcePriceCorrectionRequest,type SourcePriceCorrectionPreview} from './services/localApi';
 
@@ -29,7 +30,8 @@ export function AuditedSourcePriceCorrectionPanel({tradeId,readOnly,onApplied}:{
       replacement_price:replacement,reason:reason.trim()};
  };
  async function reload(){
-   const id=++serial.current;setBusy(true);setPreview(null);setSignature('');
+   if(busy||saveLock.current)return;
+   const id=++serial.current;setBusy(true);setUncertain(true);setPreview(null);setSignature('');
    try{
      const [list,audit]=await Promise.all([
        localApi.listTradeHistoricalSources(tradeId),
@@ -59,7 +61,7 @@ export function AuditedSourcePriceCorrectionPanel({tradeId,readOnly,onApplied}:{
      if(result.candidate_source_id!==input.candidate_source_id||
         result.expected_revision!==input.expected_revision||
         result.current_effective_price!==input.expected_effective_price||
-        result.replacement_price!==input.replacement_price)
+        result.replacement_price!==input.replacement_price||result.reason!==input.reason||result.candidate_revision_id!==active?.candidate_revision_id||!result.monetary_result_unchanged||!result.zone_geometry_unchanged)
        throw new Error('Preview identity or expected audit revision differs');
      setPreview(result);setSignature(JSON.stringify(input));
      setMessage('Check original and replacement price, affected historical decisions and reason.');
@@ -78,10 +80,7 @@ export function AuditedSourcePriceCorrectionPanel({tradeId,readOnly,onApplied}:{
        localApi.listTradeHistoricalSources(tradeId),
        localApi.listTradeSourcePriceCorrections(tradeId)]);
      if(id!==serial.current)return;
-     if(!audit.some(x=>x.correction_id===receipt.correction_id)||
-       !list.some(x=>x.candidate_source_id===input.candidate_source_id&&
-         x.effective_source_price===input.replacement_price&&
-         x.price_correction_revision===input.expected_revision+1))
+     if(!verifiedSourcePriceReadback(input,receipt,audit,list))
        throw new Error('Correction could not be verified from persisted audit and source');
      setSources(list);setEvents(audit);setPrice('');setReason('');
      setPreview(null);setSignature('');
