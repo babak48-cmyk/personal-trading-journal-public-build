@@ -313,25 +313,37 @@ export function weeklyDefinedContextBreakdown(
 /** Association, not causal mistake cost: count distinct tagged Trades and
  * show known negative R separately from the net of all eligible tagged Trades.
  * Multiple mistake labels can overlap on one Trade; never sum the groups. */
+/** Legacy rows without stable IDs retain separate label-only groups. */
+function recordedMistakeGroups(row:JournalTradeRow):{key:string;label:string;id:string|null}[]{
+  if(row.mistake_refs!==undefined){
+    const unique=new Map<string,{key:string;label:string;id:string|null}>();
+    for(const ref of row.mistake_refs){
+      if(ref.mistake_type_id.trim())unique.set(ref.mistake_type_id,{key:'id:'+ref.mistake_type_id,label:ref.label,id:ref.mistake_type_id});
+    }
+    return [...unique.values()];
+  }
+  return [...new Set(row.mistakes??[])].filter(label=>label.trim()).map(label=>({key:'legacy:'+label,label,id:null}));
+}
 export type WeeklyMistakeOutcome=Readonly<{
+  identityKey?:string;
   label:string;tradeCount:number;weekTradeCount:number;closedCount:number;
   eligibleRCount:number;lossCount:number;lossR:number|null;netR:number|null;
   tradeIds:readonly string[];
 }>;
 export function weeklyMistakeOutcomes(rows:readonly JournalTradeRow[],weekStart:string):WeeklyMistakeOutcome[]{
   const weekly=rows.filter(row=>journalWeekStart(row.session_date)===weekStart);
-  const groups=new Map<string,JournalTradeRow[]>();
+  const groups=new Map<string,{label:string;id:string|null;items:JournalTradeRow[]}>();
   for(const row of weekly){
-    for(const label of new Set(row.mistakes??[])){
-      if(!label.trim())continue;
-      const group=groups.get(label)||[];group.push(row);groups.set(label,group);
+    for(const ref of recordedMistakeGroups(row)){
+      const group=groups.get(ref.key)||{label:ref.label,id:ref.id,items:[]};
+      group.items.push(row);groups.set(ref.key,group);
     }
   }
-  return [...groups].map(([label,items])=>{
+  return [...groups].map(([key,{label,id,items}])=>{
     const closed=items.filter(row=>row.status==='CLOSED');
     const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
     const losses=eligible.filter(row=>(row.realized_r as number)<-1e-9);
-    return {label,tradeCount:items.length,weekTradeCount:weekly.length,closedCount:closed.length,
+    return {...(id===null?{}:{identityKey:key}),label,tradeCount:items.length,weekTradeCount:weekly.length,closedCount:closed.length,
       eligibleRCount:eligible.length,lossCount:losses.length,
       lossR:eligible.length?losses.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
       netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
@@ -414,10 +426,13 @@ export function weeklyLearningSnapshot(
   const correctedTradeCount=weekly.filter((_,i)=>
     fillCounts[i]>0||riskCounts[i]>0||sourceTypeCounts[i]>0||sourcePriceCounts[i]>0
   ).length;
-  const count=new Map<string,number>();
-  weekly.forEach(row=>new Set(row.mistakes||[]).forEach(id=>count.set(id,(count.get(id)||0)+1)));
+  const count=new Map<string,{id:string;label:string;count:number}>();
   const labels=new Map(mistakeCatalog.map(m=>[m.mistake_type_id,m.label]));
-  const mistakes=[...count].map(([id,n])=>({id,label:labels.get(id)||id,count:n}))
+  for(const row of weekly)for(const ref of recordedMistakeGroups(row)){
+    const item=count.get(ref.key)||{id:ref.id??ref.label,label:labels.get(ref.id??ref.label)||ref.label,count:0};
+    item.count++;count.set(ref.key,item);
+  }
+  const mistakes=[...count.values()]
     .sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)||a.id.localeCompare(b.id));
   const violated=weekly.filter(row=>row.rule_status==='VIOLATED').length;
   const unchecked=weekly.filter(row=>row.rule_status==='UNCHECKED').length;
