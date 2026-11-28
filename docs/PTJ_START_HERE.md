@@ -1,3 +1,11 @@
+## PTJ-DEMO-IDENTITY-SEARCH-REGRESSION-2026-11-28
+
+Verified PUBLIC PR #17 HEAD 62c6ce9bc9ceabcd3ddeeed049695b176d7fca1f, unmerged. Identity implementation SHA 77474e181a2640f3c9385d2cc454eed7d5aa069b CI 46139243540 FAILED (Rust SUCCESS; frontend and packaging regression 644 passed/1 failed). Exact instrument search ES matched incidental substring in new Zone label Resistance B. Corrected search precedence for exact known instrument symbols, preserving general Zone/note/ID search; added regression. Source SHA 62c6ce9bc9ceabcd3ddeeed049695b176d7fca1f, both changed files independently read back and PR head verified. CI observation [{"id":46140807738,"status":"in_progress","conclusion":null}]. No completion claimed until exact-source CI SUCCESS. No intermediate installer delivery. No change to financial formulas, required-field enforcement, schema or user data.
+
+Next delivery planning: retain existing Packages A–D and all twelve categories, no invented Package E. Once defect CI succeeds, reconcile remaining approved C (#8–9) and D (#12) gaps, prioritizing practical analytics/weekly learning and approved safe audited correction coverage with release/transfer safety. Confirm scope against current source and requirements before implementation; high-risk timestamp/ownership/link corrections, proposed Setup Playbook (#10), conditional NinjaTrader import (#11) remain separately gated. One integrated isolated Windows DEMO after substantive approved package completion, incorporating outstanding prior defect Windows checks and C/D installed acceptance paths. This is planning, not a declaration of completed categories. Preserve prior scoped PASS evidence. No merge or PRIVATE write.
+
+---
+
 ## PTJ-DEMO-IDENTITY-COMPLETION-2026-11-28
 
 PUBLIC PR #17 verified HEAD [77474e181a2640f3c9385d2cc454eed7d5aa069b](https://github.com/babak48-cmyk/personal-trading-journal-public-build/commit/77474e181a2640f3c9385d2cc454eed7d5aa069b), OPEN/DRAFT/UNMERGED; all eight changed source/test files independently read back at that SHA. Prior correction commits 31239c5e89c9bea5db5a32eac408df0e2f50a8c9 and 14ceb234635c0af98dc417383138f4c41f3c363f both CI SUCCESS (46137822737, 46138679398). Current identity commit CI observation: [{"id":46139243540,"status":"queued","conclusion":null}]; no PASS inferred.
