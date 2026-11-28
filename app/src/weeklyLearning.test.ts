@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendMetrics,dayHourHeatmapMetrics} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendMetrics,mistakeTrendSeries,dayHourHeatmapMetrics} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -561,5 +561,26 @@ describe('historical dashboard integrity',()=>{
     expect(heat.find(g=>g.key===JSON.stringify(['Australia/Sydney','Monday','11']))).toMatchObject({value:0,tradeIds:['a']});
     expect(heat.find(g=>g.key===JSON.stringify(['UTC','Monday','00']))).toMatchObject({value:null,tradeIds:[]});
     expect(heat.find(g=>g.key==='UNKNOWN')).toMatchObject({value:null,tradeIds:[]});
+  });
+});
+
+describe('continuous recorded mistake trend',()=>{
+  it('keeps nonempty zero weeks distinct from empty gaps and joins renamed stable IDs',()=>{
+    const rows=[
+      row('a','2026-11-02',{mistake_refs:[{mistake_type_id:'m',label:'Early'},{mistake_type_id:'m',label:'Early'}]}),
+      row('b','2026-11-09',{mistake_refs:[]}),
+      row('c','2026-11-23',{mistake_refs:[{mistake_type_id:'m',label:'Early renamed'}]}),
+      row('d','2026-11-23',{mistake_refs:[{mistake_type_id:'other',label:'Early renamed'}]}),
+    ];
+    const series=mistakeTrendSeries(rows);
+    expect(series).toHaveLength(2);
+    expect(new Set(series.map(g=>g.label)).size).toBe(2);
+    expect(series.find(g=>g.key==='id:m')?.points).toEqual([
+      {week:'2026-11-02',count:1,tradeCount:1,tradeIds:['a']},
+      {week:'2026-11-09',count:0,tradeCount:1,tradeIds:[]},
+      {week:'2026-11-16',count:null,tradeCount:0,tradeIds:[]},
+      {week:'2026-11-23',count:1,tradeCount:2,tradeIds:['c']},
+    ]);
+    expect(mistakeTrendSeries([])).toEqual([]);
   });
 });
