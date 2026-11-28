@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {verifiedFillCorrectionReadback} from './fillCorrectionReadback';
+import {verifiedFillCorrectionReadback,verifiedFillCorrectionPreview} from './fillCorrectionReadback';
 import type {
   CorrectionHistoryEvent, FillCorrectionInput, FillCorrectionReceipt, TradeDetail,
 } from './services/localApi';
@@ -54,4 +54,17 @@ describe('Fill correction must be independently read back',()=>{
       })).toBe(true);
     }
   });
+});
+
+it('requires confirmation of the exact proposed field, value, reason and prior revision',()=>{
+ const impact={gross_realized_pnl:100,net_realized_pnl:95,realized_r:1,open_quantity:0,unknown_cost_fields:0};
+ const preview={trade_id:'trade-1',execution_id:'fill-1',field:input.field,original:2,current_effective:2,proposed_effective:3,expected_revision:0,reason:input.reason,before:impact,after:impact,explicit_confirmation_required:true};
+ expect(verifiedFillCorrectionPreview('trade-1',input,preview)).toBe(true);
+ expect(verifiedFillCorrectionPreview('trade-1',input,{...preview,field:'commission'})).toBe(false);
+ expect(verifiedFillCorrectionPreview('trade-1',input,{...preview,proposed_effective:null})).toBe(false);
+ expect(verifiedFillCorrectionPreview('trade-1',input,{...preview,reason:'Different reason'})).toBe(false);
+ expect(verifiedFillCorrectionPreview('trade-1',input,{...preview,expected_revision:-1})).toBe(false);
+ expect(verifiedFillCorrectionPreview('trade-1',input,{...preview,explicit_confirmation_required:false})).toBe(false);
+ expect(verifiedFillCorrectionReadback('trade-1',input,receipt,[event],fresh,0)).toBe(true);
+ expect(verifiedFillCorrectionReadback('trade-1',input,receipt,[event],fresh,1)).toBe(false);
 });
