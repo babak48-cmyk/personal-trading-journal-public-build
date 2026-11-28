@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2421,6 +2421,13 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const tradeNumberBreakdown=activeWeek?weeklyTradeNumberBreakdown(rows,activeWeek):[];
   const mistakeOutcomes=activeWeek?weeklyMistakeOutcomes(rows,activeWeek):[];
   const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
+  const outcomeGroups=activeWeek?weeklyDecisionOutcomeGroups(rows,activeWeek):[];
+  const [outcomeView,setOutcomeView]=useState<'chart'|'table'>('chart');
+  const [outcomeSelection,setOutcomeSelection]=useState<{scope:string;key:string}|null>(null);
+  const outcomeScope=JSON.stringify([activeWeek,appliedFilter]);
+  const outcomeKey=(g:{quality:string;outcome:string})=>JSON.stringify([g.quality,g.outcome]);
+  const selectedOutcome=outcomeSelection?.scope===outcomeScope?outcomeGroups.find(g=>outcomeKey(g)===outcomeSelection.key):undefined;
+  const maxOutcomeCount=Math.max(1,...outcomeGroups.map(g=>g.count));
   const weekdayBreakdown=activeWeek?weeklyWeekdayBreakdown(rows,activeWeek):[];
   const decisionHourBreakdown=activeWeek?weeklyDecisionHourBreakdown(rows,activeWeek):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
@@ -2544,6 +2551,15 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <small>{group.ruleViolationCount} recorded violation(s) · overlapping source groups</small>
           </div>)}</div>}
         </details>
+        <section className="weeklyBreakdown" aria-label="Interactive decision quality and outcome chart">
+          <h3>Decision quality × financial outcome</h3>
+          <p className="subtle">Selected week and applied Trade filters. Financial outcome uses known net P&amp;L sign for closed Trades; R eligibility is separate. Open/other status and unknown closed outcomes have distinct groups. Click a group to inspect its original Trades.</p>
+          <div className="headerActions"><button aria-pressed={outcomeView==='chart'} onClick={()=>setOutcomeView('chart')}>Chart</button><button aria-pressed={outcomeView==='table'} onClick={()=>setOutcomeView('table')}>Table</button></div>
+          {outcomeGroups.length===0?<p>No matching Trades.</p>:outcomeView==='chart'?outcomeGroups.map(g=><button key={outcomeKey(g)} aria-pressed={selectedOutcome===g} onClick={()=>setOutcomeSelection({scope:outcomeScope,key:outcomeKey(g)})} style={{display:'grid',gridTemplateColumns:'minmax(100px,1fr) minmax(60px,2fr) auto',alignItems:'center',gap:8,textAlign:'left',width:'100%'}}>
+            <span>{g.quality} · {g.outcome}</span><span aria-hidden="true" style={{display:'block',height:12,width:(100*g.count/maxOutcomeCount)+'%',background:g.outcome==='WIN'?'#27875c':g.outcome==='LOSS'?'#b84b4b':'#8794a3',borderRadius:3}}/><strong>{g.count}</strong>
+          </button>):<table><thead><tr><th>Quality</th><th>Outcome</th><th>Trades</th></tr></thead><tbody>{outcomeGroups.map(g=><tr key={outcomeKey(g)}><td>{g.quality}</td><td>{g.outcome}</td><td><button aria-pressed={selectedOutcome===g} onClick={()=>setOutcomeSelection({scope:outcomeScope,key:outcomeKey(g)})}>{g.count} · Inspect</button></td></tr>)}</tbody></table>}
+          {selectedOutcome&&<div className="weeklyBreakdown" aria-label="Selected outcome contributing Trades"><h4>{selectedOutcome.quality} · {selectedOutcome.outcome} · {selectedOutcome.count} Trades</h4><button onClick={()=>setOutcomeSelection(null)}>Clear selection</button>{selectedOutcome.tradeIds.map(id=>{const trade=rows.find(row=>row.trade_id===id);return <div key={id} className="weeklyBreakdownRow"><strong>{trade?.session_date} · {trade?.instrument_symbol} · {trade?.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · {trade?.direction}</strong><span>{trade?.candidate_label||'No Zone label'} · Net R {fmt(trade?.realized_r)}</span><button onClick={()=>openTrade(id)}>Open original Trade</button></div>})}</div>}
+        </section>
         <details className="guidedMore"><summary>Decision quality vs outcome · descriptive only</summary>
           <p className="subtle">A winning trade does not prove a good decision; A/B/C and unreviewed groups are based on saved decision-quality records. No causal inference.</p>
           <div className="weeklyBreakdown">{decisionBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
@@ -2573,7 +2589,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <div className="weeklyBreakdownRow"><strong>3 · One actionable next-week experiment</strong><span>{weeklyThreePart.nextAction}</span></div>
         </div>}
         <WeeklyActionWorkspace weekStart={activeWeek} appliedFilter={appliedFilter} suggestedAction={weeklyAction}/>
-        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)+'\nMistake-associated outcomes (overlapping, not causal cost): '+weeklyMistakeOutcomeText(mistakeOutcomes)+'\nBad decision + winning outcome: '+badDecisionWins.length+' recorded cases.'+'\nTrade number within complete Session (filtered samples): '+tradeNumberBreakdown.map(g=>g.label+': '+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR==null?'Net R unknown':g.netR.toFixed(2)+'R')).join(' | ')} readOnly/></label>
+        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)+'\nMistake-associated outcomes (overlapping, not causal cost): '+weeklyMistakeOutcomeText(mistakeOutcomes)+'\nDecision quality / known financial outcome: '+weeklyDecisionOutcomeText(outcomeGroups)+'\nBad decision + winning outcome: '+badDecisionWins.length+' recorded cases.'+'\nTrade number within complete Session (filtered samples): '+tradeNumberBreakdown.map(g=>g.label+': '+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR==null?'Net R unknown':g.netR.toFixed(2)+'R')).join(' | ')} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
     </>}
