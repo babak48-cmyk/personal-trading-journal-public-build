@@ -1992,6 +1992,8 @@ pub struct JournalFilterInput {
 #[derive(Debug, Serialize, Clone)]
 pub struct JournalTradeRowDto {
     pub trade_id: String,
+    /// Chronological first actual entry within the complete Session, before filters.
+    pub session_trade_number: Option<i64>,
     pub session_id: String,
     pub session_date: String,
     /// Original Decision instant; not entry/exit time or planned event.
@@ -2244,6 +2246,63 @@ pub fn list_decision_only_analytics(
     Ok(rows)
 }
 
+/// Derive ordinals from all persisted Trades and their actual ENTRY fills.
+/// A missing or unzoned entry timestamp or tied first entries makes that
+/// Session's chronology unknown. Never break ties with UUID or insertion order.
+fn session_trade_numbers(conn:&Connection)->Result<std::collections::BTreeMap<String,i64>,AppError>{
+    use std::collections::BTreeMap;
+    use chrono::{DateTime,Utc};
+    let mut stmt=conn.prepare(
+        "SELECT t.session_id,t.trade_id,f.occurred_at
+         FROM trades t LEFT JOIN execution_fills f
+         ON f.trade_id=t.trade_id AND f.action='ENTRY'")?;
+    let rows=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?)))?;
+    let mut sessions:BTreeMap<String,BTreeMap<String,Option<DateTime<Utc>>>>=BTreeMap::new();
+    for row in rows {
+        let (session,trade,raw)=row?;
+        let parsed=raw.as_deref().and_then(|v|DateTime::parse_from_rfc3339(v).ok()).map(|v|v.with_timezone(&Utc));
+        let slot=sessions.entry(session).or_default().entry(trade).or_insert(parsed);
+        *slot=match (*slot,parsed){(Some(a),Some(b))=>Some(a.min(b)),_=>None};
+    }
+    let mut result=BTreeMap::new();
+    for (_,trades) in sessions {
+        let mut ordered=Vec::new();
+        let mut complete=true;
+        for (id,at) in trades {
+            match at {Some(at)=>ordered.push((at,id)),None=>{complete=false;break;}}
+        }
+        if !complete{continue;}
+        ordered.sort_by_key(|(at,_)|*at);
+        if ordered.windows(2).any(|w|w[0].0==w[1].0){continue;}
+        for (index,(_,id)) in ordered.into_iter().enumerate(){result.insert(id,index as i64+1);}
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+mod session_trade_number_tests {
+    use super::*;
+    #[test]
+    fn complete_session_order_uses_entry_instants_not_display_order(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE trades(trade_id TEXT,session_id TEXT);
+            CREATE TABLE execution_fills(trade_id TEXT,action TEXT,occurred_at TEXT);
+            INSERT INTO trades VALUES ('b','s'),('a','s'),('c','other'),('d','bad'),('e','bad'),('f','tie'),('g','tie'),('h','missing');
+            INSERT INTO execution_fills VALUES
+            ('b','ENTRY','2026-11-09T02:00:00Z'),('a','ENTRY','2026-11-09T11:00:00+10:00'),
+            ('a','ENTRY','2026-11-09T03:00:00Z'),('a','EXIT','2026-11-09T04:00:00Z'),
+            ('c','ENTRY','2026-11-09T02:00:00Z'),('d','ENTRY','2026-11-09T01:00:00'),
+            ('e','ENTRY','2026-11-09T02:00:00Z'),('f','ENTRY','2026-11-09T01:00:00Z'),
+            ('g','ENTRY','2026-11-09T11:00:00+10:00');").unwrap();
+        let result=session_trade_numbers(&conn).unwrap();
+        assert_eq!(result.len(),3);
+        assert_eq!(result.get("a"),Some(&1));
+        assert_eq!(result.get("b"),Some(&2));
+        assert_eq!(result.get("c"),Some(&1));
+        for id in ["d","e","f","g","h"]{assert!(!result.contains_key(id));}
+    }
+}
+
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
     if !matches!(filter.evidence_timing.as_deref(),None|Some("ANY_RECORDED")|Some("AT_DECISION")){
         return Err(AppError::Validation("unknown evidence timing filter".into()));
@@ -2263,6 +2322,7 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,
         r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?
     )))?.collect::<Result<Vec<_>,_>>()?;
+    let numbers=session_trade_numbers(conn)?;
     let mut out=Vec::new();
     for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag,decision_candidate_revision_id,decision_at) in base {
         if let Some(v)=&filter.date_from {if session_date.as_str() < v.as_str() {continue;}}
@@ -2324,6 +2384,7 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
           ))
         )?;
         out.push(JournalTradeRowDto{
+            session_trade_number:numbers.get(&trade_id).copied(),
             trade_id,session_id,session_date,
             decision_occurred_at:decision_at,session_timezone_id,
             instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
