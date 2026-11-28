@@ -436,6 +436,54 @@ export function weeklyProvenanceChartMetrics(rows:readonly JournalTradeRow[],wee
   }));
 }
 
+/** All filtered CLOSED trades must have known R and distinct normalized native
+ * final EXIT instants. Compare fixed-width UTC strings to retain nanoseconds. */
+export function realizedRChartSequence(rows:readonly JournalTradeRow[]){
+  const closed=rows.filter(row=>row.status==='CLOSED');
+  if(!closed.length||closed.some(row=>typeof row.realized_r!=='number'||!Number.isFinite(row.realized_r)||
+    !row.final_exit_utc||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{9}Z$/.test(row.final_exit_utc)||!Number.isFinite(Date.parse(row.final_exit_utc))))return null;
+  const sorted=[...closed].sort((a,b)=>a.final_exit_utc!<b.final_exit_utc!?-1:a.final_exit_utc!>b.final_exit_utc!?1:0);
+  if(sorted.some((row,i)=>i>0&&row.final_exit_utc===sorted[i-1].final_exit_utc))return null;
+  let total=0,peak=0;
+  return sorted.map(row=>{
+    total+=row.realized_r as number;peak=Math.max(peak,total);
+    return {tradeId:row.trade_id,at:row.final_exit_utc!,cumulativeR:total,drawdownR:peak-total};
+  });
+}
+export function realizedRDistribution(rows:readonly JournalTradeRow[]):WeeklyInteractiveMetric[]{
+  const closed=rows.filter(row=>row.status==='CLOSED');
+  const keys=['Below -2R','-2R to below -1R','-1R to below 0R','0R','Above 0R to 1R','Above 1R to 2R','Above 2R','Unknown R'];
+  const bins=keys.map(label=>({key:label,label,value:0,sample:'',tradeIds:[] as string[]}));
+  for(const row of closed){
+    const r=row.realized_r;
+    const i=typeof r!=='number'||!Number.isFinite(r)?7:r< -2?0:r< -1?1:r<0?2:r===0?3:r<=1?4:r<=2?5:6;
+    bins[i].value++;bins[i].tradeIds.push(row.trade_id);
+  }
+  return bins.map(g=>({...g,sample:g.value+'/'+closed.length+' filtered closed Trades'}));
+}
+export function mistakeTrendMetrics(rows:readonly JournalTradeRow[]):WeeklyInteractiveMetric[]{
+  return journalWeeks([...rows]).slice().sort().flatMap(week=>weeklyMistakeChartMetrics(rows,week,'frequency').map(g=>({...g,key:JSON.stringify([week,g.key]),label:week+' · '+g.label})));
+}
+export function dayHourHeatmapMetrics(rows:readonly JournalTradeRow[]):WeeklyInteractiveMetric[]{
+  const groups=new Map<string,{label:string;items:JournalTradeRow[];known:boolean}>();
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  for(const row of rows){
+    const week=journalWeekStart(row.session_date);
+    const hour=localDecisionHour(row.decision_occurred_at,row.session_timezone_id);
+    const day=week?days[new Date(row.session_date+'T00:00:00Z').getUTCDay()]:null;
+    const known=!!(day&&hour&&row.session_timezone_id);
+    const key=known?JSON.stringify([row.session_timezone_id,day,hour]):'UNKNOWN';
+    const label=known?row.session_timezone_id+' · '+day+' · '+hour+':00':'Unknown Session day / Decision clock';
+    const group=groups.get(key)||{label,items:[],known};group.items.push(row);groups.set(key,group);
+  }
+  return [...groups].map(([key,g])=>{
+    const closed=g.items.filter(row=>row.status==='CLOSED');
+    const eligible=g.known?closed.filter(row=>typeof row.realized_r==='number'&&Number.isFinite(row.realized_r)):[];
+    return {key,label:g.label,value:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0)/eligible.length:null,
+      sample:eligible.length+'/'+closed.length+' closed R eligible · '+g.items.length+' Trades',tradeIds:eligible.map(row=>row.trade_id)};
+  });
+}
+
 export function weeklyMistakeOutcomeText(groups:readonly WeeklyMistakeOutcome[]):string{
   return groups.length?groups.map(g=>g.label+': '+g.tradeCount+'/'+g.weekTradeCount+
     ' tagged Trades; '+g.eligibleRCount+'/'+g.closedCount+' closed R eligible; '+
