@@ -351,6 +351,38 @@ export function weeklyMistakeOutcomes(rows:readonly JournalTradeRow[],weekStart:
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** Shared chart contract: contributing IDs are distinct from the full tagged
+ * population. A zero known loss is different from an unavailable loss. */
+export type WeeklyInteractiveMetric=Readonly<{
+  key:string;label:string;value:number|null;sample:string;tradeIds:readonly string[];
+}>;
+export function weeklyMistakeChartMetrics(rows:readonly JournalTradeRow[],weekStart:string,mode:'frequency'|'loss'):WeeklyInteractiveMetric[]{
+  const groups=weeklyMistakeOutcomes(rows,weekStart);
+  const byId=new Map(rows.map(row=>[row.trade_id,row]));
+  return groups.map(g=>{
+    const label=groups.filter(other=>other.label===g.label).length>1
+      ?g.label+' · '+(g.identityKey??'legacy label'):g.label;
+    return {key:g.identityKey??'legacy:'+g.label,label,
+      value:mode==='frequency'?g.tradeCount:g.lossR===null?null:Math.abs(g.lossR),
+      sample:mode==='frequency'?g.tradeCount+'/'+g.weekTradeCount+' tagged Trades':
+        g.lossCount+' known losing Trades · '+g.eligibleRCount+'/'+g.closedCount+' closed R eligible',
+      tradeIds:mode==='frequency'?g.tradeIds:g.tradeIds.filter(id=>{
+        const row=byId.get(id);return row?.status==='CLOSED'&&typeof row.realized_r==='number'&&Number.isFinite(row.realized_r)&&row.realized_r< -1e-9;
+      })};
+  }).sort((a,b)=>a.value===null?(b.value===null?a.label.localeCompare(b.label):1):b.value===null?-1:b.value-a.value||a.label.localeCompare(b.label));
+}
+
+export function weeklyTradeNumberChartMetrics(rows:readonly JournalTradeRow[],weekStart:string):WeeklyInteractiveMetric[]{
+  const groups=weeklyTradeNumberBreakdown(rows,weekStart);
+  return groups.map(g=>{
+    const members=rows.filter(row=>journalWeekStart(row.session_date)===weekStart&&
+      (typeof row.session_trade_number==='number'&&Number.isSafeInteger(row.session_trade_number)&&row.session_trade_number>0?'Trade #'+row.session_trade_number:'Unknown trade number')===g.label);
+    return {key:g.label,label:g.label,value:g.netR===null||g.eligibleRCount===0?null:g.netR/g.eligibleRCount,
+      sample:g.eligibleRCount+'/'+g.closedCount+' closed R eligible · '+g.tradeCount+' Trades',
+      tradeIds:members.filter(row=>row.status==='CLOSED'&&typeof row.realized_r==='number'&&Number.isFinite(row.realized_r)).map(row=>row.trade_id)};
+  });
+}
+
 export function weeklyMistakeOutcomeText(groups:readonly WeeklyMistakeOutcome[]):string{
   return groups.length?groups.map(g=>g.label+': '+g.tradeCount+'/'+g.weekTradeCount+
     ' tagged Trades; '+g.eligibleRCount+'/'+g.closedCount+' closed R eligible; '+
