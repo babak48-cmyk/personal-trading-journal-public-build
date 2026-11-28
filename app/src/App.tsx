@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2418,6 +2418,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const instrumentBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'instrument_symbol'):[];
   const directionBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'direction'):[];
   const sessionBreakdown=activeWeek?weeklySessionBreakdown(rows,activeWeek):[];
+  const tradeNumberBreakdown=activeWeek?weeklyTradeNumberBreakdown(rows,activeWeek):[];
   const weekdayBreakdown=activeWeek?weeklyWeekdayBreakdown(rows,activeWeek):[];
   const decisionHourBreakdown=activeWeek?weeklyDecisionHourBreakdown(rows,activeWeek):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
@@ -2492,6 +2493,14 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <small>{group.ruleViolationCount} recorded rule violation(s)</small>
           </div>)}</div>}
         </details>
+        <details className="guidedMore"><summary>Trade number within Session · actual entry order</summary>
+          <p className="subtle">Numbers come from the complete Session history before filters. Additional fills do not create a new Trade number. Missing or tied entry chronology remains unknown. These are descriptive samples, not a proven trading edge.</p>
+          {tradeNumberBreakdown.length===0?<p className="subtle">No trades in this selected week.</p>:<div className="weeklyBreakdown">{tradeNumberBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
+            <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
+            <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
+            <small>{group.ruleViolationCount} recorded rule violation(s)</small>
+          </div>)}</div>}
+        </details>
         <details className="guidedMore"><summary>Direction breakdown · LONG / SHORT</summary>
           <p className="subtle">Recorded execution direction only. Descriptive trade samples within current filters; no prediction or inferred directional edge. Missing net R remains unknown.</p>
           {directionBreakdown.length===0?<p className="subtle">No executed Trades in this selected week.</p>:<div className="weeklyBreakdown">{directionBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
@@ -2548,7 +2557,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <div className="weeklyBreakdownRow"><strong>3 · One actionable next-week experiment</strong><span>{weeklyThreePart.nextAction}</span></div>
         </div>}
         <WeeklyActionWorkspace weekStart={activeWeek} appliedFilter={appliedFilter} suggestedAction={weeklyAction}/>
-        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)} readOnly/></label>
+        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)+'\nTrade number within complete Session (filtered samples): '+tradeNumberBreakdown.map(g=>g.label+': '+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR==null?'Net R unknown':g.netR.toFixed(2)+'R')).join(' | ')} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
     </>}
