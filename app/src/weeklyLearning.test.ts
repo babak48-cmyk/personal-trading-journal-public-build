@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -379,5 +379,24 @@ describe('weekly monetary outcomes preserve coverage and currency',()=>{
   });
   it('never manufactures a zero from a missing monetary sample',()=>{
     expect(weeklyMoneyBreakdown([row('missing','2026-11-23',{pnl_currency:'USD',gross_realized_pnl:null,net_realized_pnl:null})],'2026-11-23')[0]).toEqual({currency:'USD',closedCount:1,grossCount:0,netCount:0,costCount:0,gross:null,net:null,costs:null});
+  });
+});
+
+describe('weekly trade number uses complete native Session ordinals',()=>{
+  it('retains filtered gaps and independent sessions, and does not invent missing numbers',()=>{
+    const rows=[
+      row('a','2026-11-09',{session_id:'one',session_trade_number:3,realized_r:-2,rule_status:'VIOLATED'}),
+      row('b','2026-11-09',{session_id:'two',session_trade_number:3,realized_r:null}),
+      row('c','2026-11-10',{session_trade_number:1,realized_r:2}),
+      row('d','2026-11-10',{session_trade_number:null,realized_r:null}),
+      row('e','2026-11-10',{session_trade_number:0,status:'OPEN',realized_r:99}),
+      row('f','2026-11-16',{session_trade_number:2,realized_r:99}),
+    ];
+    expect(weeklyTradeNumberBreakdown(rows,'2026-11-09')).toEqual([
+      {label:'Trade #1',tradeCount:1,closedCount:1,eligibleRCount:1,netR:2,ruleViolationCount:0},
+      {label:'Trade #3',tradeCount:2,closedCount:2,eligibleRCount:1,netR:-2,ruleViolationCount:1},
+      {label:'Unknown trade number',tradeCount:2,closedCount:1,eligibleRCount:0,netR:null,ruleViolationCount:0},
+    ]);
+    expect(weeklyTradeNumberBreakdown([rows[0]],'2026-11-09')[0].label).toBe('Trade #3');
   });
 });
