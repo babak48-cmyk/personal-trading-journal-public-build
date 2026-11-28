@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -398,5 +398,37 @@ describe('weekly trade number uses complete native Session ordinals',()=>{
       {label:'Unknown trade number',tradeCount:2,closedCount:1,eligibleRCount:0,netR:null,ruleViolationCount:0},
     ]);
     expect(weeklyTradeNumberBreakdown([rows[0]],'2026-11-09')[0].label).toBe('Trade #3');
+  });
+});
+
+describe('weekly mistake associations and decision-outcome separation',()=>{
+  it('deduplicates tags, retains overlapping cases and known denominators, and excludes other weeks',()=>{
+    const rows=[
+      row('a','2026-11-09',{mistakes:['Chasing','Chasing','Early entry'],realized_r:-2}),
+      row('b','2026-11-10',{mistakes:['Chasing'],realized_r:3}),
+      row('c','2026-11-11',{mistakes:['Chasing'],realized_r:null}),
+      row('d','2026-11-12',{mistakes:['Early entry'],status:'OPEN',realized_r:99}),
+      row('e','2026-11-12',{mistakes:['Unknown'],realized_r:null}),
+      row('f','2026-11-13',{mistakes:[]}),
+      row('outside','2026-11-16',{mistakes:['Chasing'],realized_r:-100}),
+    ];
+    const groups=weeklyMistakeOutcomes(rows,'2026-11-09');
+    expect(groups[0]).toEqual({label:'Chasing',tradeCount:3,weekTradeCount:6,closedCount:3,eligibleRCount:2,lossCount:1,lossR:-2,netR:1,tradeIds:['a','b','c']});
+    expect(groups[1]).toEqual({label:'Early entry',tradeCount:2,weekTradeCount:6,closedCount:1,eligibleRCount:1,lossCount:1,lossR:-2,netR:-2,tradeIds:['a','d']});
+    expect(groups[2]).toMatchObject({label:'Unknown',eligibleRCount:0,lossR:null,netR:null});
+    expect(weeklyMistakeOutcomeText(groups)).toContain('negative R sum UNKNOWN');
+  });
+  it('matches native bad-decision wins without requiring a known initial risk',()=>{
+    const rows=[
+      row('a','2026-11-09',{decision_quality:'C',net_realized_pnl:50,realized_r:null}),
+      row('b','2026-11-09',{decision_quality:'INVALID',net_realized_pnl:100}),
+      row('c','2026-11-09',{decision_quality:'A',net_realized_pnl:200}),
+      row('d','2026-11-09',{decision_quality:'C',net_realized_pnl:null}),
+      row('e','2026-11-09',{decision_quality:'C',net_realized_pnl:0}),
+      row('f','2026-11-09',{decision_quality:'INVALID',net_realized_pnl:100,status:'OPEN'}),
+      row('g','2026-11-16',{decision_quality:'C',net_realized_pnl:100}),
+      row('h','2026-11-09',{decision_quality:'C',net_realized_pnl:-5}),
+    ];
+    expect(weeklyBadDecisionWins(rows,'2026-11-09').map(row=>row.trade_id)).toEqual(['a','b']);
   });
 });
