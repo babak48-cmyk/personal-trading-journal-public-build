@@ -1,3 +1,13 @@
+## PTJ-C8-NONFILL-AUDIT-READBACK-2026-11-28
+
+Approved delivery Set 1 (#8) implementation started. PUBLIC PR #17 HEAD d74ee5c969002203b9d11116e0606d0d45f2447c, unmerged; source commit d74ee5c969002203b9d11116e0606d0d45f2447c, all five files independently read back. Exact-source CI observation [{"id":46143516982,"status":"in_progress","conclusion":null}] (do not infer PASS). Previous defect batch CI 46140807738 SUCCESS retained.
+
+Existing Fill, INITIAL risk, Level Source type and price correction capabilities retained. Found non-Fill verification gap: INITIAL risk reload read audit alone rather than fresh effective Trade; three non-Fill confirmation paths checked incomplete receipt identity. Implemented exact receipt/event/revision/reason/owner and effective readback verification, fresh initial-risk snapshot and metrics reload, source preview revision and unchanged-monetary/geometry checks, fail-closed manual reload. Added targeted positive and negative regression tests, including unknown price vs zero. Files: app/src/AuditedInitialRiskCorrectionPanel.tsx, AuditedSourceCorrectionPanel.tsx, AuditedSourcePriceCorrectionPanel.tsx, nonFillCorrectionReadback.ts and test. No DB migration, financial formula or history mutation, PRIVATE change, merge or intermediate DEMO. Windows verification deferred. Set 1 remains PARTIAL; this is one real implementation slice, not full scope closure.
+
+NEXT: verify CI and fix failures; reconcile remaining authorized #8 correction coverage against governing documents, then #9 Analytics & Weekly Learning, #12 Stability & Integration, one integrated DEMO. Separately gated timestamp/ownership/link changes remain blocked pending explicit approval. Preserve all 12 roadmap families and prior acceptance evidence. No known unsaved source changes.
+
+---
+
 ## PTJ-C-D-NEXT-DELIVERY-APPROVED-2026-11-28
 
 User explicitly approved the three consecutive cohesive sets and instructed execution without renewed permission or unnecessary reports: (1) remaining approved Audited Data Correction (#8), (2) Analytics & Weekly Learning (#9), (3) Stability & Integration (#12), followed by ONE integrated isolated Windows DEMO. No intermediate installer delivery. Existing A–D packages, all twelve roadmap families, prior scoped PASS evidence, and unfinished Full All-Inputs requirements remain intact. Do not expand separately gated timestamp/ownership/link corrections, proposed Setup Playbook or conditional NinjaTrader import. No merge or PRIVATE changes.
