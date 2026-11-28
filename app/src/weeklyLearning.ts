@@ -310,6 +310,50 @@ export function weeklyDefinedContextBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** Association, not causal mistake cost: count distinct tagged Trades and
+ * show known negative R separately from the net of all eligible tagged Trades.
+ * Multiple mistake labels can overlap on one Trade; never sum the groups. */
+export type WeeklyMistakeOutcome=Readonly<{
+  label:string;tradeCount:number;weekTradeCount:number;closedCount:number;
+  eligibleRCount:number;lossCount:number;lossR:number|null;netR:number|null;
+  tradeIds:readonly string[];
+}>;
+export function weeklyMistakeOutcomes(rows:readonly JournalTradeRow[],weekStart:string):WeeklyMistakeOutcome[]{
+  const weekly=rows.filter(row=>journalWeekStart(row.session_date)===weekStart);
+  const groups=new Map<string,JournalTradeRow[]>();
+  for(const row of weekly){
+    for(const label of new Set(row.mistakes??[])){
+      if(!label.trim())continue;
+      const group=groups.get(label)||[];group.push(row);groups.set(label,group);
+    }
+  }
+  return [...groups].map(([label,items])=>{
+    const closed=items.filter(row=>row.status==='CLOSED');
+    const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
+    const losses=eligible.filter(row=>(row.realized_r as number)<-1e-9);
+    return {label,tradeCount:items.length,weekTradeCount:weekly.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,lossCount:losses.length,
+      lossR:eligible.length?losses.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
+      netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
+      tradeIds:items.map(row=>row.trade_id)};
+  }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
+export function weeklyMistakeOutcomeText(groups:readonly WeeklyMistakeOutcome[]):string{
+  return groups.length?groups.map(g=>g.label+': '+g.tradeCount+'/'+g.weekTradeCount+
+    ' tagged Trades; '+g.eligibleRCount+'/'+g.closedCount+' closed R eligible; '+
+    g.lossCount+' known losing Trades; negative R sum '+(g.lossR===null?'UNKNOWN':g.lossR.toFixed(2))+
+    '; net R '+(g.netR===null?'UNKNOWN':g.netR.toFixed(2))).join(' | '):'No mistake tags recorded';
+}
+
+/** Same definition as native summary: saved C/INVALID quality and positive
+ * known net P&L on a CLOSED Trade, independent of whether R is eligible. */
+export function weeklyBadDecisionWins(rows:readonly JournalTradeRow[],weekStart:string):JournalTradeRow[]{
+  return rows.filter(row=>journalWeekStart(row.session_date)===weekStart&&row.status==='CLOSED'&&
+    (row.decision_quality==='C'||row.decision_quality==='INVALID')&&
+    typeof row.net_realized_pnl==='number'&&Number.isFinite(row.net_realized_pnl)&&row.net_realized_pnl>1e-9);
+}
+
 export type WeeklyLearningSnapshot=Readonly<{
   weekStart:string;
   tradeCount:number;
