@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -446,5 +446,28 @@ describe('stable mistake identity',()=>{
     expect(groups.find(g=>g.identityKey==='id:b')).toMatchObject({tradeCount:1,netR:-2,tradeIds:['a']});
     expect(groups.find(g=>g.identityKey===undefined)).toMatchObject({tradeCount:1,netR:3,tradeIds:['c']});
     expect(weeklyLearningSnapshot(rows,'2026-11-09').mistakes.find(m=>m.id==='a')?.count).toBe(2);
+  });
+});
+
+describe('interactive decision outcome data',()=>{
+  it('keeps financial sign independent of quality and risk and returns exact selected memberships',()=>{
+    const rows=[
+      row('a','2026-11-09',{decision_quality:'A',net_realized_pnl:-100}),
+      row('b','2026-11-09',{decision_quality:'C',net_realized_pnl:50,realized_r:null}),
+      row('c','2026-11-10',{decision_quality:'C',net_realized_pnl:0}),
+      row('d','2026-11-10',{decision_quality:'C',net_realized_pnl:null}),
+      row('e','2026-11-10',{decision_quality:'C',status:'OPEN',net_realized_pnl:100}),
+      row('f','2026-11-11',{decision_quality:null,net_realized_pnl:100}),
+      row('outside','2026-11-16',{decision_quality:'C',net_realized_pnl:100}),
+    ];
+    const groups=weeklyDecisionOutcomeGroups(rows,'2026-11-09');
+    expect(groups.map(g=>[g.quality,g.outcome,g.tradeIds])).toEqual([
+      ['A','LOSS',['a']],['C','WIN',['b']],['C','BREAKEVEN',['c']],['C','UNKNOWN',['d']],
+      ['C','NOT_CLOSED',['e']],['Not recorded','WIN',['f']],
+    ]);
+    expect(groups.reduce((sum,g)=>sum+g.count,0)).toBe(6);
+    expect(weeklyDecisionOutcomeGroups([rows[1]],'2026-11-09')[0].tradeIds).toEqual(['b']);
+    expect(weeklyDecisionOutcomeText(groups)).toContain('C / UNKNOWN: 1');
+    expect(weeklyDecisionOutcomeGroups([],'2026-11-09')).toEqual([]);
   });
 });
