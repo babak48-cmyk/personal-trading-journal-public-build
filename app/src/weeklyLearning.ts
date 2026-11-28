@@ -366,6 +366,34 @@ export function weeklyBadDecisionWins(rows:readonly JournalTradeRow[],weekStart:
     typeof row.net_realized_pnl==='number'&&Number.isFinite(row.net_realized_pnl)&&row.net_realized_pnl>1e-9);
 }
 
+export type WeeklyDecisionOutcome='WIN'|'LOSS'|'BREAKEVEN'|'UNKNOWN'|'NOT_CLOSED';
+export type WeeklyDecisionOutcomeGroup=Readonly<{
+  quality:string;outcome:WeeklyDecisionOutcome;tradeIds:readonly string[];count:number;
+}>;
+/** Financial sign uses known CLOSED net P&L, independent of initial-risk
+ * eligibility. Same positive threshold as native bad-decision-win count. */
+export function weeklyDecisionOutcomeGroups(rows:readonly JournalTradeRow[],weekStart:string):WeeklyDecisionOutcomeGroup[]{
+  const groups=new Map<string,{quality:string;outcome:WeeklyDecisionOutcome;tradeIds:string[]}>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const quality=row.decision_quality?.trim()||'Not recorded';
+    const net=row.net_realized_pnl;
+    const outcome:WeeklyDecisionOutcome=row.status!=='CLOSED'?'NOT_CLOSED':
+      typeof net!=='number'||!Number.isFinite(net)?'UNKNOWN':net>1e-9?'WIN':net< -1e-9?'LOSS':'BREAKEVEN';
+    const key=JSON.stringify([quality,outcome]);
+    const group=groups.get(key)||{quality,outcome,tradeIds:[]};
+    group.tradeIds.push(row.trade_id);groups.set(key,group);
+  }
+  const qualityOrder=['A','B','C','INVALID','UNCLEAR','Not recorded'];
+  const order:WeeklyDecisionOutcome[]=['WIN','LOSS','BREAKEVEN','UNKNOWN','NOT_CLOSED'];
+  const rank=(quality:string)=>qualityOrder.includes(quality)?qualityOrder.indexOf(quality):qualityOrder.length;
+  return [...groups.values()].map(g=>({...g,count:g.tradeIds.length})).sort((a,b)=>
+    rank(a.quality)-rank(b.quality)||a.quality.localeCompare(b.quality)||order.indexOf(a.outcome)-order.indexOf(b.outcome));
+}
+export function weeklyDecisionOutcomeText(groups:readonly WeeklyDecisionOutcomeGroup[]):string{
+  return groups.length?groups.map(g=>g.quality+' / '+g.outcome+': '+g.count).join(' | '):'No matching Trades';
+}
+
 export type WeeklyLearningSnapshot=Readonly<{
   weekStart:string;
   tradeCount:number;
