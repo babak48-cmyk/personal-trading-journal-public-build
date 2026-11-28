@@ -1,4 +1,4 @@
-import {revealDestination,shortRecordId,zoneIdentity,tradeIdentity} from './workflowDestination';
+import {revealDestination,shortRecordId,zoneIdentity,tradeIdentity,entryValidationIds,removeEntryValidation} from './workflowDestination';
 import { open } from '@tauri-apps/plugin-dialog';
 import {CustomFieldHistoryPanel} from './CustomFieldHistoryPanel';
 import {CustomTradeAnalyticsPanel} from './CustomTradeAnalyticsPanel';
@@ -1201,6 +1201,16 @@ export function App(){
     if(!confirmCloseEvidenceEditor())return false;
     return discardEvidenceEditorDraft();
   }
+  function revealZoneEditor(id:string,zoneId:string){
+    const owner=active?.session_id,generation=sessionLoadRequestRef.current;
+    window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
+      if(!owner||activeSessionIdRef.current!==owner||sessionLoadRequestRef.current!==generation)return;
+      const node=document.getElementById(id);
+      if(node?.dataset.zoneId!==zoneId||!node.getClientRects().length)return;
+      revealDestination(node,'start');
+      if(!node.contains(document.activeElement))node.focus({preventScroll:true});
+    }));
+  }
   function openQuickZones(){
     if(!active)return;
     if(active.status==='DRAFT'){
@@ -1222,7 +1232,7 @@ export function App(){
   function goToNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'){
     setNotebookPage(page);
     setNotebookMaxPage(v=>Math.max(v,['PLAN','EVIDENCE','DECISION','EXECUTION','REVIEW'].indexOf(page)));
-    window.scrollTo({top:0,behavior:'smooth'});
+    window.scrollTo({top:0,behavior:'auto'});
   }
   function navigateNotebookPage(page:'PLAN'|'EVIDENCE'|'DECISION'|'EXECUTION'|'REVIEW'):boolean{
     if(page===notebookPage)return true;
@@ -1296,7 +1306,7 @@ export function App(){
   async function openEvidenceAfterDecisionGate(c:CurrentCandidate){
     if(evidenceCandidate?.candidate_id===c.candidate_id){
       setQuickZoneId(c.candidate_id);
-      setNotebookPage('EVIDENCE');return; // Do not erase a draft on reopening its own Zone.
+      setNotebookPage('EVIDENCE');revealZoneEditor('journal-quick-evidence',c.candidate_id);return; // Do not erase a draft on reopening its own Zone.
     }
     if(evidenceCandidate&&!confirmCloseEvidenceEditor())return;
     // Quick Plan and Evidence must point to the same canonical owner Zone.
@@ -1304,6 +1314,7 @@ export function App(){
     setQuickZoneId(c.candidate_id);
     const ownerSessionId=active?.session_id;
     setNotebookPage('EVIDENCE');setNotebookMaxPage(v=>Math.max(v,1));setEvidenceCandidate(c);setValidationErrors([]);
+    revealZoneEditor('journal-quick-evidence',c.candidate_id);
     // Do not discard the attempted batch while its durable outcome is UNKNOWN:
     // the trader needs its exact type/stance/price/note to compare with history.
     const uncertainAttempt=hasUncertainWrite(evidenceSaveUncertainZoneId,c.candidate_id)
@@ -1438,6 +1449,7 @@ export function App(){
     setReentryFromTradeId(priorTradeId);
     setDecisionClosePrompt(false);setPendingDecisionPage(null);
     setDecisionSaveFeedback('');setLastDecisionNotice('');setNotebookPage('DECISION');setNotebookMaxPage(v=>Math.max(v,2));setQuickZoneId(c.candidate_id);setDecisionCandidate(c);
+    revealZoneEditor('journal-quick-decision',c.candidate_id);
     setDecisionType(savedDraft?.decisionType??type);setDecisionInitialType(type);
     setDecisionReason(savedDraft?.reason??'');setDecisionNote(savedDraft?.note??'');
     setDecisionQuality(savedDraft?.quality??'');setMismatchReason(savedDraft?.mismatchReason??'');
@@ -1504,7 +1516,7 @@ export function App(){
       catch (refreshError) { setMessage('Decision saved, but timeline could not refresh: '+String(refreshError)); }
       delete decisionDraftsRef.current[decisionDraftKey(decisionCandidate.candidate_id,decisionType)];
       setDecisionClosePrompt(false);setPendingDecisionPage(null);
-      if(isTrade){ setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); focusQuickEntryInput(saved.decision_id); }
+      if(isTrade){ clearPreviousEntryValidation(); setUnexecutedRefreshToken(v=>v+1);setNotebookPage('EXECUTION'); setPendingTradeDecision(saved); setEntryPrice(null); setStopPrice(null); setTradeQty(1); setPlannedTarget(null); setEntryCommissionInput('');setEntryFeesInput(''); setMessage('Trade decision saved. Record only entry, stop and quantity now.'); focusQuickEntryInput(saved.decision_id); }
       else {const notice=`${decisionType.replace('_','-')} saved for this Zone. You can record another decision if the Zone is revisited.`;setMessage(notice);setLastDecisionNotice(notice);}
       setDecisionCandidate(null);
     }catch(e){
@@ -1534,7 +1546,13 @@ export function App(){
   function entryDraftKey(decisionId:string):string{
     return scopedQuickDraftKey(active?.session_id??'', 'ENTRY', decisionId);
   }
+  function clearPreviousEntryValidation(){
+    if(entryValidationIds.has(requiredFocusTargetRef.current))requiredFocusRequestRef.current++;
+    setValidationErrors(removeEntryValidation);
+    setMessage(previous=>previous.startsWith('Missing required field')&&validationErrors.length>0&&validationErrors.every(id=>entryValidationIds.has(id))?'':previous);
+  }
   function resetPendingEntryEditor(){
+    clearPreviousEntryValidation();
     setDecisionSaveFeedback(previous=>previous.startsWith('An earlier TRADE decision is still open for entry.')?'':previous);
     setPendingTradeDecision(null);
     setEntryPrice(null);setStopPrice(null);setTradeQty(1);setPlannedTarget(null);
@@ -1777,7 +1795,7 @@ export function App(){
       if(!input||input.disabled)return;
       // Avoid stealing focus from a user who already started editing this panel.
       if(panel.contains(document.activeElement))return;
-      revealDestination(input,'center');
+      revealDestination(panel,'start');
       input.focus({preventScroll:true});
     }));
   }
@@ -1805,6 +1823,7 @@ export function App(){
     }
     if(!confirmDiscardUnsavedTradeCapture('to the saved TRADE Decision',false))return;
     if(!navigateNotebookPage('EXECUTION'))return;
+    clearPreviousEntryValidation();
     const keepPrevious=!!pendingTradeDecision&&unsavedEntryCapture();
     if(keepPrevious)keepEntryDraft(pendingTradeDecision.decision_id);
     reviewSelectionRequestRef.current++;
@@ -2027,11 +2046,11 @@ export function App(){
       <div className="journeyHeading"><strong>YOUR WORKFLOW</strong><span>{active ? `${active.session_date} · ${active.instrument_symbol} · ${active.environment}` : 'Start a DEMO session to begin'}</span></div>
       <div className="journeySteps">
         <div className={active ? 'journeyStep journeyDone' : 'journeyStep journeyCurrent'}><span>01</span><b><JournalIcon name="session"/>Session</b><small>{active ? 'Selected' : 'Start here'}</small></div>
-        <div className={plan ? 'journeyStep journeyDone' : active ? 'journeyStep journeyCurrent' : 'journeyStep'}><span>02</span><b><JournalIcon name="zone"/>Planning</b><small>{plan ? 'Confirmed' : active ? 'Draft / confirm' : 'Next'}</small>{active?.status==='DRAFT' && !plan && <div className="journeyDraftLinks"><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(1)}>Plan</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(2)}>Opportunity Zones</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(3)}>Review</button></div>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>03</span><b><JournalIcon name="evidence"/>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={openQuickZones}>Select zone ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>04</span><b><JournalIcon name="checklist"/>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={openQuickZones}>Select zone ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>05</span><b><JournalIcon name="entry"/>Execution</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('EXECUTION'))window.requestAnimationFrame(()=>revealDestination(document.getElementById('journal-session-trades')));}}>View trades ↓</button>}</div>
-        <div className={plan ? 'journeyStep journeyAvailable' : 'journeyStep'}><span>06</span><b><JournalIcon name="review"/>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('REVIEW')){if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>revealDestination(document.getElementById('journal-session-review')));}}}>Session review ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyDone'+(notebookPage==='PLAN'?' journeyActivePage':'') : active ? 'journeyStep journeyCurrent' : 'journeyStep'}><span>02</span><b><JournalIcon name="zone"/>Planning</b><small>{plan ? 'Confirmed' : active ? 'Draft / confirm' : 'Next'}</small>{active?.status==='DRAFT' && !plan && <div className="journeyDraftLinks"><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(1)}>Plan</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(2)}>Opportunity Zones</button><button type="button" disabled={draftBusy} onClick={()=>saveAndAdvanceDraft(3)}>Review</button></div>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable'+(notebookPage==='EVIDENCE'?' journeyActivePage':'') : 'journeyStep'}><span>03</span><b><JournalIcon name="evidence"/>Evidence</b><small>{plan ? `${Object.values(candidateEvidence).reduce((n,items)=>n+items.length,0)} observed` : 'Record what happened'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={openQuickZones}>Select zone ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable'+(notebookPage==='DECISION'?' journeyActivePage':'') : 'journeyStep'}><span>04</span><b><JournalIcon name="checklist"/>Decision</b><small>{plan ? `${Object.values(candidateDecisions).reduce((n,items)=>n+items.length,0)} decisions` : 'Trade / No-trade / Missed'}</small>{plan && plan.candidates.length>0 && <button type="button" className="journeyJump" onClick={openQuickZones}>Select zone ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable'+(notebookPage==='EXECUTION'?' journeyActivePage':'') : 'journeyStep'}><span>05</span><b><JournalIcon name="entry"/>Execution</b><small>{plan ? `${sessionTrades.length} actual trade(s)` : 'Actual fills & risk'}</small>{plan && sessionTrades.length>0 && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('EXECUTION'))window.requestAnimationFrame(()=>revealDestination(document.getElementById('journal-session-trades')));}}>View trades ↓</button>}</div>
+        <div className={plan ? 'journeyStep journeyAvailable'+(notebookPage==='REVIEW'?' journeyActivePage':'') : 'journeyStep'}><span>06</span><b><JournalIcon name="review"/>Review</b><small>{sessionReview?.status==='COMPLETED' ? 'Session review completed' : 'Process & learning'}</small>{plan && <button type="button" className="journeyJump" onClick={()=>{if(navigateNotebookPage('REVIEW')){if(!showSessionReview)void openSessionReview();window.requestAnimationFrame(()=>revealDestination(document.getElementById('journal-session-review')));}}}>Session review ↓</button>}</div>
       </div>
       <p className="journeyNote">Session selected and Planning confirmed refer to saved milestones. Evidence, Decision and Execution can repeat. The highlighted notebook tab identifies the current page; available stages are not permanently complete.</p>
     </div>}
@@ -2257,7 +2276,7 @@ export function App(){
             {!historyOnlyLoading&&historyOnlyZoneId&&!historyOnlyError&&candidateDecisions[historyOnlyZoneId]&&<DecisionHistoryList rows={candidateDecisions[historyOnlyZoneId]}/>}
           </div>}
           {lastDecisionNotice&&!decisionCandidate&&<p role="status" className="okBox">{lastDecisionNotice}</p>}
-          {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision"><div className="panelTitle"><div><h2><JournalIcon name="checklist"/>{reentryFromTradeId?'New attempt':'Decision'} · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button type="button" onClick={requestCloseDecisionEditor}>Close</button></div>
+          {decisionCandidate&&<div className="panel decisionPanel" id="journal-quick-decision" data-zone-id={decisionCandidate.candidate_id} tabIndex={-1}><div className="panelTitle"><div><h2><JournalIcon name="checklist"/>{reentryFromTradeId?'New attempt':'Decision'} · {decisionCandidate.label||'Zone'}</h2><p className="subtle">Quick mode records only what matters now. Detailed review can be completed later.</p></div><button type="button" onClick={requestCloseDecisionEditor}>Close</button></div>
             <div className="fieldHelpLine"><b>{fieldText['decision.type']?.label?.trim()||'Decision'}</b>{fieldText['decision.type']?.help&&<small title={fieldText['decision.type'].help}>ⓘ</small>}<FieldHelp id="decision.type" value={decisionType}/></div><div className="decisionChoice"><button className={decisionType==='TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='TRADE'){setDecisionType('TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}><JournalIcon name="open"/>TRADE</button><button className={decisionType==='NO_TRADE'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='NO_TRADE'){setDecisionType('NO_TRADE');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}><JournalIcon name="noTrade"/>NO-TRADE</button><button className={decisionType==='MISSED'?'decisionBig selectedDecision':'decisionBig'} onClick={()=>{if(decisionType!=='MISSED'){setDecisionType('MISSED');setDecisionReason('');setMismatchReason('');clearValidation('decision.reason');clearValidation('decision.mismatchReason');}}}><JournalIcon name="missed"/>MISSED</button></div>
             {decisionType==='TRADE'&&<div className="formGrid">{orderFieldIdsWithinSection(TRADE_DECISION_ORDER,fieldOrder).map(id=>
               id==='decision.direction' ? <label key={id} data-validation-id="decision.direction" className={invalidClass('decision.direction')}>{fieldText['decision.direction']?.label?.trim()||"Direction"} {fieldText['decision.direction']?.help&&<small title={fieldText['decision.direction'].help}>ⓘ</small>} <small>{decisionCandidate.directional_intent==='LONG'||decisionCandidate.directional_intent==='SHORT'?'From the saved Zone intent; change only if you intend the opposite side.':'Choose explicitly — the Zone has no committed LONG/SHORT direction.'}</small><select value={decisionDirection} onChange={e=>{setDecisionDirection(e.target.value as ExplicitTradeDirection);setMismatchReason('');clearValidation('decision.mismatchReason');clearValidation('decision.direction');}}><option value="">Choose direction</option><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select></label>
@@ -2276,7 +2295,7 @@ export function App(){
           </div>
           <div style={{display:!quickMode||notebookPage==='EVIDENCE'?'block':'none'}}>
           {quickMode&&!evidenceCandidate&&<div className="panel"><h2><JournalIcon name="evidence"/>Evidence for this Zone</h2><p className="subtle">Only record observations that actually happened. Skip if none.</p>{plan.candidates.length>0&&<button type="button" onClick={()=>{const c=plan.candidates.find(x=>x.candidate_id===quickZoneId)??plan.candidates[0];void openEvidence(c);}}><JournalIcon name="evidence"/>Record evidence</button>}</div>}
-          {evidenceCandidate&&<div className="panel"><div className="panelTitle"><div><h2><JournalIcon name="evidence"/>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button type="button" disabled={evidenceSaving} onClick={closeEvidenceEditor}>Close</button></div>
+          {evidenceCandidate&&<div className="panel" id="journal-quick-evidence" data-zone-id={evidenceCandidate.candidate_id} tabIndex={-1}><div className="panelTitle"><div><h2><JournalIcon name="evidence"/>Quick evidence · {evidenceCandidate.label||'Zone'}</h2><p className="subtle">Capture what appeared now. Level provenance remains separate.</p></div><button type="button" disabled={evidenceSaving} onClick={closeEvidenceEditor}>Close</button></div>
           <div className={evidenceSaved?'okBox':hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id)?'warningBox':'subtle'} role="status" aria-live="polite" data-testid="evidence-persistence-state">
             <strong>{evidenceSaving?'SAVING — please do not navigate':evidenceSaved?'SAVED — confirmed by journal database':hasUncertainWrite(evidenceSaveUncertainZoneId,evidenceCandidate.candidate_id)?'SAVE OUTCOME UNKNOWN — verify history':hasUnsavedEvidenceDraft({selectedIds:selectedEvidenceIds,stances:evidenceStances,direction:evidenceDirection,price:evidencePrice,note:evidenceNote,acknowledgedSaved:false})?'NOT SAVED — Capture is required':'NOT SAVED — choose an observation'}</strong>
             {evidenceSaved&&<p>Recorded {savedEvidenceIds.length} observation(s). Saved details are shown in Recent evidence below. Capture another observation only when actually observed.</p>}

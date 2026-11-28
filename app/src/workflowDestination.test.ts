@@ -1,3 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {shortRecordId,zoneIdentity,tradeIdentity} from './workflowDestination';
+import {shortRecordId,zoneIdentity,tradeIdentity,removeEntryValidation} from './workflowDestination';
 describe('readable record identity',()=>{it('retains stable short reference and distinguishes unknown and unplanned zones',()=>{expect(shortRecordId('abcdefgh-123')).toBe('abcdefgh');expect(zoneIdentity('abcdefgh-123','Test Zone')).toBe('Test Zone · abcdefgh');expect(zoneIdentity('abcdefgh-123')).toBe('Zone abcdefgh');expect(zoneIdentity(null)).toBe('Unplanned');});it('does not fabricate entry price',()=>{expect(tradeIdentity({trade_id:'abcdefgh-123',direction:'LONG',average_entry:0})).toContain('@ 0');expect(tradeIdentity({trade_id:'abcdefgh-123',direction:'LONG'})).not.toContain('@');});});
+
+it('retires only the previous entry owner’s field errors, preserving other required errors',()=>{expect(removeEntryValidation(['trade.entryPrice','trade.stopPrice','trade.entryFees','decision.reason','review.note','sessionReview.wentWell','custom-trade-abc'])).toEqual(['decision.reason','review.note','sessionReview.wentWell','custom-trade-abc']);expect(removeEntryValidation(['trade.quantity','trade.plannedTarget','trade.entryCommission'])).toEqual([]);});

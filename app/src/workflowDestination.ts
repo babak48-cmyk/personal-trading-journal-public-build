@@ -19,3 +19,8 @@ export function zoneIdentity(id:string|null|undefined,label?:string|null):string
 export function tradeIdentity(trade:{trade_id:string;direction:string;average_entry?:number|null},zone?:string):string{
   return 'Trade '+shortRecordId(trade.trade_id)+' · '+trade.direction+(trade.average_entry!=null?' @ '+trade.average_entry:'')+(zone?' · '+zone:'');
 }
+
+// Entry errors are owner-specific. Dropping the old owner's presentation never
+// bypasses validation: the next save re-runs every required-field check.
+export const entryValidationIds:ReadonlySet<string>=new Set(['trade.entryPrice','trade.stopPrice','trade.quantity','trade.plannedTarget','trade.entryCommission','trade.entryFees']);
+export function removeEntryValidation(ids:readonly string[]):string[]{return ids.filter(id=>!entryValidationIds.has(id));}
