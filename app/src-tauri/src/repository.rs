@@ -2011,6 +2011,8 @@ pub struct JournalTradeRowDto {
     /// Such rows must not be mislabelled as having no Level Sources.
     pub level_source_snapshot_missing: bool,
     pub mistakes: Vec<String>,
+    /// Stable mistake type identity, with current catalog label (not a historical label snapshot).
+    pub mistake_refs: Vec<JournalMistakeRef>,
     pub realized_r: Option<f64>,
     pub gross_realized_pnl: Option<f64>,
     pub net_realized_pnl: Option<f64>,
@@ -2103,10 +2105,36 @@ fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<
     Ok(rows)
 }
 
-fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppError>{
-    let mut stmt=conn.prepare("SELECT mt.label FROM trade_mistakes tm JOIN mistake_types mt ON mt.mistake_type_id=tm.mistake_type_id WHERE tm.trade_id=?1 ORDER BY mt.label")?;
-    let rows = stmt.query_map([trade_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
+#[derive(Debug, Serialize)]
+pub struct JournalMistakeRef {
+    pub mistake_type_id:String,
+    pub label:String,
+}
+
+fn trade_mistake_refs(conn:&Connection,trade_id:&str)->Result<Vec<JournalMistakeRef>,AppError>{
+    let mut stmt=conn.prepare("SELECT DISTINCT tm.mistake_type_id,mt.label FROM trade_mistakes tm JOIN mistake_types mt ON mt.mistake_type_id=tm.mistake_type_id WHERE tm.trade_id=?1 ORDER BY mt.label,tm.mistake_type_id")?;
+    let rows=stmt.query_map([trade_id],|r|Ok(JournalMistakeRef{mistake_type_id:r.get(0)?,label:r.get(1)?}))?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
+}
+
+#[cfg(test)]
+mod journal_mistake_identity_tests{
+    use super::*;
+    #[test]
+    fn equal_labels_do_not_merge_distinct_saved_type_ids(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE mistake_types(mistake_type_id TEXT,label TEXT);
+          CREATE TABLE trade_mistakes(trade_id TEXT,mistake_type_id TEXT);
+          INSERT INTO mistake_types VALUES ('a','Same'),('b','Same');
+          INSERT INTO trade_mistakes VALUES ('t','a'),('t','a'),('t','b'),('other','a');").unwrap();
+        let refs=trade_mistake_refs(&conn,"t").unwrap();
+        assert_eq!(refs.len(),2);
+        assert_eq!(refs[0].mistake_type_id,"a");
+        assert_eq!(refs[1].mistake_type_id,"b");
+        conn.execute("UPDATE mistake_types SET label='Renamed' WHERE mistake_type_id='a'",[]).unwrap();
+        let refs=trade_mistake_refs(&conn,"t").unwrap();
+        assert!(refs.iter().any(|r|r.mistake_type_id=="a"&&r.label=="Renamed"));
+    }
 }
 
 /// Strict shared temporal classification: require an explicit RFC3339 offset.
@@ -2400,6 +2428,7 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             r.get::<_,Option<String>>(4)?
           ))
         )?;
+        let mistake_refs=trade_mistake_refs(conn,&metrics.trade_id)?;
         out.push(JournalTradeRowDto{
             session_trade_number:numbers.get(&trade_id).copied(),
             trade_id,session_id,session_date,
@@ -2407,7 +2436,8 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
-            mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
+            mistakes:mistake_refs.iter().map(|m|m.label.clone()).collect(),
+            mistake_refs,
             realized_r:metrics.realized_r,gross_realized_pnl:metrics.gross_realized_pnl,net_realized_pnl:metrics.net_realized_pnl,pnl_currency,
             open_quantity:metrics.open_quantity,audited_correction_count,
             audited_initial_risk_correction_count,audited_source_type_correction_count,
