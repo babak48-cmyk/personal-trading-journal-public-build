@@ -26,3 +26,5 @@ describe('cross-session Review Pending presentation (server eligibility is autho
 });
 
 it('finds the saved Decision and Zone without fabricating missing metadata',()=>{expect(filterCrossSessionPendingReviews(rows,'Resistance B').map(x=>x.trade_id)).toEqual(['newer-trade']);expect(filterCrossSessionPendingReviews(rows,'second attempt').map(x=>x.trade_id)).toEqual(['newer-trade']);expect(filterCrossSessionPendingReviews(rows,'decision-b').map(x=>x.trade_id)).toEqual(['newer-trade']);});
+
+it('prioritizes exact instrument symbols over incidental note or Zone substrings',()=>{expect(filterCrossSessionPendingReviews(rows,'ES').map(x=>x.trade_id)).toEqual(['older-trade']);expect(filterCrossSessionPendingReviews(rows,'resistance').map(x=>x.trade_id)).toEqual(['newer-trade']);});
