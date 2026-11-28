@@ -1,3 +1,11 @@
+## PTJ-C8-FILL-PREVIEW-VERIFICATION-2026-11-28
+
+Approved Set 1 (#8) continued. Previous non-Fill source d74ee5c969002203b9d11116e0606d0d45f2447c exact-source CI 46143516982 COMPLETED SUCCESS. New PUBLIC PR #17 source 542bb49f75395c9e9b2f55b036117d25a94c8db3, three files independently read back; observed PR head 542bb49f75395c9e9b2f55b036117d25a94c8db3, unmerged. CI []; no new PASS inferred. Changes: app/src/AuditedFillCorrectionPanel.tsx, fillCorrectionReadback.ts and test. Validate exact field/value/reason/owner/revision and explicit confirmation before accepting preview; refresh entire preview immediately before write and require new confirmation on changes; independently verify receipt revision equals preview prior revision +1; clear UNKNOWN selection on Fill switch. Added positive/negative regression coverage. No schema/formula/user history modification, no PRIVATE write, merge or intermediate DEMO. Pre-write preview check is not an atomic backend revision CAS; no claim otherwise.
+
+NEXT: verify exact-source CI; reconcile approved Set 1 scope, including existing safe Fill, INITIAL risk, Source Type/Price correction coverage and exports; record any real remaining gaps. High-risk historical timestamps, ownership/links remain separately authorization-gated, not silently closed. Continue #9 then #12 and one integrated Windows DEMO. Windows acceptance remains OPEN. No known unsaved source changes.
+
+---
+
 ## PTJ-C8-NONFILL-AUDIT-READBACK-2026-11-28
 
 Approved delivery Set 1 (#8) implementation started. PUBLIC PR #17 HEAD d74ee5c969002203b9d11116e0606d0d45f2447c, unmerged; source commit d74ee5c969002203b9d11116e0606d0d45f2447c, all five files independently read back. Exact-source CI observation [{"id":46143516982,"status":"in_progress","conclusion":null}] (do not infer PASS). Previous defect batch CI 46140807738 SUCCESS retained.
