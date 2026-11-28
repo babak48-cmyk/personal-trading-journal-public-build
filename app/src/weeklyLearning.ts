@@ -207,7 +207,20 @@ export function weeklyObservedEvidenceBreakdown(
     if(journalWeekStart(row.session_date)!==weekStart)continue;
     const observed=[...new Set((row.evidence_observed_at_decision??[])
       .map(x=>x.trim()).filter(Boolean))];
-    const labels=observed.length?observed:['No timestamp-verified evidence at Decision'];
+    // Distinguish absent verified pre-decision evidence from observed events
+    // whose recorded time is later or unknown. These are coverage categories,
+    // NOT evidence that any event confirmed the Decision. A trade can appear
+    // in several categories; never add group counts as distinct trades.
+    const labels=observed.length?[...observed]:[];
+    if(!observed.length){
+      labels.push('No timestamp-verified evidence at Decision');
+    }
+    if((row.evidence_post_decision_count??0)>0){
+      labels.push('Evidence recorded after Decision (not entry confirmation)');
+    }
+    if((row.evidence_unknown_timing_count??0)>0){
+      labels.push('Evidence with unknown timing (not verified at Decision)');
+    }
     for(const label of labels){
       const group=groups.get(label)||[];group.push(row);groups.set(label,group);
     }
