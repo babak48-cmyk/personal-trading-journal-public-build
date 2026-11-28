@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendSeries,dayHourHeatmapMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRPointContributors,realizedRDistribution,mistakeTrendSeries,dayHourHeatmapMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2428,16 +2428,28 @@ function WeeklyMetricChart({title,metrics,scope,rows,openTrade,unit}:{title:stri
   </section>;
 }
 
-function RealizedRLine({title,points,mode,openTrade}:{title:string;points:NonNullable<ReturnType<typeof realizedRChartSequence>>;mode:'cumulativeR'|'drawdownR';openTrade:(id:string)=>void}){
+function RealizedRLine({title,points,mode,scope,rows,openTrade}:{title:string;points:NonNullable<ReturnType<typeof realizedRChartSequence>>;mode:'cumulativeR'|'drawdownR';scope:string;rows:readonly JournalTradeRow[];openTrade:(id:string)=>void}){
   const [view,setView]=useState<'chart'|'table'>('chart');
-  const values=[0,...points.map(p=>p[mode])];const lo=Math.min(...values),hi=Math.max(...values);const range=hi-lo||1;
+  const [selection,setSelection]=useState<{scope:string;tradeId:string}|null>(null);
+  const selected=selection?.scope===scope?realizedRPointContributors(points,selection.tradeId,mode):null;
+  const select=(tradeId:string)=>setSelection({scope,tradeId});
+  const byId=new Map(rows.map(row=>[row.trade_id,row]));
+  const values=[0,...points.map(p=>p[mode])];
+  const lo=values.reduce((a,v)=>Math.min(a,v),0),hi=values.reduce((a,v)=>Math.max(a,v),0),range=hi-lo||1;
   const x=(i:number)=>24+552*i/Math.max(1,points.length);
   const y=(v:number)=>150-126*(v-lo)/range;
-  return <section className="weeklyBreakdown"><h3>{title}</h3><p className="subtle">Complete filtered closed sequence, ordered by final actual Exit. Not account equity.</p>
+  return <section className="weeklyBreakdown"><h3>{title}</h3><p className="subtle">Complete filtered closed sequence, ordered by final actual Exit. Not account equity. Select a point to inspect {mode==='cumulativeR'?'every contributing result through that point':'the outstanding decline interval since the most recent peak, including partial recoveries'}.</p>
     <div className="headerActions"><button aria-pressed={view==='chart'} onClick={()=>setView('chart')}>Chart</button><button aria-pressed={view==='table'} onClick={()=>setView('table')}>Table</button></div>
-    {view==='chart'&&<svg viewBox="0 0 600 174" width="100%" role="img" aria-label={title}><line x1="24" x2="576" y1={y(0)} y2={y(0)} stroke="currentColor" opacity=".4"/><polyline points={values.map((v,i)=>x(i)+','+y(v)).join(' ')} fill="none" stroke="#477fa5" strokeWidth="2"/>{points.map((p,i)=><circle key={p.tradeId} cx={x(i+1)} cy={y(p[mode])} r="4" fill="#477fa5" onClick={()=>openTrade(p.tradeId)}><title>{p.at} · {p[mode].toFixed(2)}R</title></circle>)}</svg>}
-    <p>Final value: {values[values.length-1].toFixed(2)}R · {points.length} closed Trades</p>
-    <details open={view==='table'}><summary>Exact chronological values / open original Trade</summary><table><thead><tr><th>Final exit UTC</th><th>Value</th><th>Trade</th></tr></thead><tbody>{points.map(p=><tr key={p.tradeId}><td>{p.at}</td><td>{p[mode].toFixed(2)}R</td><td><button onClick={()=>openTrade(p.tradeId)}>Open original Trade</button></td></tr>)}</tbody></table></details>
+    {view==='chart'&&<svg viewBox="0 0 600 174" width="100%" role="img" aria-label={title}><line x1="24" x2="576" y1={y(0)} y2={y(0)} stroke="currentColor" opacity=".4"/><polyline points={values.map((v,i)=>x(i)+','+y(v)).join(' ')} fill="none" stroke="#477fa5" strokeWidth="2"/>{points.map((p,i)=><circle key={p.tradeId} cx={x(i+1)} cy={y(p[mode])} r={selected?.point.tradeId===p.tradeId?7:4} fill="#477fa5" onClick={()=>select(p.tradeId)}><title>{p.at} · {p[mode].toFixed(2)}R</title></circle>)}</svg>}
+    <p>Final value: {values[values.length-1].toFixed(2)}R · {points.length} closed Trades{mode==='drawdownR'?' · Maximum drawdown '+hi.toFixed(2)+'R':''}</p>
+    <details open={view==='table'}><summary>Exact chronological values / accessible point selection</summary><table><thead><tr><th>Final exit UTC</th><th>Value</th><th>Inspect</th></tr></thead><tbody>{points.map(p=><tr key={p.tradeId}><td>{p.at}</td><td>{p[mode].toFixed(2)}R</td><td><button aria-pressed={selected?.point.tradeId===p.tradeId} onClick={()=>select(p.tradeId)}>Inspect point</button></td></tr>)}</tbody></table></details>
+    {selected&&<div className="weeklyBreakdown" aria-label={title+' selected point'}>
+      <h4>{selected.point[mode].toFixed(2)}R · {selected.tradeIds.length} contributing Trades</h4>
+      <p>Selected final exit: {selected.point.at}</p>
+      <div className="headerActions"><button onClick={()=>openTrade(selected.point.tradeId)}>Open selected Trade</button><button onClick={()=>setSelection(null)}>Clear selection</button></div>
+      {mode==='drawdownR'&&<p>{selected.peakTradeId?'The decline is measured from the last attained peak.':'The decline is measured from the initial 0R baseline.'}{selected.peakTradeId&&<button onClick={()=>openTrade(selected.peakTradeId!)}>Open peak Trade</button>}</p>}
+      {selected.tradeIds.length===0?<p>No outstanding decline interval at this point.</p>:selected.tradeIds.map(id=>{const trade=byId.get(id);return <div className="weeklyBreakdownRow" key={id}><strong>{trade?.session_date} · {trade?.instrument_symbol} · {trade?.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · {trade?.direction}</strong><span>{trade?.candidate_label||'No Zone label'} · Net R {trade?.realized_r==null?'UNKNOWN':trade.realized_r.toFixed(2)}</span><button onClick={()=>openTrade(id)}>Open original Trade</button></div>})}
+    </div>}
   </section>;
 }
 function MistakeTrendChart({series,scope,rows,openTrade}:{series:ReturnType<typeof mistakeTrendSeries>;scope:string;rows:readonly JournalTradeRow[];openTrade:(id:string)=>void}){
@@ -2674,7 +2686,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
         </details>
         <details className="guidedMore"><summary>Interactive performance history and time heatmap · all applied filters</summary>
           <p className="subtle">These history charts use all applied Trade filters, not just the selected week. Unknown chronology or missing R blocks the complete sequence rather than fabricating a curve.</p>
-          {realizedSequence?<><RealizedRLine title="Cumulative realized net R" points={realizedSequence} mode="cumulativeR" openTrade={openTrade}/><RealizedRLine title="Realized R drawdown magnitude" points={realizedSequence} mode="drawdownR" openTrade={openTrade}/></>:<p>Complete cumulative R / drawdown unavailable: no closed Trades, missing R, missing or ambiguous final exit chronology.</p>}
+          {realizedSequence?<><RealizedRLine title="Cumulative realized net R" points={realizedSequence} mode="cumulativeR" scope={historyScope} rows={rows} openTrade={openTrade}/><RealizedRLine title="Realized R drawdown magnitude" points={realizedSequence} mode="drawdownR" scope={historyScope} rows={rows} openTrade={openTrade}/></>:<p>Complete cumulative R / drawdown unavailable: no closed Trades, missing R, missing or ambiguous final exit chronology.</p>}
           <WeeklyMetricChart title="Distribution of realized R" metrics={distributionMetrics} scope={historyScope} rows={rows} openTrade={openTrade} unit="count"/>
           <MistakeTrendChart series={mistakeSeries} scope={historyScope} rows={rows} openTrade={openTrade}/>
           <DecisionHeatmap metrics={heatmapMetrics} scope={historyScope} rows={rows} openTrade={openTrade}/>
