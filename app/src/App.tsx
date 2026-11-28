@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,type WeeklyInteractiveMetric} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2452,6 +2452,9 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const weekdayMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'weekday'):[];
   const hourMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'hour'):[];
   const ruleMetrics=activeWeek?weeklyContextChartMetrics(rows,activeWeek,'rules'):[];
+  const setupMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'setup'):[];
+  const sourceMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'source'):[];
+  const evidenceMetrics=activeWeek?weeklyProvenanceChartMetrics(rows,activeWeek,'evidence'):[];
   const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
   const outcomeGroups=activeWeek?weeklyDecisionOutcomeGroups(rows,activeWeek):[];
   const [outcomeView,setOutcomeView]=useState<'chart'|'table'>('chart');
@@ -2599,6 +2602,12 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
             <small>{group.ruleViolationCount} recorded violation(s)</small>
           </div>)}</div>
+        </details>
+        <details className="guidedMore"><summary>Interactive Setup, Level Source and Evidence charts</summary>
+          <p className="subtle">Selected week and applied filters. Average R uses eligible closed Trades. Setup versions and attribution are separate; definitions are not observed market context. Level Sources use decision-time provenance. Evidence groups distinguish recorded roles and timing coverage; later or unknown timing is not entry confirmation. Source and evidence memberships may overlap; associations do not establish causation or an edge.</p>
+          <WeeklyMetricChart title="Average eligible R by Setup version and attribution" metrics={setupMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
+          <WeeklyMetricChart title="Average eligible R by decision-time Level Source" metrics={sourceMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
+          <WeeklyMetricChart title="Average eligible R by recorded Evidence and timing coverage" metrics={evidenceMetrics} scope={outcomeScope} rows={rows} openTrade={openTrade} unit="R"/>
         </details>
         <details className="guidedMore"><summary>Interactive market, time and rule-adherence charts</summary>
           <p className="subtle">Average R uses eligible closed Trades only. Weekday is the recorded Session date; hour is the original Decision in the saved Session timezone, not the Entry hour. Unknown clocks have no attributed R. Rule counts describe recorded status, not verified compliance or a trading edge.</p>
