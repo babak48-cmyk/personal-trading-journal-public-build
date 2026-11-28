@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2419,6 +2419,8 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const directionBreakdown=activeWeek?weeklyTradeBreakdown(rows,activeWeek,'direction'):[];
   const sessionBreakdown=activeWeek?weeklySessionBreakdown(rows,activeWeek):[];
   const tradeNumberBreakdown=activeWeek?weeklyTradeNumberBreakdown(rows,activeWeek):[];
+  const mistakeOutcomes=activeWeek?weeklyMistakeOutcomes(rows,activeWeek):[];
+  const badDecisionWins=activeWeek?weeklyBadDecisionWins(rows,activeWeek):[];
   const weekdayBreakdown=activeWeek?weeklyWeekdayBreakdown(rows,activeWeek):[];
   const decisionHourBreakdown=activeWeek?weeklyDecisionHourBreakdown(rows,activeWeek):[];
   const levelSourceBreakdown=activeWeek?weeklyLevelSourceBreakdown(rows,activeWeek):[];
@@ -2550,14 +2552,28 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
             <small>{group.ruleViolationCount} recorded violation(s)</small>
           </div>)}</div>
         </details>
-        {weekly.mistakes.length>0&&<p><strong>Recorded recurring mistakes:</strong> {weekly.mistakes.slice(0,3).map(m=>m.label+' ('+m.count+')').join(' · ')}</p>}
+        <details className="guidedMore"><summary>Recorded mistakes · frequency and associated losses</summary>
+          <p className="subtle">Counts use distinct tagged Trades within this week's filters. Negative R sums only known losing closed Trades; this is not the causal cost of a mistake. Tags may overlap; never add groups. Missing R is not zero, and untagged Trades are not necessarily mistake-free.</p>
+          {mistakeOutcomes.length===0?<p>No mistake tags recorded.</p>:mistakeOutcomes.map(g=><div className="weeklyBreakdownRow" key={g.label}>
+            <strong>{g.label}</strong><span>{g.tradeCount}/{g.weekTradeCount} tagged · {g.eligibleRCount}/{g.closedCount} closed R eligible</span>
+            <span>Known losing Trades {g.lossCount} · negative R sum {fmt(g.lossR)} · net R {fmt(g.netR)}</span>
+            <div>{g.tradeIds.map(id=>{const trade=rows.find(row=>row.trade_id===id);return <button key={id} onClick={()=>openTrade(id)}>{trade?.session_date} · {trade?.instrument_symbol} · {trade?.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · {trade?.direction} · {trade?.candidate_label||'No Zone label'}</button>})}</div>
+          </div>)}
+        </details>
+        <details className="guidedMore"><summary>Bad decision + winning outcome · {badDecisionWins.length} recorded cases</summary>
+          <p className="subtle">Closed Trades with saved C/INVALID quality and positive known net P&amp;L, matching the performance summary. A win is not proof of sound process; missing financial results are excluded.</p>
+          {badDecisionWins.length===0?<p>No qualifying recorded cases.</p>:badDecisionWins.map(trade=><div className="weeklyBreakdownRow" key={trade.trade_id}>
+            <strong>{trade.session_date} · {trade.instrument_symbol} · {trade.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · {trade.direction}</strong>
+            <span>Quality {trade.decision_quality} · R {fmt(trade.realized_r)} · {trade.candidate_label||'No Zone label'}</span><button onClick={()=>openTrade(trade.trade_id)}>Open original Trade</button>
+          </div>)}
+        </details>
         {weeklyThreePart&&<div className="weeklyBreakdown" aria-label="Three-part weekly review">
           <div className="weeklyBreakdownRow"><strong>1 · Setup to evaluate (not a proven edge)</strong><span>{weeklyThreePart.setupCandidate}</span></div>
           <div className="weeklyBreakdownRow"><strong>2 · Recorded concern to investigate</strong><span>{weeklyThreePart.recordedConcern}</span></div>
           <div className="weeklyBreakdownRow"><strong>3 · One actionable next-week experiment</strong><span>{weeklyThreePart.nextAction}</span></div>
         </div>}
         <WeeklyActionWorkspace weekStart={activeWeek} appliedFilter={appliedFilter} suggestedAction={weeklyAction}/>
-        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)+'\nTrade number within complete Session (filtered samples): '+tradeNumberBreakdown.map(g=>g.label+': '+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR==null?'Net R unknown':g.netR.toFixed(2)+'R')).join(' | ')} readOnly/></label>
+        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)+'\nMistake-associated outcomes (overlapping, not causal cost): '+weeklyMistakeOutcomeText(mistakeOutcomes)+'\nBad decision + winning outcome: '+badDecisionWins.length+' recorded cases.'+'\nTrade number within complete Session (filtered samples): '+tradeNumberBreakdown.map(g=>g.label+': '+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible, '+(g.netR==null?'Net R unknown':g.netR.toFixed(2)+'R')).join(' | ')} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
     </>}
