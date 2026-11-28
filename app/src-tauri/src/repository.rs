@@ -2010,7 +2010,10 @@ pub struct JournalTradeRowDto {
     pub level_source_snapshot_missing: bool,
     pub mistakes: Vec<String>,
     pub realized_r: Option<f64>,
+    pub gross_realized_pnl: Option<f64>,
     pub net_realized_pnl: Option<f64>,
+    /// Original Session currency snapshot only; never today's instrument currency.
+    pub pnl_currency: Option<String>,
     pub open_quantity: f64,
     /// Number of immutable audit events recorded against this Trade's Fills;
     /// counts audit provenance, not corrected/confirmed profitability.
@@ -2278,10 +2281,11 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         let evidence_temporal=trade_evidence_temporal_snapshot(
             conn,&trade_id,&candidate_id,decision_at.as_deref()
         )?;
-        let session_timezone_id:Option<String>=conn.query_row(
-            "SELECT timezone_id FROM sessions WHERE session_id=?1",
-            [&session_id],|r|r.get(0)
+        let (session_timezone_id,pnl_currency):(Option<String>,Option<String>)=conn.query_row(
+            "SELECT timezone_id,instrument_currency_snapshot FROM sessions WHERE session_id=?1",
+            [&session_id],|r|Ok((r.get(0)?,r.get(1)?))
         )?;
+        let pnl_currency=pnl_currency.filter(|code|code.len()==3&&code.bytes().all(|ch|ch.is_ascii_uppercase()));
         let metrics=trade_metrics(conn,&trade_id)?;
         let audited_correction_count:i64=conn.query_row(
           "SELECT COUNT(*) FROM fill_correction_events ce
@@ -2326,7 +2330,7 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             level_sources:sources.into_iter().map(|(_,label)|label).collect(),
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
             mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
-            realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,
+            realized_r:metrics.realized_r,gross_realized_pnl:metrics.gross_realized_pnl,net_realized_pnl:metrics.net_realized_pnl,pnl_currency,
             open_quantity:metrics.open_quantity,audited_correction_count,
             audited_initial_risk_correction_count,audited_source_type_correction_count,
             audited_source_price_correction_count,

@@ -461,3 +461,34 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:
     'Record an approved personal action separately; this read-only summary does not save a review event.',
   ].join('\n');
 }
+
+/** Closed recorded outcomes grouped by original currency. Gross and net each
+ * retain their own denominator. Cost = gross - net only for paired known values.
+ * Never aggregate different or unknown currencies; never replace missing with 0. */
+export type WeeklyMoneyGroup=Readonly<{
+  currency:string|null; closedCount:number; grossCount:number; netCount:number; costCount:number;
+  gross:number|null; net:number|null; costs:number|null;
+}>;
+export function weeklyMoneyBreakdown(rows:readonly JournalTradeRow[],weekStart:string):WeeklyMoneyGroup[]{
+  const groups=new Map<string|null,JournalTradeRow[]>();
+  for(const row of rows){
+    if(row.status!=='CLOSED'||journalWeekStart(row.session_date)!==weekStart)continue;
+    const currency=row.pnl_currency&&/^[A-Z]{3}$/.test(row.pnl_currency)?row.pnl_currency:null;
+    const items=groups.get(currency)??[];items.push(row);groups.set(currency,items);
+  }
+  const known=(v:number|null|undefined):v is number=>typeof v==='number'&&Number.isFinite(v);
+  const sum=(values:number[])=>values.length?values.reduce((a,b)=>a+b,0):null;
+  return [...groups].map(([currency,items])=>{
+    const gross=items.flatMap(r=>known(r.gross_realized_pnl)?[r.gross_realized_pnl]:[]);
+    const net=items.flatMap(r=>known(r.net_realized_pnl)?[r.net_realized_pnl]:[]);
+    const costs=items.flatMap(r=>known(r.gross_realized_pnl)&&known(r.net_realized_pnl)?[r.gross_realized_pnl-r.net_realized_pnl]:[]);
+    return {currency,closedCount:items.length,grossCount:gross.length,netCount:net.length,costCount:costs.length,
+      gross:currency?sum(gross):null,net:currency?sum(net):null,costs:currency?sum(costs):null};
+  }).sort((a,b)=>a.currency===null?1:b.currency===null?-1:a.currency.localeCompare(b.currency));
+}
+export function weeklyMoneyText(groups:readonly WeeklyMoneyGroup[]):string{
+  const label=(v:number|null)=>v===null?'unknown':v.toFixed(2);
+  return groups.length?groups.map(g=>(g.currency??'Unknown historical currency (totals withheld)')+
+    ': gross '+label(g.gross)+' ('+g.grossCount+'/'+g.closedCount+'), costs '+label(g.costs)+' ('+g.costCount+'/'+g.closedCount+
+    '), net '+label(g.net)+' ('+g.netCount+'/'+g.closedCount+')').join('; '):'No closed trades';
+}

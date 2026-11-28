@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -329,5 +329,29 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(blank.tradeCount).toBe(0);
     expect(blank.netR).toBeNull();
     expect(blank.observation).toContain('No trades');
+  });
+});
+
+describe('weekly monetary outcomes preserve coverage and currency',()=>{
+  it('separates currencies and missing costs, excludes open and other weeks',()=>{
+    const date='2026-11-23';
+    const result=weeklyMoneyBreakdown([
+      row('es',date,{pnl_currency:'USD',gross_realized_pnl:100,net_realized_pnl:96}),
+      row('gc',date,{pnl_currency:'USD',gross_realized_pnl:50,net_realized_pnl:null}),
+      row('zero',date,{pnl_currency:'USD',gross_realized_pnl:0,net_realized_pnl:0}),
+      row('aud',date,{pnl_currency:'AUD',gross_realized_pnl:80,net_realized_pnl:75}),
+      row('legacy',date,{pnl_currency:null,gross_realized_pnl:999,net_realized_pnl:999}),
+      row('open',date,{status:'OPEN',pnl_currency:'USD',gross_realized_pnl:999}),
+      row('prior','2026-11-16',{pnl_currency:'USD',gross_realized_pnl:999}),
+    ],date);
+    expect(result).toEqual([
+      {currency:'AUD',closedCount:1,grossCount:1,netCount:1,costCount:1,gross:80,net:75,costs:5},
+      {currency:'USD',closedCount:3,grossCount:3,netCount:2,costCount:2,gross:150,net:96,costs:4},
+      {currency:null,closedCount:1,grossCount:1,netCount:1,costCount:1,gross:null,net:null,costs:null}
+    ]);
+    expect(weeklyMoneyText(result)).toContain('Unknown historical currency (totals withheld)');
+  });
+  it('never manufactures a zero from a missing monetary sample',()=>{
+    expect(weeklyMoneyBreakdown([row('missing','2026-11-23',{pnl_currency:'USD',gross_realized_pnl:null,net_realized_pnl:null})],'2026-11-23')[0]).toEqual({currency:'USD',closedCount:1,grossCount:0,netCount:0,costCount:0,gross:null,net:null,costs:null});
   });
 });

@@ -48,7 +48,7 @@ import {isCustomFieldPresented,safeVisibleCustomFields,effectiveCustomPresentati
 import { missingRequiredCustomValues, isUsableCustomSelection, isUsableCustomTypedValue } from './customFieldRequired';
 import {WeeklyActionWorkspace} from './WeeklyActionWorkspace';
 import {DemoDataTransferPanel} from './DemoDataTransferPanel';
-import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness} from './weeklyLearning';
+import {journalWeeks,journalWeekStart,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklyMoneyBreakdown,weeklyMoneyText} from './weeklyLearning';
 import {analyticsInstrumentOptions} from './analyticsInstrumentOptions';
 import {readOnlyCustomRow, orderedReadOnlyCustomRows, type ReadOnlyCustomRow} from './customFieldReadOnly';
 import { fieldConnectionReport, fieldConnectionSummary, requiredPresentationIssues, isEditableRequirementControl, type InventoryStage } from './fieldInventory';
@@ -2410,6 +2410,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
   const [selectedWeek,setSelectedWeek]=useState('');
   const activeWeek=weeks.includes(selectedWeek)?selectedWeek:(weeks[0]??'');
   const weekly=activeWeek?weeklyLearningSnapshot(rows,activeWeek,mistakes):null;
+  const weeklyMoney=activeWeek?weeklyMoneyBreakdown(rows,activeWeek):[];
   const decisionWeekRows=activeWeek?decisionOnlyRows.filter(item=>journalWeekStart(item.session_date)===activeWeek):[];
   const weeklyReasons=activeWeek?decisionReasonRows.filter(item=>journalWeekStart(item.session_date)===activeWeek):[];
   const decisionWeekSummary=decisionWeekRows.reduce((acc,item)=>({noTrade:acc.noTrade+item.no_trade_count,missed:acc.missed+item.missed_count,missingReason:acc.missingReason+item.reason_missing_count}),{noTrade:0,missed:0,missingReason:0});
@@ -2448,6 +2449,16 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <span title="Largest negative net R among R-eligible closed Trades only; unknown outcomes excluded."><b>Largest known loser</b>{weekly.largestLoserR==null?'—':weekly.largestLoserR.toFixed(2)+'R'}</span>
           <span><b><JournalIcon name="safety"/>Rule violations</b>{weekly.ruleViolationCount}</span>
           <span><b><JournalIcon name="checklist"/>Unchecked rules</b>{weekly.uncheckedRuleCount}</span>
+        </div>
+        <div className="weeklyBreakdown" aria-label="Weekly monetary outcomes by original currency">
+          <h3>Gross P&amp;L, costs and net P&amp;L</h3>
+          <p className="subtle">Closed trades only. Each total has its own known-value sample count; costs use paired gross and net values. Different currencies are never added together. Unknown currency totals are withheld.</p>
+          {weeklyMoney.length===0?<p className="subtle">No closed trades in this week.</p>:weeklyMoney.map(g=><div className="weeklyBreakdownRow" key={g.currency??'UNKNOWN'}>
+            <strong>{g.currency??'Unknown historical currency'} · {g.closedCount} closed</strong>
+            <span>Gross {fmt(g.gross)} · {g.grossCount}/{g.closedCount} known</span>
+            <span>Costs {fmt(g.costs)} · {g.costCount}/{g.closedCount} paired</span>
+            <span>Net {fmt(g.net)} · {g.netCount}/{g.closedCount} known</span>
+          </div>)}
         </div>
         <details className="guidedMore"><summary>Instrument breakdown · sample sizes (ES / GC / others)</summary>
           <p className="subtle">Descriptive comparison within this selected week and applied filters. Missing cost or initial-risk records are not counted as zero R.</p>
@@ -2537,7 +2548,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           <div className="weeklyBreakdownRow"><strong>3 · One actionable next-week experiment</strong><span>{weeklyThreePart.nextAction}</span></div>
         </div>}
         <WeeklyActionWorkspace weekStart={activeWeek} appliedFilter={appliedFilter} suggestedAction={weeklyAction}/>
-        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)} readOnly/></label>
+        <label className="weeklyLearningCopy">Review summary to copy<textarea aria-label="Weekly summary, read-only" rows={9} value={weeklyLearningText(weekly,levelSourceBreakdown,decisionOnlyError?undefined:{noTrade:decisionWeekSummary.noTrade,missed:decisionWeekSummary.missed,action:weeklyAction},{setups:setupVersionBreakdown,definedContexts:definedContextBreakdown},observedEvidenceBreakdown)+'\nWeekly monetary outcomes (separate currencies, known/closed): '+weeklyMoneyText(weeklyMoney)} readOnly/></label>
         <p className="subtle">Only trades in the current filters are counted. NO_TRADE and MISSED decisions without executions are not included here; this is not a complete missed-opportunity analysis. A displayed action is a suggestion, not a proven trading edge, and is not saved as a journal event.</p>
       </>}
     </>}
