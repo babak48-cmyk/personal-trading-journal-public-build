@@ -2517,7 +2517,7 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
           </div>)}</div>}
         </details>
         <details className="guidedMore"><summary>Actually observed Evidence by original Decision time · sample sizes</summary>
-          <p className="subtle">Only timestamp-valid, persisted observations at or before the original Decision count here. A saved plan, a Setup definition or a later observation is NOT historical confirmation. Groups overlap if one trade has multiple evidence types; do not sum them as independent trades. Empty or unknown timing is not proof that evidence was absent in the market.</p>
+          <p className="subtle">Only timestamp-valid, persisted observations at or before the original Decision count here. A saved plan, a Setup definition or a later observation is NOT historical confirmation. Groups also overlap across verified, later and unknown-timing records; do not sum them as independent trades. Later or unknown-timing observations are not confirmations at Decision. Empty or unknown timing is not proof that evidence was absent in the market.</p>
           {observedEvidenceBreakdown.length===0?<p className="subtle">No trades in selected week.</p>:<div className="weeklyBreakdown">{observedEvidenceBreakdown.map(group=><div className="weeklyBreakdownRow" key={group.label}>
             <strong>{group.label}</strong><span>{group.tradeCount} trade(s) · {group.closedCount} closed</span>
             <span>R eligible {group.eligibleRCount}/{group.closedCount} · {group.netR==null?'Net R unknown':group.netR.toFixed(2)+'R'}</span>
