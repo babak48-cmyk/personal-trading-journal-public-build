@@ -224,6 +224,31 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     expect(results.reduce((sum,r)=>sum+r.tradeCount,0)).toBe(4);
     expect(weeklyObservedEvidenceBreakdown(data,'2026-10-26')).toEqual([]);
   });
+  it('distinguishes absent at-Decision evidence, later evidence, and unknown timing without inventing confirmation',()=>{
+    const records=[
+      row('none','2026-11-09',{evidence_observed_at_decision:[],evidence_post_decision_count:0,evidence_unknown_timing_count:0,realized_r:1}),
+      row('later','2026-11-10',{evidence_observed_at_decision:[],evidence_post_decision_count:2,evidence_unknown_timing_count:0,realized_r:-1}),
+      row('unknown','2026-11-11',{evidence_observed_at_decision:[],evidence_post_decision_count:0,evidence_unknown_timing_count:1,realized_r:null}),
+      row('mixed','2026-11-12',{evidence_observed_at_decision:['CONTRADICTING_EVIDENCE: Delta'],evidence_post_decision_count:1,evidence_unknown_timing_count:1,realized_r:2}),
+      row('outside','2026-11-02',{evidence_observed_at_decision:[],evidence_post_decision_count:9,evidence_unknown_timing_count:9}),
+    ];
+    const groups=weeklyObservedEvidenceBreakdown(records,'2026-11-09');
+    const get=(label:string)=>groups.find(g=>g.label===label);
+    expect(get('No timestamp-verified evidence at Decision')).toMatchObject({
+      tradeCount:3,closedCount:3,eligibleRCount:2,netR:0,
+    });
+    expect(get('Evidence recorded after Decision (not entry confirmation)')).toMatchObject({
+      tradeCount:2,closedCount:2,eligibleRCount:2,netR:1,
+    });
+    expect(get('Evidence with unknown timing (not verified at Decision)')).toMatchObject({
+      tradeCount:2,closedCount:2,eligibleRCount:1,netR:2,
+    });
+    expect(get('CONTRADICTING_EVIDENCE: Delta')).toMatchObject({
+      tradeCount:1,netR:2,
+    });
+    expect(groups.reduce((sum,g)=>sum+g.tradeCount,0)).toBe(8);
+    expect(weeklyObservedEvidenceBreakdown(records,'2026-10-26')).toEqual([]);
+  });
   it('uses decision-only MISSED reasons for one cautious weekly action when trade process has no priority issue',()=>{
     const snap=weeklyLearningSnapshot([row('a','2026-11-09',{realized_r:1})],'2026-11-09');
     const reasons=[
