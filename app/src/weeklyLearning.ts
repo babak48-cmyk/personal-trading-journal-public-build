@@ -450,6 +450,21 @@ export function realizedRChartSequence(rows:readonly JournalTradeRow[]){
     return {tradeId:row.trade_id,at:row.final_exit_utc!,cumulativeR:total,drawdownR:peak-total};
   });
 }
+/** Exact contributing interval for a selected chronological point.
+ * Cumulative R includes every result through the selected point.
+ * Drawdown starts immediately after the most recent attained peak, including
+ * recovery Trades in that interval, not only losses. Zero drawdown has no
+ * outstanding decline interval. */
+export function realizedRPointContributors(points:NonNullable<ReturnType<typeof realizedRChartSequence>>,tradeId:string,mode:'cumulativeR'|'drawdownR'){
+  const end=points.findIndex(p=>p.tradeId===tradeId);
+  if(end<0)return null;
+  let start=0;
+  if(mode==='drawdownR'){
+    for(let i=0;i<=end;i++)if(points[i].drawdownR===0)start=i+1;
+  }
+  return {point:points[end],tradeIds:points.slice(start,end+1).map(p=>p.tradeId),
+    peakTradeId:mode==='drawdownR'&&start>0?points[start-1].tradeId:null};
+}
 export function realizedRDistribution(rows:readonly JournalTradeRow[]):WeeklyInteractiveMetric[]{
   const closed=rows.filter(row=>row.status==='CLOSED');
   const keys=['Below -2R','-2R to below -1R','-1R to below 0R','0R','Above 0R to 1R','Above 1R to 2R','Above 2R','Unknown R'];
