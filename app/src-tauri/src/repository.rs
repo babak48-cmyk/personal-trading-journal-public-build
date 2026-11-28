@@ -2105,7 +2105,7 @@ fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<
     Ok(rows)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct JournalMistakeRef {
     pub mistake_type_id:String,
     pub label:String,
