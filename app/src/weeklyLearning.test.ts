@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendMetrics,mistakeTrendSeries,dayHourHeatmapMetrics} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRPointContributors,realizedRDistribution,mistakeTrendMetrics,mistakeTrendSeries,dayHourHeatmapMetrics} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -582,5 +582,21 @@ describe('continuous recorded mistake trend',()=>{
       {week:'2026-11-23',count:1,tradeCount:2,tradeIds:['c']},
     ]);
     expect(mistakeTrendSeries([])).toEqual([]);
+  });
+});
+
+describe('realized R point contributors',()=>{
+  it('includes recovery trades in drawdown, resets at an attained peak and preserves cumulative prefix',()=>{
+    const values=[2,-3,1,2,0,-1,2];
+    const rows=values.map((r,i)=>row('t'+i,'2026-11-09',{realized_r:r,final_exit_utc:'2026-11-09T10:00:0'+i+'.000000000Z'}));
+    const points=realizedRChartSequence([...rows].reverse())!;
+    expect(realizedRPointContributors(points,'t2','cumulativeR')?.tradeIds).toEqual(['t0','t1','t2']);
+    expect(realizedRPointContributors(points,'t2','drawdownR')).toMatchObject({tradeIds:['t1','t2'],peakTradeId:'t0',point:{drawdownR:2}});
+    expect(realizedRPointContributors(points,'t3','drawdownR')?.tradeIds).toEqual([]);
+    expect(realizedRPointContributors(points,'t5','drawdownR')).toMatchObject({tradeIds:['t5'],peakTradeId:'t4'});
+    expect(realizedRPointContributors(points,'t6','drawdownR')?.tradeIds).toEqual([]);
+    expect(realizedRPointContributors(points,'absent','cumulativeR')).toBeNull();
+    const initial=realizedRChartSequence([{...rows[0],realized_r:-1}])!;
+    expect(realizedRPointContributors(initial,'t0','drawdownR')).toMatchObject({tradeIds:['t0'],peakTradeId:null});
   });
 });
