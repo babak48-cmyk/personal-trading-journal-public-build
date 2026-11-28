@@ -56,6 +56,26 @@ export function weeklyTradeBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+/** Ordinals come from the complete native Session history, not filtered rows. */
+export function weeklyTradeNumberBreakdown(
+  rows:readonly JournalTradeRow[],weekStart:string,
+):WeeklyTradeBreakdown[]{
+  const groups=new Map<number|null,JournalTradeRow[]>();
+  for(const row of rows){
+    if(journalWeekStart(row.session_date)!==weekStart)continue;
+    const value=row.session_trade_number;
+    const n=typeof value==='number'&&Number.isSafeInteger(value)&&value>0?value:null;
+    const group=groups.get(n)||[];group.push(row);groups.set(n,group);
+  }
+  return [...groups.entries()].sort(([a],[b])=>a===null?(b===null?0:1):b===null?-1:a-b).map(([n,items])=>{
+    const closed=items.filter(row=>row.status==='CLOSED');
+    const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
+    return {label:n===null?'Unknown trade number':'Trade #'+n,tradeCount:items.length,closedCount:closed.length,
+      eligibleRCount:eligible.length,netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
+      ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length};
+  });
+}
+
 /** Session-date weekday, never inferred from a trade's exit or current clock.
  * Same-week multiple sessions remain independent in the Session breakdown. */
 export function weeklyWeekdayBreakdown(
