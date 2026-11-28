@@ -1,3 +1,13 @@
+## PTJ-C-D-NEXT-DELIVERY-APPROVED-2026-11-28
+
+User explicitly approved the three consecutive cohesive sets and instructed execution without renewed permission or unnecessary reports: (1) remaining approved Audited Data Correction (#8), (2) Analytics & Weekly Learning (#9), (3) Stability & Integration (#12), followed by ONE integrated isolated Windows DEMO. No intermediate installer delivery. Existing A–D packages, all twelve roadmap families, prior scoped PASS evidence, and unfinished Full All-Inputs requirements remain intact. Do not expand separately gated timestamp/ownership/link corrections, proposed Setup Playbook or conditional NinjaTrader import. No merge or PRIVATE changes.
+
+Defect batch source HEAD 62c6ce9bc9ceabcd3ddeeed049695b176d7fca1f, PUBLIC draft PR #17, independently verified unmerged. Final CI [46140807738](https://github.com/babak48-cmyk/personal-trading-journal-public-build/actions/runs/46140807738) completed SUCCESS; earlier failing identity search corrected and regression covered. Defect batch implementation/CI gate complete for scoped fixes; Windows acceptance and actual C cost inspection remain OPEN, deferred to next integrated DEMO per explicit user direction. No user acceptance of untested Windows behavior inferred. No known unsaved source changes.
+
+NEXT approved action: reconcile #8 existing correction capabilities against Master Requirements and governing roadmap; implement remaining safe authorized correction scope in cohesive changes with targeted tests, then #9, then #12, and integrated DEMO. Record verified material milestones. Do not duplicate existing functionality or alter historical ownership/identity without separate permission.
+
+---
+
 ## PTJ-DEMO-IDENTITY-SEARCH-REGRESSION-2026-11-28
 
 Verified PUBLIC PR #17 HEAD 62c6ce9bc9ceabcd3ddeeed049695b176d7fca1f, unmerged. Identity implementation SHA 77474e181a2640f3c9385d2cc454eed7d5aa069b CI 46139243540 FAILED (Rust SUCCESS; frontend and packaging regression 644 passed/1 failed). Exact instrument search ES matched incidental substring in new Zone label Resistance B. Corrected search precedence for exact known instrument symbols, preserving general Zone/note/ID search; added regression. Source SHA 62c6ce9bc9ceabcd3ddeeed049695b176d7fca1f, both changed files independently read back and PR head verified. CI observation [{"id":46140807738,"status":"in_progress","conclusion":null}]. No completion claimed until exact-source CI SUCCESS. No intermediate installer delivery. No change to financial formulas, required-field enforcement, schema or user data.
