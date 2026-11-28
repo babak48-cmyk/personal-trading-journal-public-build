@@ -383,6 +383,35 @@ export function weeklyTradeNumberChartMetrics(rows:readonly JournalTradeRow[],we
   });
 }
 
+/** Chart and table share existing aggregate values. Match the exact eligible
+ * population; unknown clock groups retain count coverage but no attributed R. */
+export function weeklyContextChartMetrics(rows:readonly JournalTradeRow[],weekStart:string,mode:'instrument'|'weekday'|'hour'|'rules'):WeeklyInteractiveMetric[]{
+  const weekly=rows.filter(row=>journalWeekStart(row.session_date)===weekStart);
+  const names=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const hourLabel=(row:JournalTradeRow)=>{
+    const hour=localDecisionHour(row.decision_occurred_at,row.session_timezone_id);
+    return hour&&row.session_timezone_id?row.session_timezone_id+' · '+hour+':00–'+hour+':59':'Unknown recorded Decision time / Session zone';
+  };
+  if(mode==='rules'){
+    const buckets=['FOLLOWED','VIOLATED','UNCHECKED'] as const;
+    return buckets.map(key=>{
+      const members=weekly.filter(row=>(row.rule_status==='FOLLOWED'||row.rule_status==='VIOLATED'?row.rule_status:'UNCHECKED')===key);
+      return {key,label:key==='FOLLOWED'?'No violation recorded':key==='VIOLATED'?'Violation recorded':'Unchecked / unknown',
+        value:members.length,sample:members.length+'/'+weekly.length+' filtered Trades',tradeIds:members.map(row=>row.trade_id)};
+    });
+  }
+  const groups=mode==='instrument'?weeklyTradeBreakdown(rows,weekStart,'instrument_symbol'):
+    mode==='weekday'?weeklyWeekdayBreakdown(rows,weekStart):weeklyDecisionHourBreakdown(rows,weekStart);
+  const labelFor=(row:JournalTradeRow)=>mode==='instrument'?row.instrument_symbol?.trim()||'Not recorded':
+    mode==='weekday'?names[new Date(row.session_date+'T00:00:00Z').getUTCDay()]:hourLabel(row);
+  return groups.map(g=>{
+    const members=weekly.filter(row=>labelFor(row)===g.label);
+    const eligible=g.eligibleRCount===0?[]:members.filter(row=>row.status==='CLOSED'&&typeof row.realized_r==='number'&&Number.isFinite(row.realized_r));
+    return {key:g.label,label:g.label,value:g.netR===null||g.eligibleRCount===0?null:g.netR/g.eligibleRCount,
+      sample:g.eligibleRCount+'/'+g.closedCount+' closed R eligible · '+g.tradeCount+' Trades',tradeIds:eligible.map(row=>row.trade_id)};
+  });
+}
+
 export function weeklyMistakeOutcomeText(groups:readonly WeeklyMistakeOutcome[]):string{
   return groups.length?groups.map(g=>g.label+': '+g.tradeCount+'/'+g.weekTradeCount+
     ' tagged Trades; '+g.eligibleRCount+'/'+g.closedCount+' closed R eligible; '+
