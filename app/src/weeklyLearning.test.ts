@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics,weeklyProvenanceChartMetrics,realizedRChartSequence,realizedRDistribution,mistakeTrendMetrics,dayHourHeatmapMetrics} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -535,5 +535,31 @@ describe('interactive provenance chart integrity',()=>{
     expect(evidence.find(g=>g.key==='SUPPORT: Delta')).toMatchObject({value:.5,tradeIds:['a','b']});
     expect(evidence.find(g=>g.key==='CONTRARY: Absorption')).toMatchObject({value:2,tradeIds:['a']});
     expect(evidence.find(g=>g.key.startsWith('Evidence recorded after'))).toMatchObject({value:3,tradeIds:['c']});
+  });
+});
+
+describe('historical dashboard integrity',()=>{
+  it('orders by native nanosecond exit time and fails closed on unknown or tied closed results',()=>{
+    const a=row('a','2026-11-09',{realized_r:2,final_exit_utc:'2026-11-09T10:00:00.000000001Z'});
+    const b=row('b','2026-11-09',{realized_r:-3,final_exit_utc:'2026-11-09T10:00:00.000000002Z'});
+    expect(realizedRChartSequence([b,a])?.map(p=>[p.tradeId,p.cumulativeR,p.drawdownR])).toEqual([['a',2,0],['b',-1,3]]);
+    expect(realizedRChartSequence([a,{...b,final_exit_utc:a.final_exit_utc}])).toBeNull();
+    expect(realizedRChartSequence([a,{...b,realized_r:null}])).toBeNull();
+    expect(realizedRChartSequence([a,{...b,final_exit_utc:null}])).toBeNull();
+    expect(realizedRChartSequence([a,{...b,status:'OPEN',final_exit_utc:null}])?.length).toBe(1);
+  });
+  it('preserves distribution membership, weekly counts and timezone-specific heatmap cells',()=>{
+    const rows=[
+      row('a','2026-11-09',{realized_r:0,mistakes:['Chasing'],decision_occurred_at:'2026-11-09T00:00:00Z',session_timezone_id:'Australia/Sydney'}),
+      row('b','2026-11-09',{realized_r:null,mistakes:['Chasing'],decision_occurred_at:'2026-11-09T00:00:00Z',session_timezone_id:'UTC'}),
+      row('c','2026-11-16',{realized_r:-2,mistakes:['Chasing'],decision_occurred_at:'2026-11-16T00:00:00',session_timezone_id:'UTC'}),
+    ];
+    expect(realizedRDistribution(rows).find(g=>g.key==='0R')?.tradeIds).toEqual(['a']);
+    expect(realizedRDistribution(rows).find(g=>g.key==='Unknown R')?.tradeIds).toEqual(['b']);
+    expect(mistakeTrendMetrics(rows).map(g=>g.value)).toEqual([2,1]);
+    const heat=dayHourHeatmapMetrics(rows);
+    expect(heat.find(g=>g.key===JSON.stringify(['Australia/Sydney','Monday','11']))).toMatchObject({value:0,tradeIds:['a']});
+    expect(heat.find(g=>g.key===JSON.stringify(['UTC','Monday','00']))).toMatchObject({value:null,tradeIds:[]});
+    expect(heat.find(g=>g.key==='UNKNOWN')).toMatchObject({value:null,tradeIds:[]});
   });
 });
