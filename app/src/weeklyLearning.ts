@@ -187,9 +187,9 @@ export function weeklySessionBreakdown(
  * overlap by design and MUST NOT be added together as distinct trades.
  * Missing historical provenance snapshots cannot be interpreted as "none".
  */
-export function weeklyLevelSourceBreakdown(
+function weeklyLevelSourceBreakdownWithMembership(
   rows:readonly JournalTradeRow[],weekStart:string,
-):WeeklyTradeBreakdown[]{
+): (WeeklyTradeBreakdown & {identityKey:string;eligibleTradeIds:readonly string[]})[]{
   const groups=new Map<string,JournalTradeRow[]>();
   for(const row of rows){
     if(journalWeekStart(row.session_date)!==weekStart)continue;
@@ -206,8 +206,7 @@ export function weeklyLevelSourceBreakdown(
   return [...groups].map(([label,items])=>{
     const closed=items.filter(row=>row.status==='CLOSED');
     const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
-    return {
-      label,tradeCount:items.length,closedCount:closed.length,
+    return {identityKey:label,eligibleTradeIds:eligible.map(row=>row.trade_id),label,tradeCount:items.length,closedCount:closed.length,
       eligibleRCount:eligible.length,
       netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
       ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length,
@@ -215,13 +214,17 @@ export function weeklyLevelSourceBreakdown(
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+export function weeklyLevelSourceBreakdown(rows:readonly JournalTradeRow[],weekStart:string):WeeklyTradeBreakdown[]{
+  return weeklyLevelSourceBreakdownWithMembership(rows,weekStart).map(({identityKey,eligibleTradeIds,...group})=>group);
+}
+
 /** Count only observed records whose event time is at or before the
  * original persisted Decision. Missing/invalid/post-Decision events are not
  * automatically treated as confirmations. Groups can overlap on one Trade.
  */
-export function weeklyObservedEvidenceBreakdown(
+function weeklyObservedEvidenceBreakdownWithMembership(
   rows:readonly JournalTradeRow[],weekStart:string,
-):WeeklyTradeBreakdown[]{
+): (WeeklyTradeBreakdown & {identityKey:string;eligibleTradeIds:readonly string[]})[]{
   const groups=new Map<string,JournalTradeRow[]>();
   for(const row of rows){
     if(journalWeekStart(row.session_date)!==weekStart)continue;
@@ -248,20 +251,24 @@ export function weeklyObservedEvidenceBreakdown(
   return [...groups].map(([label,items])=>{
     const closed=items.filter(row=>row.status==='CLOSED');
     const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
-    return {label,tradeCount:items.length,closedCount:closed.length,
+    return {identityKey:label,eligibleTradeIds:eligible.map(row=>row.trade_id),label,tradeCount:items.length,closedCount:closed.length,
       eligibleRCount:eligible.length,
       netR:eligible.length?eligible.reduce((total,row)=>total+(row.realized_r as number),0):null,
       ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length};
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
 }
 
+export function weeklyObservedEvidenceBreakdown(rows:readonly JournalTradeRow[],weekStart:string):WeeklyTradeBreakdown[]{
+  return weeklyObservedEvidenceBreakdownWithMembership(rows,weekStart).map(({identityKey,eligibleTradeIds,...group})=>group);
+}
+
 /** A saved Setup definition is not proof that its market context actually
  * occurred. At-entry and retrospectively linked trades remain distinct.
  * Group identity uses immutable version ID, not potentially reused labels.
  */
-export function weeklySetupVersionBreakdown(
+function weeklySetupVersionBreakdownWithMembership(
   rows:readonly JournalTradeRow[], weekStart:string,
-):WeeklyTradeBreakdown[]{
+): (WeeklyTradeBreakdown & {identityKey:string;eligibleTradeIds:readonly string[]})[]{
   const groups=new Map<string,{label:string;items:JournalTradeRow[]}>();
   for(const row of rows){
     if(journalWeekStart(row.session_date)!==weekStart)continue;
@@ -276,14 +283,18 @@ export function weeklySetupVersionBreakdown(
     const group=groups.get(key)||{label,items:[]};
     group.items.push(row);groups.set(key,group);
   }
-  return [...groups.values()].map(({label,items})=>{
+  return [...groups.entries()].map(([key,{label,items}])=>{
     const closed=items.filter(row=>row.status==='CLOSED');
     const eligible=closed.filter(row=>row.realized_r!=null&&Number.isFinite(row.realized_r));
-    return {label,tradeCount:items.length,closedCount:closed.length,
+    return {identityKey:key,eligibleTradeIds:eligible.map(row=>row.trade_id),label,tradeCount:items.length,closedCount:closed.length,
       eligibleRCount:eligible.length,
       netR:eligible.length?eligible.reduce((sum,row)=>sum+(row.realized_r as number),0):null,
       ruleViolationCount:items.filter(row=>row.rule_status==='VIOLATED').length};
   }).sort((a,b)=>b.tradeCount-a.tradeCount||a.label.localeCompare(b.label));
+}
+
+export function weeklySetupVersionBreakdown(rows:readonly JournalTradeRow[],weekStart:string):WeeklyTradeBreakdown[]{
+  return weeklySetupVersionBreakdownWithMembership(rows,weekStart).map(({identityKey,eligibleTradeIds,...group})=>group);
 }
 
 /** Version definition text, not observed session market conditions.
@@ -410,6 +421,19 @@ export function weeklyContextChartMetrics(rows:readonly JournalTradeRow[],weekSt
     return {key:g.label,label:g.label,value:g.netR===null||g.eligibleRCount===0?null:g.netR/g.eligibleRCount,
       sample:g.eligibleRCount+'/'+g.closedCount+' closed R eligible · '+g.tradeCount+' Trades',tradeIds:eligible.map(row=>row.trade_id)};
   });
+}
+
+/** Reuse exactly the same historical groups for charts and tabular summaries. */
+export function weeklyProvenanceChartMetrics(rows:readonly JournalTradeRow[],weekStart:string,mode:'setup'|'source'|'evidence'):WeeklyInteractiveMetric[]{
+  const groups=mode==='setup'?weeklySetupVersionBreakdownWithMembership(rows,weekStart):
+    mode==='source'?weeklyLevelSourceBreakdownWithMembership(rows,weekStart):weeklyObservedEvidenceBreakdownWithMembership(rows,weekStart);
+  return groups.map(g=>({
+    key:g.identityKey,
+    label:groups.filter(other=>other.label===g.label).length>1?g.label+' · '+g.identityKey:g.label,
+    value:g.netR===null||g.eligibleRCount===0?null:g.netR/g.eligibleRCount,
+    sample:g.eligibleRCount+'/'+g.closedCount+' closed R eligible · '+g.tradeCount+' Trades',
+    tradeIds:g.eligibleTradeIds,
+  }));
 }
 
 export function weeklyMistakeOutcomeText(groups:readonly WeeklyMistakeOutcome[]):string{
