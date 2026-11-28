@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -469,5 +469,26 @@ describe('interactive decision outcome data',()=>{
     expect(weeklyDecisionOutcomeGroups([rows[1]],'2026-11-09')[0].tradeIds).toEqual(['b']);
     expect(weeklyDecisionOutcomeText(groups)).toContain('C / UNKNOWN: 1');
     expect(weeklyDecisionOutcomeGroups([],'2026-11-09')).toEqual([]);
+  });
+});
+
+describe('interactive mistake and ordinal chart memberships',()=>{
+  it('selects only contributors to each metric and retains unknown separately from zero',()=>{
+    const rows=[
+      row('loss','2026-11-09',{mistakes:['Chasing'],session_trade_number:3,realized_r:-2}),
+      row('win','2026-11-10',{mistakes:['Chasing','Other'],session_trade_number:3,realized_r:4}),
+      row('missing','2026-11-11',{mistakes:['Chasing','Unknown'],session_trade_number:3,realized_r:null}),
+      row('open','2026-11-12',{mistakes:['Chasing'],session_trade_number:3,status:'OPEN',realized_r:100}),
+      row('outside','2026-11-16',{mistakes:['Chasing'],session_trade_number:3,realized_r:-50}),
+    ];
+    const freq=weeklyMistakeChartMetrics(rows,'2026-11-09','frequency');
+    expect(freq[0]).toMatchObject({label:'Chasing',value:4,tradeIds:['loss','win','missing','open']});
+    const losses=weeklyMistakeChartMetrics(rows,'2026-11-09','loss');
+    expect(losses.find(g=>g.label==='Chasing')).toMatchObject({value:2,tradeIds:['loss']});
+    expect(losses.find(g=>g.label==='Other')).toMatchObject({value:0,tradeIds:[]});
+    expect(losses.find(g=>g.label==='Unknown')).toMatchObject({value:null,tradeIds:[]});
+    expect(weeklyTradeNumberChartMetrics(rows,'2026-11-09')).toEqual([
+      {key:'Trade #3',label:'Trade #3',value:1,sample:'2/3 closed R eligible · 4 Trades',tradeIds:['loss','win']},
+    ]);
   });
 });
