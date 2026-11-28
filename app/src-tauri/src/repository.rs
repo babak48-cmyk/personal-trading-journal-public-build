@@ -2109,27 +2109,32 @@ fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppE
     Ok(rows)
 }
 
+/// Strict shared temporal classification: require an explicit RFC3339 offset.
+fn evidence_timing(event:Option<&str>,decision:Option<&str>)->&'static str{
+    let parse=|raw:Option<&str>|raw.and_then(|v|chrono::DateTime::parse_from_rfc3339(v).ok());
+    match (parse(event),parse(decision)){
+        (Some(e),Some(d)) if e<=d=>"AT_DECISION",
+        (Some(_),Some(_))=>"AFTER_DECISION",
+        _=>"UNKNOWN",
+    }
+}
+
 fn trade_evidence_temporal_snapshot(
     conn:&Connection,trade_id:&str,candidate_id:&Option<String>,decision_at:Option<&str>
 )->Result<(Vec<String>,i64,i64),AppError>{
     let mut stmt=conn.prepare(
-      "SELECT et.label,eo.role,eo.occurred_at,
-              CASE WHEN julianday(eo.occurred_at) IS NULL OR ?3 IS NULL OR julianday(?3) IS NULL
-                     THEN 'UNKNOWN'
-                   WHEN julianday(eo.occurred_at)<=julianday(?3) THEN 'AT_DECISION'
-                   ELSE 'AFTER_DECISION' END
+      "SELECT et.label,eo.role,eo.occurred_at
        FROM evidence_observations eo
        JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
        WHERE eo.present=1 AND (eo.trade_id=?1 OR (?2 IS NOT NULL AND eo.candidate_id=?2))
        ORDER BY eo.rowid")?;
-    let events=stmt.query_map(params![trade_id,candidate_id,decision_at],|r|Ok((
-        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,
-        r.get::<_,String>(3)?
+    let events=stmt.query_map(params![trade_id,candidate_id],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?
     )))?;
     let mut labels=Vec::new();let mut post=0;let mut unknown=0;
     for event in events {
-        let (label,role,_timestamp,bucket)=event?;
-        match bucket.as_str(){
+        let (label,role,timestamp)=event?;
+        match evidence_timing(timestamp.as_deref(),decision_at){
             "AT_DECISION"=>{
                 let combined=format!("{role}: {label}");
                 if !labels.contains(&combined){labels.push(combined);}
@@ -2143,19 +2148,31 @@ fn trade_evidence_temporal_snapshot(
 
 fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str,
     decision_at:Option<&str>,at_decision:bool)->Result<bool,AppError>{
-    // Existing ANY_RECORDED filter means observed at any point in the lifecycle.
-    // Only the opt-in AT_DECISION filter enforces a contemporaneous timestamp.
-    // julianday converts timezone offsets and excludes unparseable/unknown dates.
-    // Do not silently interpret post-decision observations as entry confirmation.
-    let n:i64=conn.query_row(
-        "SELECT COUNT(*) FROM evidence_observations
+    let mut stmt=conn.prepare(
+        "SELECT occurred_at FROM evidence_observations
          WHERE evidence_type_id=?1 AND present=1
-           AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))
-           AND (?4=0 OR (?5 IS NOT NULL AND julianday(occurred_at) IS NOT NULL
-               AND julianday(?5) IS NOT NULL AND julianday(occurred_at)<=julianday(?5)))",
-        params![evidence_type_id,trade_id,candidate_id,i64::from(at_decision),decision_at], |r|r.get(0)
-    )?;
-    Ok(n>0)
+           AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))")?;
+    let events=stmt.query_map(params![evidence_type_id,trade_id,candidate_id],|r|r.get::<_,Option<String>>(0))?;
+    for event in events {
+        let timestamp=event?;
+        if !at_decision||evidence_timing(timestamp.as_deref(),decision_at)=="AT_DECISION"{return Ok(true);}
+    }
+    Ok(false)
+}
+
+#[cfg(test)]
+mod strict_evidence_timing_tests {
+    use super::*;
+    #[test]
+    fn explicit_offsets_and_submillisecond_order_are_required(){
+        let d=Some("2026-11-12T10:00:00.000001Z");
+        assert_eq!(evidence_timing(Some("2026-11-12T21:00:00.000001+11:00"),d),"AT_DECISION");
+        assert_eq!(evidence_timing(Some("2026-11-12T10:00:00.000002Z"),d),"AFTER_DECISION");
+        assert_eq!(evidence_timing(Some("2026-11-12T09:00:00"),d),"UNKNOWN");
+        assert_eq!(evidence_timing(Some("2026-11-12"),d),"UNKNOWN");
+        assert_eq!(evidence_timing(Some("2026-11-12T09:00:00Z"),Some("2026-11-12T10:00:00")),"UNKNOWN");
+        assert_eq!(evidence_timing(None,d),"UNKNOWN");
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -3675,6 +3692,7 @@ mod decision_time_evidence_filter_tests {
                 ('LATE',1,'trade-one',NULL,'2026-11-12T10:01:00+00:00'),
                 ('CONTRARY',1,NULL,'zone-one','2026-11-12T11:00:00+11:00'),
                 ('BAD_DATE',1,NULL,'zone-one','unknown'),
+                ('UNZONED',1,NULL,'zone-one','2026-11-12T09:00:00'),
                 ('ABSENT',0,NULL,'zone-one','2026-11-12T09:00:00Z');
         ").unwrap();
         let zone=Some("zone-one".to_string());
@@ -3686,6 +3704,8 @@ mod decision_time_evidence_filter_tests {
         assert!(trade_has_evidence(&conn,"trade-one",&zone,"LATE",Some(decision),false).unwrap());
         assert!(trade_has_evidence(&conn,"trade-one",&zone,"CONTRARY",Some(decision),true).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"BAD_DATE",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"UNZONED",Some(decision),true).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"UNZONED",Some(decision),false).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSENT",Some(decision),false).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"DELTA",None,true).unwrap());
     }
