@@ -432,3 +432,19 @@ describe('weekly mistake associations and decision-outcome separation',()=>{
     expect(weeklyBadDecisionWins(rows,'2026-11-09').map(row=>row.trade_id)).toEqual(['a','b']);
   });
 });
+
+describe('stable mistake identity',()=>{
+  it('keeps same-name IDs separate, preserves renamed identities and does not merge legacy labels',()=>{
+    const rows=[
+      row('a','2026-11-09',{mistakes:['Same'],mistake_refs:[{mistake_type_id:'a',label:'Same'},{mistake_type_id:'b',label:'Same'}],realized_r:-2}),
+      row('b','2026-11-10',{mistakes:['Renamed'],mistake_refs:[{mistake_type_id:'a',label:'Renamed'}],realized_r:1}),
+      row('c','2026-11-11',{mistakes:['Same'],realized_r:3}),
+    ];
+    const groups=weeklyMistakeOutcomes(rows,'2026-11-09');
+    expect(groups).toHaveLength(3);
+    expect(groups.find(g=>g.identityKey==='id:a')).toMatchObject({tradeCount:2,netR:-1,tradeIds:['a','b']});
+    expect(groups.find(g=>g.identityKey==='id:b')).toMatchObject({tradeCount:1,netR:-2,tradeIds:['a']});
+    expect(groups.find(g=>g.identityKey===undefined)).toMatchObject({tradeCount:1,netR:3,tradeIds:['c']});
+    expect(weeklyLearningSnapshot(rows,'2026-11-09').mistakes.find(m=>m.id==='a')?.count).toBe(2);
+  });
+});
