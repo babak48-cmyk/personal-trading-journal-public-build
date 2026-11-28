@@ -469,7 +469,7 @@ export function weeklyLearningText(snapshot:WeeklyLearningSnapshot,levelSources:
     'Decision-only events: '+(decisionContext?'NO_TRADE '+decisionContext.noTrade+'; MISSED '+decisionContext.missed+'.':'unavailable in this trade-only summary.') ,
     'Setup versions (at entry vs retrospective, no inferred observation): '+(setupContext?.setups.length?setupContext.setups.map(g=>g.label+' ['+g.eligibleRCount+'/'+g.closedCount+' eligible, '+(g.netR===null?'R unknown':g.netR.toFixed(2)+'R')+']').join('; '):'none')+'.',
     'Setup-defined context (not observed market conditions): '+(setupContext?.definedContexts.length?setupContext.definedContexts.map(g=>g.label+' ['+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' eligible R]').join('; '):'none')+'.',
-    'Actually observed at original Decision (overlapping groups; not plan assertions): '+(observedEvidence.length?observedEvidence.map(g=>g.label+' ['+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible]').join('; '):'not separately available')+'.',
+    'Evidence timing relative to original Decision (verified at/before, after, or unknown; overlapping groups, not plan assertions): '+(observedEvidence.length?observedEvidence.map(g=>g.label+' ['+g.tradeCount+' trades, '+g.eligibleRCount+'/'+g.closedCount+' R eligible]').join('; '):'not separately available')+'.',
     'Suggested review action (not proven trading advice): '+(decisionContext?.action??snapshot.action),
     'Record an approved personal action separately; this read-only summary does not save a review event.',
   ].join('\n');
