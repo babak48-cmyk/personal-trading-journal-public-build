@@ -464,6 +464,40 @@ export function realizedRDistribution(rows:readonly JournalTradeRow[]):WeeklyInt
 export function mistakeTrendMetrics(rows:readonly JournalTradeRow[]):WeeklyInteractiveMetric[]{
   return journalWeeks([...rows]).slice().sort().flatMap(week=>weeklyMistakeChartMetrics(rows,week,'frequency').map(g=>({...g,key:JSON.stringify([week,g.key]),label:week+' · '+g.label})));
 }
+export type MistakeTrendPoint=Readonly<{week:string;count:number|null;tradeCount:number;tradeIds:readonly string[]}>;
+export type MistakeTrendSeries=Readonly<{key:string;label:string;points:readonly MistakeTrendPoint[]}>;
+/** Every intervening week is represented. A week with no filtered Trades
+ * is unknown, not a zero mistake rate. Zero means no recorded tag in a
+ * nonempty filtered sample, not proof of error-free trading. */
+export function mistakeTrendSeries(rows:readonly JournalTradeRow[]):MistakeTrendSeries[]{
+  const weeks=new Map<string,{total:number;groups:Map<string,string[]>}>();
+  const labels=new Map<string,string>();
+  for(const row of rows){
+    const week=journalWeekStart(row.session_date);if(!week)continue;
+    const group=weeks.get(week)||{total:0,groups:new Map<string,string[]>()};group.total++;
+    for(const ref of recordedMistakeGroups(row)){
+      labels.set(ref.key,ref.label);
+      const ids=group.groups.get(ref.key)||[];ids.push(row.trade_id);group.groups.set(ref.key,ids);
+    }
+    weeks.set(week,group);
+  }
+  const observed=[...weeks.keys()].sort();if(!observed.length)return [];
+  const calendar:string[]=[];
+  const cursor=new Date(observed[0]+'T00:00:00Z');
+  while(cursor.toISOString().slice(0,10)<=observed[observed.length-1]){
+    calendar.push(cursor.toISOString().slice(0,10));cursor.setUTCDate(cursor.getUTCDate()+7);
+  }
+  const duplicateLabels=new Map<string,number>();
+  for(const label of labels.values())duplicateLabels.set(label,(duplicateLabels.get(label)||0)+1);
+  return [...labels].sort((a,b)=>a[1].localeCompare(b[1])||a[0].localeCompare(b[0])).map(([key,label])=>({
+    key,label:(duplicateLabels.get(label)||0)>1?label+' · '+key:label,
+    points:calendar.map(week=>{
+      const sample=weeks.get(week);const ids=sample?.groups.get(key)||[];
+      return {week,count:sample?ids.length:null,tradeCount:sample?.total||0,tradeIds:ids};
+    }),
+  }));
+}
+
 export function dayHourHeatmapMetrics(rows:readonly JournalTradeRow[]):WeeklyInteractiveMetric[]{
   const groups=new Map<string,{label:string;items:JournalTradeRow[];known:boolean}>();
   const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
