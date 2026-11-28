@@ -891,7 +891,7 @@ pub fn add_candidate_status(conn:&Connection,input:AddCandidateStatusInput)->Res
 pub fn list_plan_timeline(conn:&Connection,session_id:&str)->Result<Vec<TimelineEventDto>,AppError>{
     let mut out=Vec::new();
     let mut p=conn.prepare("SELECT created_at,revision_type,revision_number,initial_bias,why_changed FROM session_plan_revisions WHERE session_id=?1 ORDER BY created_at")?;
-    for row in p.query_map([session_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?)))? { let (at,typ,num,bias,why)=row?; out.push(TimelineEventDto{occurred_at:at,event_type:"PLAN_REVISION".into(),title:if typ=="INITIAL"{"Initial plan confirmed".into()}else{format!("Plan revision #{num}")},detail:why.or(bias),revision_number:Some(num),candidate_id:None}); }
+    for row in p.query_map([session_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,Option<String>>(4)?)))? { let (at,typ,num,bias,why)=row?; out.push(TimelineEventDto{occurred_at:at,event_type:"PLAN_REVISION".into(),title:if typ=="INITIAL"{"Initial plan confirmed".into()}else{format!("Plan revision #{num}")},detail:why.or_else(||bias.map(|value|match value.as_str(){"LONG"=>"Bullish".into(),"SHORT"=>"Bearish".into(),"NEUTRAL"=>"Sideways".into(),"MIXED"=>"Mixed".into(),"UNKNOWN"=>"Unclear".into(),_=>value})),revision_number:Some(num),candidate_id:None}); }
     let mut c=conn.prepare("SELECT cr.created_at,cr.revision_number,c.candidate_id,COALESCE(c.label,'Zone'),cr.change_type,cr.change_reason FROM candidate_revisions cr JOIN candidates c ON c.candidate_id=cr.candidate_id WHERE c.session_id=?1 ORDER BY cr.created_at")?;
     for row in c.query_map([session_id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,i64>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<String>>(5)?)))? { let (at,num,cid,label,change,reason)=row?; out.push(TimelineEventDto{occurred_at:at,event_type:"CANDIDATE_REVISION".into(),title:if num==1{format!("{label} created")}else{format!("{label}: {change}")},detail:reason,revision_number:Some(num),candidate_id:Some(cid)}); }
     let mut st=conn.prepare("SELECT se.occurred_at,c.candidate_id,COALESCE(c.label,'Zone'),se.status,se.reason FROM candidate_status_events se JOIN candidates c ON c.candidate_id=se.candidate_id WHERE c.session_id=?1 ORDER BY se.occurred_at")?;
@@ -1097,6 +1097,7 @@ pub struct TradeMetricsDto {
     pub trade_id: String,
     pub session_id: String,
     pub candidate_id: Option<String>,
+    pub identity: TradeRecordIdentityDto,
     pub direction: String,
     pub status: String,
     pub average_entry: Option<f64>,
@@ -1286,6 +1287,29 @@ fn trade_execution_ledger(conn:&Connection,trade_id:&str,direction:&str,point_va
     ledger.unknown_cost_fields=unknown_cost_fields;
     Ok(ledger)
 }
+/// Read-only identity from exact persisted owner links. Zone label is the catalog label,
+/// not a fabricated decision-time snapshot. Missing historical metadata stays null.
+#[derive(Debug, Serialize)]
+pub struct TradeRecordIdentityDto {
+    pub decision_id: Option<String>,
+    pub candidate_id: Option<String>,
+    pub zone_label: Option<String>,
+    pub decision_note: Option<String>,
+    pub decision_occurred_at: Option<String>,
+}
+fn trade_record_identity(conn:&Connection,trade_id:&str)->Result<TradeRecordIdentityDto,AppError>{
+    Ok(conn.query_row(
+        "SELECT d.decision_id,t.candidate_id,c.label,d.reason_note,d.occurred_at
+         FROM trades t
+         LEFT JOIN candidate_decisions d ON d.decision_id=t.decision_id AND d.session_id=t.session_id
+         LEFT JOIN candidates c ON c.candidate_id=t.candidate_id AND c.session_id=t.session_id
+         WHERE t.trade_id=?1",
+        [trade_id],|r|Ok(TradeRecordIdentityDto{
+            decision_id:r.get(0)?,candidate_id:r.get(1)?,zone_label:r.get(2)?,
+            decision_note:r.get(3)?,decision_occurred_at:r.get(4)?,
+        })
+    )?)
+}
 fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,AppError> {
     let (session_id,candidate_id,direction,status):(String,Option<String>,String,String)=conn.query_row(
         "SELECT session_id,candidate_id,direction,status FROM trades WHERE trade_id=?1",
@@ -1311,7 +1335,7 @@ fn trade_metrics(conn: &Connection, trade_id: &str) -> Result<TradeMetricsDto,Ap
         [trade_id], |r| r.get(0)
     ).optional()?;
     let rr=match(net,initial_risk){(Some(n),Some(r)) if r>0.0=>Some(n/r),_=>None};
-    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,direction,status,average_entry:state.open_average_entry.or(state.last_average_entry),total_entry_quantity:state.entry_qty,total_exit_quantity:state.exit_qty,open_quantity:state.open_qty,latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count:state.fill_count})
+    Ok(TradeMetricsDto{trade_id:trade_id.into(),session_id,candidate_id,identity:trade_record_identity(conn,trade_id)?,direction,status,average_entry:state.open_average_entry.or(state.last_average_entry),total_entry_quantity:state.entry_qty,total_exit_quantity:state.exit_qty,open_quantity:state.open_qty,latest_stop_price:latest_stop,initial_risk_dollars:initial_risk,gross_realized_pnl:gross,net_realized_pnl:net,realized_r:rr,fill_count:state.fill_count})
 }
 
 pub fn create_trade_with_entry(conn:&mut Connection,input:CreateTradeExecutionInput)->Result<TradeDetailDto,AppError>{
@@ -1480,6 +1504,7 @@ pub fn list_session_trades(conn:&Connection,session_id:&str)->Result<Vec<TradeMe
 #[derive(Debug, Serialize)]
 pub struct CrossSessionPendingReviewDto {
     pub trade_id: String,
+    pub identity: TradeRecordIdentityDto,
     pub direction: String,
     pub review_status: String,
     pub session: SessionSummary,
@@ -1508,18 +1533,20 @@ pub fn list_cross_session_pending_reviews(
          ORDER BY s.session_date DESC, s.opened_at DESC, t.rowid DESC LIMIT ?1"
     )?;
     let records=stmt.query_map([limit], |r| {
-        Ok(CrossSessionPendingReviewDto{
-            trade_id:r.get(0)?,direction:r.get(1)?,review_status:r.get(2)?,
-            session:SessionSummary{
+        Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,
+            SessionSummary{
                 session_id:r.get(3)?,session_date:r.get(4)?,
                 instrument_symbol:r.get(5)?,instrument_display_name:r.get(6)?,
                 instrument_tick_size:r.get(7)?,instrument_point_value:r.get(8)?,
                 instrument_currency:r.get(9)?,environment:r.get(10)?,
                 status:r.get(11)?,opened_at:r.get(12)?
             },
-        })
+        ))
     })?.collect::<Result<Vec<_>,_>>()?;
-    Ok(records)
+    records.into_iter().map(|(trade_id,direction,review_status,session)|{
+        let identity=trade_record_identity(conn,&trade_id)?;
+        Ok(CrossSessionPendingReviewDto{trade_id,direction,review_status,session,identity})
+    }).collect()
 }
 
 #[cfg(test)]
@@ -1536,16 +1563,20 @@ mod cross_session_review_queue_tests {
             instrument_symbol_snapshot TEXT,instrument_display_name_snapshot TEXT,
             instrument_tick_size_snapshot REAL,instrument_point_value_snapshot REAL,
             instrument_currency_snapshot TEXT);
-          CREATE TABLE trades(trade_id TEXT PRIMARY KEY,session_id TEXT,direction TEXT,status TEXT);
+          CREATE TABLE trades(trade_id TEXT PRIMARY KEY,session_id TEXT,direction TEXT,status TEXT,decision_id TEXT,candidate_id TEXT);
+          CREATE TABLE candidate_decisions(decision_id TEXT PRIMARY KEY,session_id TEXT,reason_note TEXT,occurred_at TEXT);
+          CREATE TABLE candidates(candidate_id TEXT PRIMARY KEY,session_id TEXT,label TEXT);
           CREATE TABLE trade_reviews(trade_id TEXT UNIQUE,status TEXT);
           INSERT INTO instruments VALUES('i','ES','E-mini S&P 500',0.25,50,'USD');
           INSERT INTO sessions(session_id,instrument_id,session_date,environment,status,opened_at)
             VALUES('a','i','2026-11-12','DEMO','ACTIVE','2026-11-12T09:00:00'),
                   ('b','i','2026-11-13','DEMO','CLOSED','2026-11-13T09:00:00');
-          INSERT INTO trades VALUES('a-pending','a','LONG','CLOSED'),
-                                   ('b-draft','b','SHORT','CLOSED'),
-                                   ('b-completed','b','LONG','CLOSED'),
-                                   ('b-open','b','LONG','OPEN');
+          INSERT INTO candidates VALUES('zone-a','a','Support A'),('zone-b','b','Resistance B');
+          INSERT INTO candidate_decisions VALUES('decision-a','a','First attempt','2026-11-12T09:10:00Z'),('decision-b','b','Second attempt','2026-11-13T09:10:00Z');
+          INSERT INTO trades VALUES('a-pending','a','LONG','CLOSED','decision-a','zone-a'),
+                                   ('b-draft','b','SHORT','CLOSED','decision-b','zone-b'),
+                                   ('b-completed','b','LONG','CLOSED',NULL,NULL),
+                                   ('b-open','b','LONG','OPEN',NULL,NULL);
           INSERT INTO trade_reviews VALUES('b-draft','DRAFT'),('b-completed','COMPLETED');
         ").unwrap();
         let result=list_cross_session_pending_reviews(&db,250).unwrap();
@@ -1556,6 +1587,13 @@ mod cross_session_review_queue_tests {
         assert_eq!(result[0].session.session_id,"b");
         assert_eq!(result[1].session.session_id,"a");
         assert_eq!(result[0].session.instrument_symbol,"ES");
+        assert_eq!(result[0].identity.decision_id.as_deref(),Some("decision-b"));
+        assert_eq!(result[0].identity.zone_label.as_deref(),Some("Resistance B"));
+        assert_eq!(result[1].identity.decision_note.as_deref(),Some("First attempt"));
+        assert_eq!(result[1].identity.decision_occurred_at.as_deref(),Some("2026-11-12T09:10:00Z"));
+        db.execute("UPDATE trades SET decision_id='decision-b',candidate_id='zone-b' WHERE trade_id='a-pending'",[]).unwrap();
+        let wrong_owner=trade_record_identity(&db,"a-pending").unwrap();
+        assert!(wrong_owner.decision_id.is_none()&&wrong_owner.decision_note.is_none()&&wrong_owner.zone_label.is_none());
         assert_eq!(list_cross_session_pending_reviews(&db,1).unwrap().len(),1);
         assert!(list_cross_session_pending_reviews(&db,0).is_err());
         let remaining:i64=db.query_row("SELECT COUNT(*) FROM trades",[],|r|r.get(0)).unwrap();
@@ -1954,8 +1992,16 @@ pub struct JournalFilterInput {
 #[derive(Debug, Serialize, Clone)]
 pub struct JournalTradeRowDto {
     pub trade_id: String,
+    /// Chronological first actual entry within the complete Session, before filters.
+    pub session_trade_number: Option<i64>,
     pub session_id: String,
     pub session_date: String,
+    /// Original Decision instant; not entry/exit time or planned event.
+    pub decision_occurred_at: Option<String>,
+    /// Final actual EXIT instant, normalized to UTC with fixed nanosecond precision; None if any exit clock is invalid.
+    pub final_exit_utc: Option<String>,
+    /// IANA timezone stored for the Session; never use device timezone.
+    pub session_timezone_id: Option<String>,
     pub instrument_symbol: String,
     pub direction: String,
     pub status: String,
@@ -1963,16 +2009,29 @@ pub struct JournalTradeRowDto {
     pub decision_quality: Option<String>,
     pub rule_status: String,
     pub level_sources: Vec<String>,
+    pub level_source_refs: Vec<JournalLevelSourceRef>,
+    pub evidence_refs: Vec<JournalEvidenceRef>,
     /// True if a historical trade has a Zone but lacks decision-time revision provenance.
     /// Such rows must not be mislabelled as having no Level Sources.
     pub level_source_snapshot_missing: bool,
     pub mistakes: Vec<String>,
+    /// Stable mistake type identity, with current catalog label (not a historical label snapshot).
+    pub mistake_refs: Vec<JournalMistakeRef>,
     pub realized_r: Option<f64>,
+    pub gross_realized_pnl: Option<f64>,
     pub net_realized_pnl: Option<f64>,
+    /// Original Session currency snapshot only; never today's instrument currency.
+    pub pnl_currency: Option<String>,
     pub open_quantity: f64,
     /// Number of immutable audit events recorded against this Trade's Fills;
     /// counts audit provenance, not corrected/confirmed profitability.
     pub audited_correction_count: i64,
+    /// Initial-risk correction events for this specific historical Trade.
+    pub audited_initial_risk_correction_count: i64,
+    /// Level Source type correction events attached to the Decision's saved Zone revision.
+    pub audited_source_type_correction_count: i64,
+    /// Level Source price correction events attached to the Decision's saved Zone revision.
+    pub audited_source_price_correction_count: i64,
     /// At-decision Setup version is distinct from retrospective closed-trade attribution.
     pub setup_version_id: Option<String>,
     pub setup_version_name: Option<String>,
@@ -1990,6 +2049,10 @@ pub struct JournalTradeRowDto {
 #[derive(Debug, Serialize)]
 pub struct AnalyticsSummaryDto {
     pub trade_count: i64,
+    /// Closed Trades; includes those with unknown costs or initial risk.
+    pub closed_trade_count: i64,
+    /// Closed Trades with verified net P&L, even if initial risk is unknown.
+    pub eligible_net_pnl_count: i64,
     pub eligible_r_count: i64,
     pub wins: i64,
     pub losses: i64,
@@ -2002,6 +2065,20 @@ pub struct AnalyticsSummaryDto {
     pub average_loser_r: Option<f64>,
     pub profit_factor_r: Option<f64>,
     pub expectancy_r: Option<f64>,
+    /// Mean winning R divided by absolute mean losing R (payoff, not win/loss count).
+    pub win_loss_payoff_r: Option<f64>,
+    /// Known closed net P&L divided by the count of closed Trades with known net P&L.
+    pub expectancy_pnl: Option<f64>,
+    /// Single confirmed original Session currency for eligible net P&L, if any.
+    pub pnl_currency: Option<String>,
+    /// SINGLE_CURRENCY / MIXED_CURRENCIES / UNKNOWN_CURRENCY / NO_ELIGIBLE.
+    pub pnl_currency_status: String,
+    /// Consecutive positive/negative R outcomes in known closing-time order.
+    pub max_winning_streak: Option<i64>,
+    pub max_losing_streak: Option<i64>,
+    /// Largest peak-to-trough drop in cumulative realized net R of the
+    /// COMPLETE filtered closed-trade sequence. NOT account equity drawdown.
+    pub max_realized_r_drawdown: Option<f64>,
     pub net_pnl: Option<f64>,
     pub rule_violation_trades: i64,
     pub bad_decision_win_count: i64,
@@ -2032,33 +2109,93 @@ fn trade_level_sources(conn:&Connection, decision_candidate_revision_id:&Option<
     Ok(rows)
 }
 
-fn trade_mistake_labels(conn:&Connection,trade_id:&str)->Result<Vec<String>,AppError>{
-    let mut stmt=conn.prepare("SELECT mt.label FROM trade_mistakes tm JOIN mistake_types mt ON mt.mistake_type_id=tm.mistake_type_id WHERE tm.trade_id=?1 ORDER BY mt.label")?;
-    let rows = stmt.query_map([trade_id],|r|r.get::<_,String>(0))?.collect::<Result<Vec<_>,_>>()?;
+#[derive(Debug, Serialize, Clone)]
+pub struct JournalLevelSourceRef {
+    pub source_type_id:String,
+    pub label:String,
+}
+#[derive(Debug, Serialize, Clone)]
+pub struct JournalEvidenceRef {
+    pub evidence_type_id:String,
+    pub label:String,
+    pub role:String,
+    pub timing:String,
+    pub present:bool,
+}
+
+/// Preserve recorded type, role, presence and clock separately. Candidate-level
+/// observations may be shared; a Trade-owned event must never leak to another Trade.
+fn trade_evidence_refs(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,decision_at:Option<&str>)->Result<Vec<JournalEvidenceRef>,AppError>{
+    let mut stmt=conn.prepare("SELECT eo.evidence_type_id,et.label,eo.role,eo.occurred_at,eo.present
+      FROM evidence_observations eo JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
+      WHERE eo.trade_id=?1 OR (eo.trade_id IS NULL AND ?2 IS NOT NULL AND eo.candidate_id=?2)
+      ORDER BY eo.rowid")?;
+    let rows=stmt.query_map(params![trade_id,candidate_id],|r|{
+        let timestamp:Option<String>=r.get(3)?;
+        Ok(JournalEvidenceRef{evidence_type_id:r.get(0)?,label:r.get(1)?,role:r.get(2)?,
+            timing:evidence_timing(timestamp.as_deref(),decision_at).to_string(),present:r.get::<_,i64>(4)?==1})
+    })?.collect::<Result<Vec<_>,_>>()?;
     Ok(rows)
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct JournalMistakeRef {
+    pub mistake_type_id:String,
+    pub label:String,
+}
+
+fn trade_mistake_refs(conn:&Connection,trade_id:&str)->Result<Vec<JournalMistakeRef>,AppError>{
+    let mut stmt=conn.prepare("SELECT DISTINCT tm.mistake_type_id,mt.label FROM trade_mistakes tm JOIN mistake_types mt ON mt.mistake_type_id=tm.mistake_type_id WHERE tm.trade_id=?1 ORDER BY mt.label,tm.mistake_type_id")?;
+    let rows=stmt.query_map([trade_id],|r|Ok(JournalMistakeRef{mistake_type_id:r.get(0)?,label:r.get(1)?}))?.collect::<Result<Vec<_>,_>>()?;
+    Ok(rows)
+}
+
+#[cfg(test)]
+mod journal_mistake_identity_tests{
+    use super::*;
+    #[test]
+    fn equal_labels_do_not_merge_distinct_saved_type_ids(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE mistake_types(mistake_type_id TEXT,label TEXT);
+          CREATE TABLE trade_mistakes(trade_id TEXT,mistake_type_id TEXT);
+          INSERT INTO mistake_types VALUES ('a','Same'),('b','Same');
+          INSERT INTO trade_mistakes VALUES ('t','a'),('t','a'),('t','b'),('other','a');").unwrap();
+        let refs=trade_mistake_refs(&conn,"t").unwrap();
+        assert_eq!(refs.len(),2);
+        assert_eq!(refs[0].mistake_type_id,"a");
+        assert_eq!(refs[1].mistake_type_id,"b");
+        conn.execute("UPDATE mistake_types SET label='Renamed' WHERE mistake_type_id='a'",[]).unwrap();
+        let refs=trade_mistake_refs(&conn,"t").unwrap();
+        assert!(refs.iter().any(|r|r.mistake_type_id=="a"&&r.label=="Renamed"));
+    }
+}
+
+/// Strict shared temporal classification: require an explicit RFC3339 offset.
+fn evidence_timing(event:Option<&str>,decision:Option<&str>)->&'static str{
+    let parse=|raw:Option<&str>|raw.and_then(|v|chrono::DateTime::parse_from_rfc3339(v).ok());
+    match (parse(event),parse(decision)){
+        (Some(e),Some(d)) if e<=d=>"AT_DECISION",
+        (Some(_),Some(_))=>"AFTER_DECISION",
+        _=>"UNKNOWN",
+    }
 }
 
 fn trade_evidence_temporal_snapshot(
     conn:&Connection,trade_id:&str,candidate_id:&Option<String>,decision_at:Option<&str>
 )->Result<(Vec<String>,i64,i64),AppError>{
     let mut stmt=conn.prepare(
-      "SELECT et.label,eo.role,eo.occurred_at,
-              CASE WHEN julianday(eo.occurred_at) IS NULL OR ?3 IS NULL OR julianday(?3) IS NULL
-                     THEN 'UNKNOWN'
-                   WHEN julianday(eo.occurred_at)<=julianday(?3) THEN 'AT_DECISION'
-                   ELSE 'AFTER_DECISION' END
+      "SELECT et.label,eo.role,eo.occurred_at
        FROM evidence_observations eo
        JOIN evidence_types et ON et.evidence_type_id=eo.evidence_type_id
-       WHERE eo.present=1 AND (eo.trade_id=?1 OR (?2 IS NOT NULL AND eo.candidate_id=?2))
+       WHERE eo.present=1 AND (eo.trade_id=?1 OR (eo.trade_id IS NULL AND ?2 IS NOT NULL AND eo.candidate_id=?2))
        ORDER BY eo.rowid")?;
-    let events=stmt.query_map(params![trade_id,candidate_id,decision_at],|r|Ok((
-        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?,
-        r.get::<_,String>(3)?
+    let events=stmt.query_map(params![trade_id,candidate_id],|r|Ok((
+        r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?
     )))?;
     let mut labels=Vec::new();let mut post=0;let mut unknown=0;
     for event in events {
-        let (label,role,_timestamp,bucket)=event?;
-        match bucket.as_str(){
+        let (label,role,timestamp)=event?;
+        match evidence_timing(timestamp.as_deref(),decision_at){
             "AT_DECISION"=>{
                 let combined=format!("{role}: {label}");
                 if !labels.contains(&combined){labels.push(combined);}
@@ -2072,19 +2209,31 @@ fn trade_evidence_temporal_snapshot(
 
 fn trade_has_evidence(conn:&Connection,trade_id:&str,candidate_id:&Option<String>,evidence_type_id:&str,
     decision_at:Option<&str>,at_decision:bool)->Result<bool,AppError>{
-    // Existing ANY_RECORDED filter means observed at any point in the lifecycle.
-    // Only the opt-in AT_DECISION filter enforces a contemporaneous timestamp.
-    // julianday converts timezone offsets and excludes unparseable/unknown dates.
-    // Do not silently interpret post-decision observations as entry confirmation.
-    let n:i64=conn.query_row(
-        "SELECT COUNT(*) FROM evidence_observations
+    let mut stmt=conn.prepare(
+        "SELECT occurred_at FROM evidence_observations
          WHERE evidence_type_id=?1 AND present=1
-           AND (trade_id=?2 OR (?3 IS NOT NULL AND candidate_id=?3))
-           AND (?4=0 OR (?5 IS NOT NULL AND julianday(occurred_at) IS NOT NULL
-               AND julianday(?5) IS NOT NULL AND julianday(occurred_at)<=julianday(?5)))",
-        params![evidence_type_id,trade_id,candidate_id,i64::from(at_decision),decision_at], |r|r.get(0)
-    )?;
-    Ok(n>0)
+           AND (trade_id=?2 OR (trade_id IS NULL AND ?3 IS NOT NULL AND candidate_id=?3))")?;
+    let events=stmt.query_map(params![evidence_type_id,trade_id,candidate_id],|r|r.get::<_,Option<String>>(0))?;
+    for event in events {
+        let timestamp=event?;
+        if !at_decision||evidence_timing(timestamp.as_deref(),decision_at)=="AT_DECISION"{return Ok(true);}
+    }
+    Ok(false)
+}
+
+#[cfg(test)]
+mod strict_evidence_timing_tests {
+    use super::*;
+    #[test]
+    fn explicit_offsets_and_submillisecond_order_are_required(){
+        let d=Some("2026-11-12T10:00:00.000001Z");
+        assert_eq!(evidence_timing(Some("2026-11-12T21:00:00.000001+11:00"),d),"AT_DECISION");
+        assert_eq!(evidence_timing(Some("2026-11-12T10:00:00.000002Z"),d),"AFTER_DECISION");
+        assert_eq!(evidence_timing(Some("2026-11-12T09:00:00"),d),"UNKNOWN");
+        assert_eq!(evidence_timing(Some("2026-11-12"),d),"UNKNOWN");
+        assert_eq!(evidence_timing(Some("2026-11-12T09:00:00Z"),Some("2026-11-12T10:00:00")),"UNKNOWN");
+        assert_eq!(evidence_timing(None,d),"UNKNOWN");
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -2175,6 +2324,63 @@ pub fn list_decision_only_analytics(
     Ok(rows)
 }
 
+/// Derive ordinals from all persisted Trades and their actual ENTRY fills.
+/// A missing or unzoned entry timestamp or tied first entries makes that
+/// Session's chronology unknown. Never break ties with UUID or insertion order.
+fn session_trade_numbers(conn:&Connection)->Result<std::collections::BTreeMap<String,i64>,AppError>{
+    use std::collections::BTreeMap;
+    use chrono::{DateTime,Utc};
+    let mut stmt=conn.prepare(
+        "SELECT t.session_id,t.trade_id,f.occurred_at
+         FROM trades t LEFT JOIN execution_fills f
+         ON f.trade_id=t.trade_id AND f.action='ENTRY'")?;
+    let rows=stmt.query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<String>>(2)?)))?;
+    let mut sessions:BTreeMap<String,BTreeMap<String,Option<DateTime<Utc>>>>=BTreeMap::new();
+    for row in rows {
+        let (session,trade,raw)=row?;
+        let parsed=raw.as_deref().and_then(|v|DateTime::parse_from_rfc3339(v).ok()).map(|v|v.with_timezone(&Utc));
+        let slot=sessions.entry(session).or_default().entry(trade).or_insert(parsed);
+        *slot=match (*slot,parsed){(Some(a),Some(b))=>Some(a.min(b)),_=>None};
+    }
+    let mut result=BTreeMap::new();
+    for (_,trades) in sessions {
+        let mut ordered=Vec::new();
+        let mut complete=true;
+        for (id,at) in trades {
+            match at {Some(at)=>ordered.push((at,id)),None=>{complete=false;break;}}
+        }
+        if !complete{continue;}
+        ordered.sort_by_key(|(at,_)|*at);
+        if ordered.windows(2).any(|w|w[0].0==w[1].0){continue;}
+        for (index,(_,id)) in ordered.into_iter().enumerate(){result.insert(id,index as i64+1);}
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+mod session_trade_number_tests {
+    use super::*;
+    #[test]
+    fn complete_session_order_uses_entry_instants_not_display_order(){
+        let conn=Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE trades(trade_id TEXT,session_id TEXT);
+            CREATE TABLE execution_fills(trade_id TEXT,action TEXT,occurred_at TEXT);
+            INSERT INTO trades VALUES ('b','s'),('a','s'),('c','other'),('d','bad'),('e','bad'),('f','tie'),('g','tie'),('h','missing');
+            INSERT INTO execution_fills VALUES
+            ('b','ENTRY','2026-11-09T02:00:00Z'),('a','ENTRY','2026-11-09T11:00:00+10:00'),
+            ('a','ENTRY','2026-11-09T03:00:00Z'),('a','EXIT','2026-11-09T04:00:00Z'),
+            ('c','ENTRY','2026-11-09T02:00:00Z'),('d','ENTRY','2026-11-09T01:00:00'),
+            ('e','ENTRY','2026-11-09T02:00:00Z'),('f','ENTRY','2026-11-09T01:00:00Z'),
+            ('g','ENTRY','2026-11-09T11:00:00+10:00');").unwrap();
+        let result=session_trade_numbers(&conn).unwrap();
+        assert_eq!(result.len(),3);
+        assert_eq!(result.get("a"),Some(&1));
+        assert_eq!(result.get("b"),Some(&2));
+        assert_eq!(result.get("c"),Some(&1));
+        for id in ["d","e","f","g","h"]{assert!(!result.contains_key(id));}
+    }
+}
+
 pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<Vec<JournalTradeRowDto>,AppError>{
     if !matches!(filter.evidence_timing.as_deref(),None|Some("ANY_RECORDED")|Some("AT_DECISION")){
         return Err(AppError::Validation("unknown evidence timing filter".into()));
@@ -2194,6 +2400,7 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,
         r.get::<_,Option<String>>(6)?,r.get::<_,Option<String>>(7)?,r.get::<_,Option<String>>(8)?,r.get::<_,i64>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?
     )))?.collect::<Result<Vec<_>,_>>()?;
+    let numbers=session_trade_numbers(conn)?;
     let mut out=Vec::new();
     for (trade_id,session_id,session_date,instrument,direction,status,candidate_id,candidate_label,decision_quality,rule_flag,decision_candidate_revision_id,decision_at) in base {
         if let Some(v)=&filter.date_from {if session_date.as_str() < v.as_str() {continue;}}
@@ -2212,12 +2419,27 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
         let evidence_temporal=trade_evidence_temporal_snapshot(
             conn,&trade_id,&candidate_id,decision_at.as_deref()
         )?;
+        let (session_timezone_id,pnl_currency):(Option<String>,Option<String>)=conn.query_row(
+            "SELECT timezone_id,instrument_currency_snapshot FROM sessions WHERE session_id=?1",
+            [&session_id],|r|Ok((r.get(0)?,r.get(1)?))
+        )?;
+        let pnl_currency=pnl_currency.filter(|code|code.len()==3&&code.bytes().all(|ch|ch.is_ascii_uppercase()));
         let metrics=trade_metrics(conn,&trade_id)?;
         let audited_correction_count:i64=conn.query_row(
           "SELECT COUNT(*) FROM fill_correction_events ce
            JOIN execution_fills f ON f.execution_id=ce.execution_id
            WHERE f.trade_id=?1",
           [&trade_id],|r|r.get(0))?;
+        // Reuse the existing trade-scoped audit readouts. Do not count unrelated
+        // Zone revisions or other trades, and never infer corrections from
+        // changed effective values alone. A shared source may affect each
+        // independently saved Decision/Trade referencing that exact revision.
+        let audited_initial_risk_correction_count=
+            crate::initial_risk_corrections::list_initial_risk_corrections(conn,&trade_id)?.len() as i64;
+        let audited_source_type_correction_count=
+            crate::source_type_corrections::list_source_corrections_for_trade(conn,&trade_id)?.len() as i64;
+        let audited_source_price_correction_count=
+            crate::source_price_corrections::list_for_trade(conn,&trade_id)?.len() as i64;
         // This read-only attribution uses the saved version ID snapshotted at
         // the original entry. Historical closed-trade links are labelled
         // RETROSPECTIVE, never misrepresented as known at decision time.
@@ -2239,13 +2461,24 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
             r.get::<_,Option<String>>(4)?
           ))
         )?;
+        let mistake_refs=trade_mistake_refs(conn,&metrics.trade_id)?;
+        let evidence_refs=trade_evidence_refs(conn,&trade_id,&candidate_id,decision_at.as_deref())?;
+        let final_exit_utc=if status=="CLOSED"{complete_exit_instant(conn,&trade_id)?.map(|at|at.to_rfc3339_opts(chrono::SecondsFormat::Nanos,true))}else{None};
         out.push(JournalTradeRowDto{
-            trade_id,session_id,session_date,instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
-            level_sources:sources.into_iter().map(|(_,label)|label).collect(),
+            session_trade_number:numbers.get(&trade_id).copied(),
+            trade_id,session_id,session_date,
+            decision_occurred_at:decision_at,final_exit_utc,session_timezone_id,
+            instrument_symbol:instrument,direction,status,candidate_label,decision_quality,rule_status,
+            level_sources:sources.iter().map(|(_,label)|label.clone()).collect(),
+            level_source_refs:sources.into_iter().map(|(source_type_id,label)|JournalLevelSourceRef{source_type_id,label}).collect(),
+            evidence_refs,
             level_source_snapshot_missing:candidate_id.is_some()&&decision_candidate_revision_id.is_none(),
-            mistakes:trade_mistake_labels(conn,&metrics.trade_id)?,
-            realized_r:metrics.realized_r,net_realized_pnl:metrics.net_realized_pnl,
+            mistakes:mistake_refs.iter().map(|m|m.label.clone()).collect(),
+            mistake_refs,
+            realized_r:metrics.realized_r,gross_realized_pnl:metrics.gross_realized_pnl,net_realized_pnl:metrics.net_realized_pnl,pnl_currency,
             open_quantity:metrics.open_quantity,audited_correction_count,
+            audited_initial_risk_correction_count,audited_source_type_correction_count,
+            audited_source_price_correction_count,
             setup_version_id:setup.0,setup_version_name:setup.1,
             setup_version_number:setup.2,setup_attribution:setup.3,
             setup_defined_market_context:setup.4,
@@ -2257,11 +2490,138 @@ pub fn list_journal_trades(conn:&Connection,filter:JournalFilterInput)->Result<V
     Ok(out)
 }
 
+/// Descriptive R payoff only when both winning and losing closed samples exist.
+fn closed_r_payoff(avg_winner_r:Option<f64>,avg_loser_r:Option<f64>)->Option<f64>{
+    match (avg_winner_r,avg_loser_r){
+        (Some(win),Some(loss)) if win.is_finite() && loss.is_finite() && win>0.0 && loss<0.0
+            =>Some(win/loss.abs()),
+        _=>None,
+    }
+}
+
+/// Currency-denominated expectancy uses ONLY closed Trades with known net P&L;
+/// missing-cost outcomes never enter this denominator, even when R is unknown.
+fn known_pnl_expectancy(pnls:&[f64])->Option<f64>{
+    if pnls.is_empty() || pnls.iter().any(|p|!p.is_finite()){return None;}
+    Some(pnls.iter().sum::<f64>()/pnls.len() as f64)
+}
+
+#[cfg(test)]
+mod extra_analytics_metric_tests {
+    use super::{closed_r_payoff,known_pnl_expectancy};
+    #[test]
+    fn win_loss_payoff_requires_both_signed_closed_r_samples(){
+        assert_eq!(closed_r_payoff(Some(2.0),Some(-0.5)),Some(4.0));
+        assert_eq!(closed_r_payoff(Some(1.0),None),None);
+        assert_eq!(closed_r_payoff(None,Some(-1.0)),None);
+        assert_eq!(closed_r_payoff(Some(0.0),Some(-1.0)),None);
+        assert_eq!(closed_r_payoff(Some(2.0),Some(0.0)),None);
+        assert_eq!(closed_r_payoff(Some(f64::NAN),Some(-1.0)),None);
+    }
+    #[test]
+    fn net_pnl_expectancy_uses_known_denominator_not_all_trades(){
+        assert_eq!(known_pnl_expectancy(&[292.0,-104.0]),Some(94.0));
+        assert_eq!(known_pnl_expectancy(&[0.0]),Some(0.0));
+        assert_eq!(known_pnl_expectancy(&[]),None);
+        assert_eq!(known_pnl_expectancy(&[292.0,f64::NAN]),None);
+    }
+}
+
+/// All actual exit timestamps must be known; never substitute Session or Decision time.
+fn complete_exit_instant(conn:&Connection,trade_id:&str)->Result<Option<chrono::DateTime<chrono::Utc>>,AppError>{
+    let mut query=conn.prepare("SELECT occurred_at FROM execution_fills WHERE trade_id=?1 AND action='EXIT' ORDER BY rowid")?;
+    let events=query.query_map([trade_id],|item|item.get::<_,Option<String>>(0))?;
+    let mut last:Option<chrono::DateTime<chrono::Utc>>=None;
+    for event in events{
+        let Some(raw)=event? else{return Ok(None);};
+        let Ok(stamp)=chrono::DateTime::parse_from_rfc3339(&raw) else{return Ok(None);};
+        let instant=stamp.with_timezone(&chrono::Utc);
+        last=Some(last.map_or(instant,|old|old.max(instant)));
+    }
+    Ok(last)
+}
+
+/// Sequence analytics are available only for an entirely date-ordered,
+/// R-eligible CLOSED sample. Do not collapse missing-R Trades into zero or
+/// invent the order of simultaneous/unknown exits.
+fn complete_realized_r_sequence(
+    mut points:Vec<(chrono::DateTime<chrono::Utc>,f64)>
+)->Option<(i64,i64,f64)>{
+    if points.is_empty()||points.iter().any(|(_,r)|!r.is_finite()){return None;}
+    points.sort_by_key(|(at,_)|*at);
+    if points.windows(2).any(|w|w[0].0==w[1].0){return None;}
+    let mut run_win=0;let mut run_loss=0;
+    let mut best_win=0;let mut best_loss=0;
+    let mut cumulative=0.0_f64;let mut peak=0.0_f64;let mut drawdown=0.0_f64;
+    for (_,r) in points{
+        if r>1e-9{run_win+=1;run_loss=0;}
+        else if r< -1e-9{run_loss+=1;run_win=0;}
+        else{run_win=0;run_loss=0;}
+        best_win=best_win.max(run_win);
+        best_loss=best_loss.max(run_loss);
+        cumulative+=r;peak=peak.max(cumulative);
+        drawdown=drawdown.max(peak-cumulative);
+    }
+    Some((best_win,best_loss,drawdown))
+}
+
+#[cfg(test)]
+mod chronological_realized_r_tests {
+    use super::complete_realized_r_sequence;
+    use chrono::{DateTime,Utc};
+    fn at(s:&str)->DateTime<Utc>{
+        DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+    }
+    #[test]
+    fn ordered_realized_r_peak_drawdown_and_streaks(){
+        let dates=["2026-11-09T01:00:00Z","2026-11-09T02:00:00Z",
+          "2026-11-09T03:00:00Z","2026-11-09T04:00:00Z",
+          "2026-11-09T05:00:00Z","2026-11-09T06:00:00Z"];
+        // Out-of-order input must be sorted by actual close time.
+        let points=vec![(at(dates[5]),0.0),(at(dates[3]),-1.0),
+          (at(dates[0]),2.0),(at(dates[4]),1.0),(at(dates[2]),-2.0),
+          (at(dates[1]),1.0)];
+        // R equity: 0,2,3,1,0,1,1; peak-to-trough is 3 R.
+        assert_eq!(complete_realized_r_sequence(points),Some((2,2,3.0)));
+    }
+    #[test]
+    fn unknown_duplicate_or_unordered_identity_is_not_a_zero_drawdown(){
+        let t=at("2026-11-09T00:00:00Z");
+        assert_eq!(complete_realized_r_sequence(Vec::new()),None);
+        assert_eq!(complete_realized_r_sequence(vec![(t,1.0),(t,-1.0)]),None);
+        assert_eq!(complete_realized_r_sequence(vec![(t,f64::NAN)]),None);
+        assert_eq!(complete_realized_r_sequence(vec![(t,-0.5)]),Some((0,1,0.5)));
+    }
+}
+
 pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result<AnalyticsSummaryDto,AppError>{
     let rows=list_journal_trades(conn,filter)?;
     let closed:Vec<&JournalTradeRowDto>=rows.iter().filter(|x|x.status=="CLOSED").collect();
     let mut rs:Vec<f64>=closed.iter().filter_map(|x|x.realized_r).collect();
     let pnls:Vec<f64>=closed.iter().filter_map(|x|x.net_realized_pnl).collect();
+    // R is unitless, but currency totals cannot combine USD/AUD/etc or
+    // fill a missing historical Session currency from today's instrument
+    // settings (which may have changed after the original execution).
+    let mut currencies=std::collections::BTreeSet::new();
+    let mut missing_currency=false;
+    for row in closed.iter().filter(|row|row.net_realized_pnl.is_some()){
+        let saved:Option<String>=conn.query_row(
+            "SELECT instrument_currency_snapshot FROM sessions WHERE session_id=?1",
+            [&row.session_id],|record|record.get(0)
+        )?;
+        match saved{
+            Some(code) if code.len()==3 && code.bytes().all(|ch|ch.is_ascii_uppercase())
+                =>{currencies.insert(code);},
+            _=>missing_currency=true,
+        }
+    }
+    let pnl_currency_status=if pnls.is_empty(){"NO_ELIGIBLE"}
+        else if currencies.len()>1{"MIXED_CURRENCIES"}
+        else if missing_currency||currencies.is_empty(){"UNKNOWN_CURRENCY"}
+        else{"SINGLE_CURRENCY"}.to_string();
+    let pnl_currency=if pnl_currency_status=="SINGLE_CURRENCY"{
+        currencies.into_iter().next()
+    }else{None};
     let wins=rs.iter().filter(|x|**x>1e-9).count() as i64;
     let losses=rs.iter().filter(|x|**x< -1e-9).count() as i64;
     let breakeven=rs.iter().filter(|x|x.abs()<=1e-9).count() as i64;
@@ -2277,12 +2637,51 @@ pub fn get_analytics_summary(conn:&Connection,filter:JournalFilterInput)->Result
     let average_loser_r=if losers.is_empty(){None}else{Some(losers.iter().sum::<f64>()/losers.len() as f64)};
     let gross_win:f64=winners.iter().sum(); let gross_loss:f64=losers.iter().map(|x|x.abs()).sum();
     let profit_factor_r=if gross_loss>0.0{Some(gross_win/gross_loss)}else{None};
+    // Keep both operands from the same verified closed-R sample; missing one
+    // side is not evidence of a zero win/loss payoff.
+    let win_loss_payoff_r=closed_r_payoff(average_winner_r,average_loser_r);
+    // Initial risk is NOT required for trustworthy net P&L. Missing costs
+    // result in NULL net P&L and those Trades cannot dilute this denominator.
+    let expectancy_pnl=if pnl_currency.is_some(){
+        known_pnl_expectancy(&pnls)
+    }else{None};
+    // Each CLOSED trade must have a finite R and a complete, unambiguous
+    // timestamp for EVERY exit Fill. The final exit defines realized outcome
+    // order, never Session date or a guessed Trade-ID ordering.
+    let mut sequence=Vec::new();
+    let mut sequence_complete=!closed.is_empty();
+    for row in &closed{
+        let Some(r)=row.realized_r.filter(|v|v.is_finite()) else{
+            sequence_complete=false;break;
+        };
+        let Some(at)=row.final_exit_utc.as_deref().and_then(|v|chrono::DateTime::parse_from_rfc3339(v).ok()) else{
+            sequence_complete=false;break;
+        };
+        sequence.push((at.with_timezone(&chrono::Utc),r));
+    }
+    let chronological=if sequence_complete{
+        complete_realized_r_sequence(sequence)
+    }else{None};
     let rule_violation_trades=rows.iter().filter(|x|x.rule_status=="VIOLATED").count() as i64;
-    let bad_decision_win_count=closed.iter().filter(|x|matches!(x.decision_quality.as_deref(),Some("C")|Some("INVALID")) && x.realized_r.unwrap_or(0.0)>0.0).count() as i64;
+    // A known profitable result does not require a known initial risk.
+    // Unknown costs -> UNKNOWN net result and are never counted as wins.
+    let bad_decision_win_count=closed.iter().filter(|x|
+        matches!(x.decision_quality.as_deref(),Some("C")|Some("INVALID")) &&
+        x.net_realized_pnl.is_some_and(|net|net>1e-9)
+    ).count() as i64;
+    let currency_safe_net_pnl=if pnl_currency_status=="SINGLE_CURRENCY"{
+        Some(pnls.iter().sum::<f64>())
+    }else{None};
     Ok(AnalyticsSummaryDto{
-        trade_count:rows.len() as i64,eligible_r_count:eligible,wins,losses,breakeven,win_rate,average_r,median_r,net_r,
+        trade_count:rows.len() as i64,closed_trade_count:closed.len() as i64,
+        eligible_net_pnl_count:pnls.len() as i64,eligible_r_count:eligible,
+        wins,losses,breakeven,win_rate,average_r,median_r,net_r,
         average_winner_r,average_loser_r,profit_factor_r,expectancy_r:average_r,
-        net_pnl:if pnls.is_empty(){None}else{Some(pnls.iter().sum())},rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
+        win_loss_payoff_r,expectancy_pnl,pnl_currency,pnl_currency_status,
+        max_winning_streak:chronological.map(|v|v.0),
+        max_losing_streak:chronological.map(|v|v.1),
+        max_realized_r_drawdown:chronological.map(|v|v.2),
+        net_pnl:currency_safe_net_pnl,rule_violation_trades,bad_decision_win_count,small_sample:eligible<20
     })
 }
 
@@ -2827,6 +3226,174 @@ mod chronological_trade_accounting_tests {
 }
 
 #[cfg(test)]
+mod gc_persisted_contract_acceptance_tests {
+    use super::*;
+
+    fn gc_closed_fixture(unknown_entry_fee:bool)->(Connection,String) {
+        let conn=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&conn).unwrap();
+        let session=create_draft_session(&conn,CreateSessionInput{
+            session_date:"2026-11-23".into(),instrument_symbol:"GC".into(),
+            environment:"DEMO".into(),session_label:Some("GC isolated cost acceptance".into()),
+        }).unwrap();
+        conn.execute("INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+          VALUES('gc-decision',?1,'2026-11-23T08:00:00Z','TRADE','LONG')",[&session.session_id]).unwrap();
+        conn.execute("INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+          VALUES('gc-closed','gc-decision',?1,'LONG','CLOSED')",[&session.session_id]).unwrap();
+        let fees=if unknown_entry_fee{"NULL"}else{"1.0"};
+        conn.execute_batch(&format!(
+          "INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+           VALUES ('gc-entry','gc-closed','2026-11-23T08:00:01Z','ENTRY','BUY',4100.0,2,4.0,{fees}),
+                  ('gc-exit-1','gc-closed','2026-11-23T08:01:00Z','EXIT','SELL',4100.7,1,2.0,1.0),
+                  ('gc-exit-2','gc-closed','2026-11-23T08:02:00Z','EXIT','SELL',4099.8,1,2.0,1.0);
+           INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,stop_price,quantity,risk_dollars)
+           VALUES('gc-risk','gc-closed','2026-11-23T08:00:01Z','INITIAL',4099.5,2,100.0);"
+        )).unwrap();
+        (conn,session.session_id)
+    }
+
+    #[test]
+    fn gc_persisted_partial_exits_have_correct_contract_ticks_net_cost_and_r(){
+        let (conn,session_id)=gc_closed_fixture(false);
+        let spec=instrument_spec_for_session(&conn,&session_id).unwrap();
+        assert_eq!(spec,(0.1,100.0));
+        let metrics=trade_metrics(&conn,"gc-closed").unwrap();
+        assert_eq!(metrics.status,"CLOSED");
+        assert_eq!(metrics.open_quantity,0.0);
+        assert_eq!(metrics.total_entry_quantity,2.0);
+        assert_eq!(metrics.total_exit_quantity,2.0);
+        assert!((metrics.gross_realized_pnl.unwrap()-50.0).abs()<1e-8);
+        // Total known commissions: 4+2+2 = 8; fees: 1+1+1 = 3.
+        assert!((metrics.net_realized_pnl.unwrap()-39.0).abs()<1e-8);
+        assert!((metrics.realized_r.unwrap()-0.39).abs()<1e-8);
+        let summary=get_analytics_summary(&conn,JournalFilterInput{
+            instrument_symbol:Some("GC".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(summary.closed_trade_count,1);
+        assert_eq!(summary.eligible_net_pnl_count,1);
+        assert_eq!(summary.eligible_r_count,1);
+        assert!((summary.net_pnl.unwrap()-39.0).abs()<1e-8);
+        assert!((summary.net_r.unwrap()-0.39).abs()<1e-8);
+        assert_eq!(summary.max_winning_streak,Some(1));
+        assert_eq!(summary.max_losing_streak,Some(0));
+        assert_eq!(summary.max_realized_r_drawdown,Some(0.0));
+        // The C9 clock belongs to the original saved Decision, not to a
+        // later Fill or the user's current machine timezone.
+        let journal=list_journal_trades(&conn,JournalFilterInput{
+            instrument_symbol:Some("GC".into()),..JournalFilterInput::default()
+        }).unwrap();
+        assert_eq!(journal.len(),1);
+        assert_eq!(journal[0].decision_occurred_at.as_deref(),
+          Some("2026-11-23T08:00:00Z"));
+        assert_eq!(journal[0].session_timezone_id.as_deref(),
+          Some("Australia/Sydney"));
+        assert_eq!(crate::db::integrity_check(&conn).unwrap(),"ok");
+    }
+
+    #[test]
+    fn gc_unknown_fee_remains_unknown_in_net_pnl_r_and_chronological_analytics(){
+        let (conn,_)=gc_closed_fixture(true);
+        let metrics=trade_metrics(&conn,"gc-closed").unwrap();
+        assert!((metrics.gross_realized_pnl.unwrap()-50.0).abs()<1e-8);
+        assert_eq!(metrics.net_realized_pnl,None);
+        assert_eq!(metrics.realized_r,None);
+        let summary=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(summary.closed_trade_count,1);
+        assert_eq!(summary.eligible_net_pnl_count,0);
+        assert_eq!(summary.eligible_r_count,0);
+        assert_eq!(summary.net_pnl,None);
+        assert_eq!(summary.net_r,None);
+        assert_eq!(summary.max_winning_streak,None);
+        assert_eq!(summary.max_losing_streak,None);
+        assert_eq!(summary.max_realized_r_drawdown,None);
+        let stored_fees:Option<f64>=conn.query_row(
+          "SELECT fees FROM execution_fills WHERE execution_id='gc-entry'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(stored_fees,None,"UNKNOWN fee was not silently stored as zero");
+    }
+
+    #[test]
+    fn mixed_or_missing_original_currency_never_produces_a_false_money_total(){
+        let (conn,_)=gc_closed_fixture(false);
+        let initial=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(initial.pnl_currency_status,"SINGLE_CURRENCY");
+        assert_eq!(initial.pnl_currency.as_deref(),Some("USD"));
+        assert!((initial.net_pnl.unwrap()-39.0).abs()<1e-8);
+
+        let other=create_draft_session(&conn,CreateSessionInput{
+            session_date:"2026-11-24".into(),instrument_symbol:"GC".into(),
+            environment:"DEMO".into(),session_label:Some("Isolated synthetic currency test".into()),
+        }).unwrap();
+        conn.execute(
+          "UPDATE sessions SET instrument_currency_snapshot='AUD' WHERE session_id=?1",
+          [&other.session_id]
+        ).unwrap();
+        conn.execute(
+          "INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+           VALUES('second-decision',?1,'2026-11-24T08:00:00Z','TRADE','LONG')",
+          [&other.session_id]
+        ).unwrap();
+        conn.execute(
+          "INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
+           VALUES('second-trade','second-decision',?1,'LONG','CLOSED')",
+          [&other.session_id]
+        ).unwrap();
+        conn.execute_batch(
+          "INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+             VALUES('second-entry','second-trade','2026-11-24T08:01:00Z','ENTRY','BUY',4100,1,0,0),
+                   ('second-exit','second-trade','2026-11-24T08:02:00Z','EXIT','SELL',4101,1,0,0);
+           INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,risk_dollars)
+             VALUES('second-risk','second-trade','2026-11-24T08:01:00Z','INITIAL',100);"
+        ).unwrap();
+        let mixed=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(mixed.closed_trade_count,2);
+        assert_eq!(mixed.eligible_net_pnl_count,2);
+        assert_eq!(mixed.pnl_currency_status,"MIXED_CURRENCIES");
+        assert_eq!(mixed.pnl_currency,None);
+        assert_eq!(mixed.net_pnl,None);
+        assert_eq!(mixed.expectancy_pnl,None);
+        assert!(mixed.net_r.is_some(),
+          "unitless eligible net R must remain usable when monetary units differ");
+
+        // A legacy NULL snapshot cannot be silently replaced with the mutable
+        // current instrument currency even if remaining trades are all USD.
+        conn.execute(
+          "UPDATE sessions SET instrument_currency_snapshot=NULL WHERE session_id=?1",
+          [&other.session_id]
+        ).unwrap();
+        let unknown=get_analytics_summary(&conn,JournalFilterInput::default()).unwrap();
+        assert_eq!(unknown.pnl_currency_status,"UNKNOWN_CURRENCY");
+        assert_eq!(unknown.net_pnl,None);
+        assert_eq!(unknown.expectancy_pnl,None);
+        assert_eq!(crate::db::integrity_check(&conn).unwrap(),"ok");
+    }
+
+    #[test]
+    fn gc_persisted_invalid_over_exit_fails_without_mutating_immutable_events(){
+        let (conn,_)=gc_closed_fixture(false);
+        // Import/legacy corruption is modeled by an extra persisted EXIT;
+        // original Fill history stays immutable and is never UPDATEd.
+        let original_count:i64=conn.query_row(
+          "SELECT COUNT(*) FROM execution_fills WHERE trade_id='gc-closed'",[],|r|r.get(0)
+        ).unwrap();
+        conn.execute("INSERT INTO execution_fills(
+          execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees
+        ) VALUES('gc-corrupt-exit','gc-closed','2026-11-23T08:03:00Z','EXIT','SELL',4099.5,3,0,0)",[]).unwrap();
+        assert!(trade_metrics(&conn,"gc-closed").is_err(),
+          "over-exit in legacy journal must fail closed instead of calculating false R");
+        let count:i64=conn.query_row(
+          "SELECT COUNT(*) FROM execution_fills WHERE trade_id='gc-closed'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(count,original_count+1,
+          "failed read must neither erase corrupt source events nor change originals");
+        let original_exit_qty:f64=conn.query_row(
+          "SELECT quantity FROM execution_fills WHERE execution_id='gc-exit-2'",[],|r|r.get(0)
+        ).unwrap();
+        assert_eq!(original_exit_qty,1.0);
+    }
+}
+
+#[cfg(test)]
 mod execution_sqlite_reconciliation_tests {
     use super::*;
 
@@ -2964,6 +3531,63 @@ mod unknown_cost_accounting_integrity_tests {
         assert_eq!(summary.eligible_r_count,1);
         assert_eq!(summary.net_r,Some(1.0));
         assert_eq!(summary.net_pnl,Some(20.0));
+        assert_eq!(summary.max_winning_streak,Some(1));
+        assert_eq!(summary.max_losing_streak,Some(0));
+        assert_eq!(summary.max_realized_r_drawdown,Some(0.0));
+    }
+}
+
+#[cfg(test)]
+mod analytics_coverage_truth_tests {
+    use super::*;
+    #[test]
+    fn known_profit_bad_decision_without_initial_risk_is_counted_but_not_invented_r(){
+        let db=Connection::open_in_memory().unwrap();
+        crate::db::migrate(&db).unwrap();
+        db.execute_batch("
+            INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Synthetic','now');
+            INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+                VALUES('i','w','ES',0.25,50);
+            INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+                VALUES('s','w','i','2026-11-23','DEMO','now','CLOSED','now','now');
+            INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
+                VALUES ('d1','s','2026-11-23T08:00:00Z','TRADE','LONG'),
+                       ('d2','s','2026-11-23T09:00:00Z','TRADE','LONG'),
+                       ('d3','s','2026-11-23T10:00:00Z','TRADE','LONG');
+            INSERT INTO trades(trade_id,decision_id,session_id,direction,status,decision_quality)
+                VALUES('t1','d1','s','LONG','CLOSED','A'),
+                      ('t2','d2','s','LONG','CLOSED','C'),
+                      ('t3','d3','s','LONG','CLOSED','INVALID');
+            INSERT INTO execution_fills(execution_id,trade_id,occurred_at,action,side,price,quantity,commission,fees)
+                VALUES('f11','t1','2026-11-23T08:01:00Z','ENTRY','BUY',7000,1,1,0),
+                      ('f12','t1','2026-11-23T08:02:00Z','EXIT','SELL',7001,1,1,0),
+                      ('f21','t2','2026-11-23T09:01:00Z','ENTRY','BUY',7000,1,1,0),
+                      ('f22','t2','2026-11-23T09:02:00Z','EXIT','SELL',7001,1,1,0),
+                      ('f31','t3','2026-11-23T10:01:00Z','ENTRY','BUY',7000,1,NULL,0),
+                      ('f32','t3','2026-11-23T10:02:00Z','EXIT','SELL',7001,1,1,0);
+            INSERT INTO risk_snapshots(risk_snapshot_id,trade_id,occurred_at,snapshot_type,risk_dollars)
+                VALUES('r1','t1','2026-11-23T08:01:00Z','INITIAL',100);").unwrap();
+        // Explicit historical currency snapshot: P&L is in original USD,
+        // never inferred from a mutable current instrument registry.
+        db.execute("UPDATE sessions SET instrument_currency_snapshot='USD' WHERE session_id='s'",[]).unwrap();
+        let summary=get_analytics_summary(&db,JournalFilterInput::default()).unwrap();
+        assert_eq!(summary.trade_count,3);
+        assert_eq!(summary.closed_trade_count,3);
+        assert_eq!(summary.eligible_net_pnl_count,2);
+        assert_eq!(summary.eligible_r_count,1);
+        assert_eq!(summary.net_pnl,Some(96.0));
+        assert_eq!(summary.pnl_currency.as_deref(),Some("USD"));
+        assert_eq!(summary.pnl_currency_status,"SINGLE_CURRENCY");
+        assert_eq!(summary.net_r,Some(0.48));
+        // Two of three CLOSED Trades have unknown initial risk/cost. Their
+        // sequence cannot be skipped as if the filtered sample were complete.
+        assert_eq!(summary.max_winning_streak,None);
+        assert_eq!(summary.max_losing_streak,None);
+        assert_eq!(summary.max_realized_r_drawdown,None);
+        assert_eq!(summary.bad_decision_win_count,1,
+          "C trade with known net profit belongs in process-quality warning even with unknown risk");
+        assert!(summary.small_sample);
+        assert_eq!(crate::db::integrity_check(&db).unwrap(),"ok");
     }
 }
 
@@ -3135,6 +3759,7 @@ mod decision_time_evidence_filter_tests {
                 ('LATE',1,'trade-one',NULL,'2026-11-12T10:01:00+00:00'),
                 ('CONTRARY',1,NULL,'zone-one','2026-11-12T11:00:00+11:00'),
                 ('BAD_DATE',1,NULL,'zone-one','unknown'),
+                ('UNZONED',1,NULL,'zone-one','2026-11-12T09:00:00'),
                 ('ABSENT',0,NULL,'zone-one','2026-11-12T09:00:00Z');
         ").unwrap();
         let zone=Some("zone-one".to_string());
@@ -3146,6 +3771,8 @@ mod decision_time_evidence_filter_tests {
         assert!(trade_has_evidence(&conn,"trade-one",&zone,"LATE",Some(decision),false).unwrap());
         assert!(trade_has_evidence(&conn,"trade-one",&zone,"CONTRARY",Some(decision),true).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"BAD_DATE",Some(decision),true).unwrap());
+        assert!(!trade_has_evidence(&conn,"trade-one",&zone,"UNZONED",Some(decision),true).unwrap());
+        assert!(trade_has_evidence(&conn,"trade-one",&zone,"UNZONED",Some(decision),false).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"ABSENT",Some(decision),false).unwrap());
         assert!(!trade_has_evidence(&conn,"trade-one",&zone,"DELTA",None,true).unwrap());
     }

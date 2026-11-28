@@ -17,6 +17,17 @@ fn sha256(path: &Path) -> Result<String, AppError> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+// SQLite returns a result row even when a checkpoint is blocked by a reader.
+// A successful SQL call alone does not guarantee the main file contains all commits.
+fn checkpoint_for_backup(conn: &rusqlite::Connection) -> Result<(), AppError> {
+    let (busy, log, checkpointed): (i64, i64, i64) = conn.query_row(
+        "PRAGMA wal_checkpoint(TRUNCATE)", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+    if busy != 0 || log != checkpointed {
+        return Err(AppError::Validation("Backup blocked: SQLite WAL checkpoint incomplete; retry after other database activity finishes".into()));
+    }
+    Ok(())
+}
+
 pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     let conn = db::open_database(&paths.database())?;
     let integrity = db::integrity_check(&conn)?;
@@ -27,9 +38,10 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
     crate::fill_corrections::verify_all_correction_chains(&conn)?;
     crate::initial_risk_corrections::verify_all_initial_risk_correction_chains(&conn)?;
     crate::source_type_corrections::verify_all_source_correction_chains(&conn)?;
+    crate::source_price_corrections::verify_all(&conn)?;
     // Force committed WAL pages into the main database before packaging the file.
     // The app uses a single local database; backups are serialized through this command.
-    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    checkpoint_for_backup(&conn)?;
     drop(conn);
 
     // A staging file ensures failed ZIP creation never leaves a *.zip that appears valid.
@@ -45,10 +57,12 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
         let mut zip = ZipWriter::new(file);
         let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
-        let db_path = paths.database();
-        let db_hash = sha256(&db_path)?;
+        // Hash the EXACT same immutable byte buffer that goes into the ZIP,
+        // never two independent reads of a potentially changing database.
+        let database_bytes = fs::read(paths.database())?;
+        let db_hash = hex::encode(Sha256::digest(&database_bytes));
         zip.start_file("database.sqlite", options)?;
-        zip.write_all(&fs::read(&db_path)?)?;
+        zip.write_all(&database_bytes)?;
 
         let mut attachment_count = 0usize;
         if paths.attachments.exists() {
@@ -80,6 +94,13 @@ pub fn create_backup(paths: &AppPaths) -> Result<PathBuf, AppError> {
 
     if let Err(err) = result {
         // This is a new, uniquely named incomplete staging file, never an existing backup.
+        let _ = fs::remove_file(&staging);
+        return Err(err);
+    }
+    // Only publish a completed ZIP after re-opening it and validating the
+    // archived SQLite, its declared schema, attachment CRC/count and DB hash.
+    // A failed candidate remains a hidden .partial file and is removed.
+    if let Err(err) = crate::restore::validate_backup(&staging) {
         let _ = fs::remove_file(&staging);
         return Err(err);
     }
@@ -148,6 +169,37 @@ mod destination_tests {
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
+    fn published_backup_is_validated_zip_with_exact_sqlite_bytes_and_attachments() {
+        let root=std::env::temp_dir().join(format!("ptj-publish-verified-backup-{}",uuid::Uuid::new_v4()));
+        let paths=AppPaths {
+            data:root.join("data"),attachments:root.join("attachments"),
+            backups:root.join("backups"),exports:root.join("exports"),
+            logs:root.join("logs"),root,
+        };
+        for dir in [&paths.root,&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        let conn=db::open_database(&paths.database()).unwrap();
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        drop(conn);
+        fs::write(paths.attachments.join("synthetic.png"),b"synthetic attachment bytes").unwrap();
+        let first=create_backup(&paths).unwrap();
+        assert!(first.exists());
+        assert_eq!(first.extension().and_then(|x|x.to_str()),Some("zip"));
+        let info=crate::restore::validate_backup(&first).unwrap();
+        assert_eq!(info.schema_version,db::CURRENT_SCHEMA_VERSION);
+        assert_eq!(info.attachment_count,1);
+        let first_bytes=fs::read(&first).unwrap();
+        let second=create_backup(&paths).unwrap();
+        assert_ne!(first,second,"new backup must never overwrite a previous archive");
+        assert_eq!(fs::read(&first).unwrap(),first_bytes);
+        assert_eq!(crate::restore::validate_backup(&second).unwrap().attachment_count,1);
+        assert!(fs::read_dir(&paths.backups).unwrap().all(|e|{
+            e.unwrap().path().extension().and_then(|x|x.to_str())==Some("zip")
+        }),"only validated ZIPs may be published, no .partial candidate remains");
+        fs::remove_dir_all(&paths.root).unwrap();
+    }
+    #[test]
     fn unavailable_destination_does_not_touch_source() {
         let root = std::env::temp_dir().join(format!("ptj-backup-invalid-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
@@ -156,5 +208,30 @@ mod destination_tests {
         assert!(copy_backup_to_directory(&source, &root.join("missing")).is_err());
         assert_eq!(fs::read(&source).unwrap(), b"original");
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod wal_release_tests {
+    use super::*;
+    #[test]
+    fn pinned_reader_blocks_incomplete_checkpoint_until_released() {
+        let dir=std::env::temp_dir().join(format!("ptj-wal-gate-{}",uuid::Uuid::new_v4()));
+        fs::create_dir(&dir).unwrap();
+        let path=dir.join("test.sqlite");
+        let writer=rusqlite::Connection::open(&path).unwrap();
+        writer.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=0;
+            CREATE TABLE test(value INTEGER); INSERT INTO test VALUES(1);").unwrap();
+        checkpoint_for_backup(&writer).unwrap();
+        let reader=rusqlite::Connection::open(&path).unwrap();
+        reader.execute_batch("BEGIN").unwrap();
+        assert_eq!(reader.query_row("SELECT COUNT(*) FROM test",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        writer.execute("INSERT INTO test VALUES(2)",[]).unwrap();
+        assert!(checkpoint_for_backup(&writer).is_err());
+        reader.execute_batch("ROLLBACK").unwrap();
+        checkpoint_for_backup(&writer).unwrap();
+        drop(reader);
+        drop(writer);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

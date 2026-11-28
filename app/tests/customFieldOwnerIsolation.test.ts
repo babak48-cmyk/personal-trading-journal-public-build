@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { CAPTURABLE_CUSTOM_FIELD_STAGES,customFieldFocusId } from '../src/customFieldStage';
 
 describe('Owner identity isolation across every mounted custom field editor',()=>{
-  it('keys both Select and Typed editors by the canonical persisted owner, never Quick/Detailed mode',()=>{
+  it('keys the shared Select and Typed editor by the canonical persisted owner, never Quick/Detailed mode',()=>{
     // A Session switch can otherwise render the previous owner's draft for
     // one React commit before useEffect clears and reloads the editor.
     const source=readFileSync(new URL('../src/App.tsx',import.meta.url),'utf8');
-    const tags=[...source.matchAll(/<Owner(?:CustomSelections|TypedCustomFields)\s+([^>]*?)\/>/g)];
-    expect(tags).toHaveLength(14); // Two editors for each of seven capturable stages.
+    const tags=[...source.matchAll(/<OwnerCustomFields\s+([^>]*?)\/>/g)];
+    expect(tags).toHaveLength(CAPTURABLE_CUSTOM_FIELD_STAGES.length);
     const stages=new Map<string,number>();
     for(const [,props] of tags){
       const owner=props.match(/\bownerId=\{([^}]+)\}/)?.[1];
@@ -18,11 +18,12 @@ describe('Owner identity isolation across every mounted custom field editor',()=
       expect(stage).toBeTruthy();
       expect(key).toBeTruthy();
       expect(key).toContain(owner);
+      expect(key).toContain('customCatalogRevision');
       expect(key).not.toContain('quickMode');
       stages.set(stage!, (stages.get(stage!)??0)+1);
     }
     expect([...stages.keys()].sort()).toEqual([...CAPTURABLE_CUSTOM_FIELD_STAGES].sort());
-    expect([...stages.values()]).toEqual(Array(7).fill(2));
+    expect([...stages.values()]).toEqual(CAPTURABLE_CUSTOM_FIELD_STAGES.map(()=>1));
   });
   it('keeps one owner ID distinct across Stage and another owner with same field ID',()=>{
     const ownerA=customFieldFocusId('session','session-A','required-field');

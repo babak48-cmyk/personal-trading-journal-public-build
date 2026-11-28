@@ -2,7 +2,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension};
 use crate::error::AppError;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 14;
+pub const CURRENT_SCHEMA_VERSION: u32 = 15;
 const MIGRATION_001: &str = include_str!("../migrations/001_initial.sql");
 const MIGRATION_002: &str = include_str!("../migrations/002_decision_workflow.sql");
 const MIGRATION_003: &str = include_str!("../migrations/003_execution_core.sql");
@@ -17,15 +17,35 @@ const MIGRATION_011: &str = include_str!("../migrations/011_setup_playbook.sql")
 const MIGRATION_012: &str = include_str!("../migrations/012_weekly_learning_action_events.sql");
 const MIGRATION_013: &str = include_str!("../migrations/013_initial_risk_corrections.sql");
 const MIGRATION_014: &str = include_str!("../migrations/014_candidate_source_type_corrections.sql");
+const MIGRATION_015: &str = include_str!("../migrations/015_candidate_source_price_corrections.sql");
+
+// Refuse newer databases before changing connection journal settings or running
+// migrations. An older installer must never operate against a newer schema.
+fn reject_future_schema(conn: &Connection) -> Result<(), AppError> {
+    let has_meta: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_meta')",
+        [], |r| r.get(0))?;
+    if has_meta {
+        let version: u32 = conn.query_row("SELECT schema_version FROM schema_meta WHERE id=1",
+            [], |r| r.get(0)).optional()?.unwrap_or(0);
+        if version > CURRENT_SCHEMA_VERSION {
+            return Err(AppError::Validation(format!(
+                "Database schema {version} is newer than supported schema {CURRENT_SCHEMA_VERSION}; use the matching or newer application")));
+        }
+    }
+    Ok(())
+}
 
 pub fn open_database(path: &Path) -> Result<Connection, AppError> {
     let conn = Connection::open(path)?;
+    reject_future_schema(&conn)?;
     conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000;")?;
     migrate(&conn)?;
     Ok(conn)
 }
 
 pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
+    reject_future_schema(conn)?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_meta (id INTEGER PRIMARY KEY CHECK(id = 1), schema_version INTEGER NOT NULL);\n         INSERT OR IGNORE INTO schema_meta(id, schema_version) VALUES(1, 0);"
     )?;
@@ -128,6 +148,13 @@ pub(crate) fn migrate(conn: &Connection) -> Result<(), AppError> {
         tx.execute("UPDATE schema_meta SET schema_version=14 WHERE id=1", [])?;
         tx.commit()?;
     }
+    let version: u32 = conn.query_row("SELECT schema_version FROM schema_meta WHERE id=1", [], |r| r.get(0))?;
+    if version < 15 {
+        let tx=conn.unchecked_transaction()?;
+        tx.execute_batch(MIGRATION_015).map_err(|_|AppError::Migration(15))?;
+        tx.execute("UPDATE schema_meta SET schema_version=15 WHERE id=1", [])?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -179,7 +206,7 @@ mod custom_field_schema_tests {
         let before_sessions:i64 = conn.query_row("SELECT count(*) FROM sessions",[],|r|r.get(0)).unwrap();
         let before_trades:i64 = conn.query_row("SELECT count(*) FROM trades",[],|r|r.get(0)).unwrap();
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),14);
+        assert_eq!(schema_version(&conn).unwrap(),15);
         assert_eq!(conn.query_row("SELECT session_date FROM sessions WHERE session_id='s-test'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-10-15");
         assert_eq!(conn.query_row("SELECT direction FROM trades WHERE trade_id='t-test'",[],|r|r.get::<_,String>(0)).unwrap(),"LONG");
         assert_eq!(conn.query_row("SELECT price,commission FROM execution_fills WHERE execution_id='fill-test'",[],|r|Ok((r.get::<_,f64>(0)?,r.get::<_,f64>(1)?))).unwrap(),before_fill);
@@ -188,7 +215,7 @@ mod custom_field_schema_tests {
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),14);
+        assert_eq!(schema_version(&conn).unwrap(),15);
     }
     #[test]
     fn custom_field_schema_v9_transaction_failure_rolls_back_on_disposable_v8() {
@@ -279,7 +306,7 @@ mod audited_correction_migration_gate_tests {
             [],|r|r.get(0)).unwrap();
         assert_eq!(new_tables,0);
         migrate(&conn).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(),14);
+        assert_eq!(schema_version(&conn).unwrap(),15);
         assert_eq!(conn.query_row("SELECT price FROM execution_fills WHERE execution_id='f'",[],|r|r.get::<_,f64>(0)).unwrap(),5000.0);
         assert_eq!(integrity_check(&conn).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&conn).unwrap(),0);
@@ -322,7 +349,7 @@ mod setup_playbook_v11_migration_tests {
            "SELECT COUNT(*) FROM sqlite_master WHERE name='setup_playbook_details'",[],|r|r.get(0)).unwrap();
         assert_eq!(details,0);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         let saved:String=c.query_row("SELECT setup_version_id FROM setup_versions WHERE setup_id='original-setup'",[],
             |r|r.get(0)).unwrap();
         assert_eq!(saved,"original-version");
@@ -366,11 +393,11 @@ mod weekly_action_schema_v12_tests {
     fn v11_package_b_session_survives_v12_migration_idempotently(){
         let c=v11_database();
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         assert_eq!(c.query_row("SELECT session_date FROM sessions WHERE session_id='s'",[],|r|r.get::<_,String>(0)).unwrap(),"2026-11-22");
         assert_eq!(c.query_row("SELECT count(*) FROM weekly_learning_action_events",[],|r|r.get::<_,i64>(0)).unwrap(),0);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         assert_eq!(integrity_check(&c).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
     }
@@ -391,7 +418,7 @@ mod weekly_action_schema_v12_tests {
         assert_eq!(table_count,0);
         assert_eq!(c.query_row("SELECT COUNT(*) FROM sessions",[],|r|r.get::<_,i64>(0)).unwrap(),1);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         assert_eq!(integrity_check(&c).unwrap(),"ok");
     }
 }
@@ -447,9 +474,9 @@ mod initial_risk_schema_v13_tests {
         let original:f64=c.query_row("SELECT risk_dollars FROM risk_snapshots WHERE risk_snapshot_id='r'",[],|r|r.get(0)).unwrap();
         assert_eq!(original,100.0);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         assert_eq!(c.query_row("SELECT risk_dollars FROM risk_snapshots WHERE risk_snapshot_id='r'",[],|r|r.get::<_,f64>(0)).unwrap(),100.0);
         assert_eq!(integrity_check(&c).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
@@ -513,11 +540,90 @@ mod source_type_schema_v14_tests {
         assert_eq!(created,0);
         assert_eq!(c.query_row("SELECT source_type_id FROM candidate_sources WHERE candidate_source_id='cs'",[],|r|r.get::<_,String>(0)).unwrap(),"source");
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         migrate(&c).unwrap();
-        assert_eq!(schema_version(&c).unwrap(),14);
+        assert_eq!(schema_version(&c).unwrap(),15);
         assert_eq!(c.query_row("SELECT source_type_id FROM candidate_sources WHERE candidate_source_id='cs'",[],|r|r.get::<_,String>(0)).unwrap(),"source");
         assert_eq!(integrity_check(&c).unwrap(),"ok");
         assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
+    }
+}
+
+#[cfg(test)]
+mod source_price_schema_v15_tests {
+ use super::*;
+ #[test]
+ fn migration_v14_to_v15_rolls_back_without_rewriting_existing_source_or_zone(){
+   let c=Connection::open_in_memory().unwrap();
+   c.execute_batch("PRAGMA foreign_keys=ON").unwrap();
+   c.execute_batch(
+     "CREATE TABLE schema_meta(id INTEGER PRIMARY KEY CHECK(id=1),schema_version INTEGER NOT NULL);
+      INSERT INTO schema_meta(id,schema_version) VALUES(1,0);").unwrap();
+   for (index,sql) in [
+     MIGRATION_001,MIGRATION_002,MIGRATION_003,MIGRATION_004,
+     MIGRATION_005,MIGRATION_006,MIGRATION_007,MIGRATION_008,
+     MIGRATION_009,MIGRATION_010,MIGRATION_011,MIGRATION_012,
+     MIGRATION_013,MIGRATION_014
+   ].iter().enumerate(){
+     let tx=c.unchecked_transaction().unwrap();
+     tx.execute_batch(sql).unwrap();
+     tx.execute("UPDATE schema_meta SET schema_version=?1",[(index+1) as i64]).unwrap();
+     tx.commit().unwrap();
+   }
+   c.execute_batch("
+     INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','Test','now');
+     INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value)
+       VALUES('i','w','ES',0.25,50);
+     INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
+       VALUES('s','w','i','2026-11-23','DEMO','now','CLOSED','now','now');
+     INSERT INTO candidates(candidate_id,session_id,instrument_id,identified_when,created_at)
+       VALUES('z','s','i','PRE_SESSION','now');
+     INSERT INTO candidate_revisions(candidate_revision_id,candidate_id,revision_number,created_at,price_mode,reference_price,change_type)
+       VALUES('rev','z',1,'now','SINGLE',7000,'CREATE');
+     INSERT INTO level_source_types(source_type_id,workspace_id,code,label,source_group)
+       VALUES('type','w','TYPE','Test','STRUCTURE');
+     INSERT INTO candidate_sources(candidate_source_id,candidate_id,candidate_revision_id,source_type_id,source_price)
+       VALUES('source','z','rev','type',6999.75);").unwrap();
+   assert_eq!(schema_version(&c).unwrap(),14);
+   let failed=(||->Result<(),rusqlite::Error>{
+     let tx=c.unchecked_transaction()?;
+     tx.execute_batch(MIGRATION_015)?;
+     tx.execute("INSERT INTO deliberately_missing_table VALUES(1)",[])?;
+     tx.execute("UPDATE schema_meta SET schema_version=15",[])?;
+     tx.commit()
+   })();
+   assert!(failed.is_err());
+   assert_eq!(schema_version(&c).unwrap(),14);
+   let table_count:i64=c.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='candidate_source_price_correction_events'",[],|r|r.get(0)).unwrap();
+   assert_eq!(table_count,0,"failed transaction cannot leave half a schema upgrade");
+   assert_eq!(c.query_row("SELECT source_price FROM candidate_sources WHERE candidate_source_id='source'",[],|r|r.get::<_,f64>(0)).unwrap(),6999.75);
+   migrate(&c).unwrap();
+   migrate(&c).unwrap();
+   assert_eq!(schema_version(&c).unwrap(),15);
+   assert_eq!(c.query_row("SELECT source_price FROM candidate_sources WHERE candidate_source_id='source'",[],|r|r.get::<_,f64>(0)).unwrap(),6999.75);
+   assert_eq!(c.query_row("SELECT reference_price FROM candidate_revisions WHERE candidate_revision_id='rev'",[],|r|r.get::<_,f64>(0)).unwrap(),7000.0);
+   assert_eq!(integrity_check(&c).unwrap(),"ok");
+   assert_eq!(foreign_key_violation_count(&c).unwrap(),0);
+ }
+}
+
+#[cfg(test)]
+mod future_schema_release_tests {
+    use super::*;
+    #[test]
+    fn older_app_rejects_newer_schema_without_rewriting_history() {
+        let path = std::env::temp_dir().join(format!("ptj-future-schema-{}.db", uuid::Uuid::new_v4()));
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch("CREATE TABLE schema_meta(id INTEGER PRIMARY KEY, schema_version INTEGER NOT NULL);
+            CREATE TABLE future_history(value TEXT);
+            INSERT INTO future_history VALUES('original');").unwrap();
+        c.execute("INSERT INTO schema_meta VALUES(1,?1)", [CURRENT_SCHEMA_VERSION+1]).unwrap();
+        assert!(migrate(&c).is_err());
+        drop(c);
+        let original = std::fs::read(&path).unwrap();
+        let err = open_database(&path).unwrap_err();
+        assert!(err.to_string().contains("newer than supported"));
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        std::fs::remove_file(path).unwrap();
     }
 }

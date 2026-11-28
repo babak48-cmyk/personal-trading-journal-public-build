@@ -407,7 +407,7 @@ mod tests{
         assert_eq!(info.schema_version,db::CURRENT_SCHEMA_VERSION);
         let staged=restore::restore_to_staging(&paths,&archive).unwrap();
         let restored=rusqlite::Connection::open(staged.join("database.sqlite")).unwrap();
-        assert_eq!(db::schema_version(&restored).unwrap(),14);
+        assert_eq!(db::schema_version(&restored).unwrap(),db::CURRENT_SCHEMA_VERSION);
         assert_eq!(verify_all_correction_chains(&restored).unwrap(),1);
         let original:f64=restored.query_row("SELECT price FROM execution_fills WHERE execution_id='exit'",
             [],|r|r.get(0)).unwrap();
@@ -438,14 +438,14 @@ mod tests{
         let mut db=Connection::open_in_memory().unwrap();
         db.execute_batch("PRAGMA foreign_keys=ON").unwrap();
         db::migrate(&db).unwrap();
-        assert_eq!(db::schema_version(&db).unwrap(),14);
+        assert_eq!(db::schema_version(&db).unwrap(),db::CURRENT_SCHEMA_VERSION);
         db::migrate(&db).unwrap();
-        assert_eq!(db::schema_version(&db).unwrap(),14);
+        assert_eq!(db::schema_version(&db).unwrap(),db::CURRENT_SCHEMA_VERSION);
         db.execute_batch("
           INSERT INTO workspaces(workspace_id,name,created_at) VALUES('w','test','2026-11-15');
           INSERT INTO instruments(instrument_id,workspace_id,symbol,tick_size,point_value) VALUES('i','w','ES',0.25,50);
-          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at)
-            VALUES('s','w','i','2026-11-15','DEMO','now','ACTIVE','now','now');
+          INSERT INTO sessions(session_id,workspace_id,instrument_id,session_date,environment,opened_at,status,created_at,updated_at,instrument_currency_snapshot)
+            VALUES('s','w','i','2026-11-15','DEMO','now','ACTIVE','now','now','USD');
           INSERT INTO candidate_decisions(decision_id,session_id,occurred_at,decision_type,intended_direction)
             VALUES('d','s','now','TRADE','LONG');
           INSERT INTO trades(trade_id,decision_id,session_id,direction,status)
@@ -523,6 +523,8 @@ mod tests{
             }).unwrap();
         assert_eq!(analytics.trade_count,1);
         assert_eq!(analytics.net_pnl,Some(605.0));
+        assert_eq!(analytics.pnl_currency.as_deref(),Some("USD"));
+        assert_eq!(analytics.pnl_currency_status,"SINGLE_CURRENCY");
         assert_eq!(analytics.eligible_r_count,0);
         assert_eq!(analytics.net_r,None);
         assert!(analytics.small_sample);

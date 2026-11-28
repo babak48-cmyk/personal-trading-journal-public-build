@@ -17,3 +17,18 @@ export function reviewReadbackOwnerIssue(
     return 'Saved rule check belongs to a different Trade.';
   return null;
 }
+
+type ReviewReader={
+  getTradeReview:(tradeId:string)=>Promise<TradeReview|null>;
+  getTradeRuleCheck:(tradeId:string)=>Promise<TradeRuleCheck|null>;
+};
+
+export async function readVerifiedTradeReview(api:ReviewReader,selectedTradeId:string,loadedTradeId:string){
+  const [review,ruleCheck]=await Promise.all([
+    api.getTradeReview(selectedTradeId),
+    api.getTradeRuleCheck(selectedTradeId),
+  ]);
+  const issue=reviewReadbackOwnerIssue(selectedTradeId,loadedTradeId,review,ruleCheck);
+  if(issue)throw new Error(issue);
+  return {review,ruleCheck};
+}

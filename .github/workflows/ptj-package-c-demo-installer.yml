@@ -3,6 +3,13 @@ name: PTJ Package C isolated DEMO installer (one cohesive release gate)
 # product and Tauri app identity from accepted main and prior DEMO.
 on:
   workflow_dispatch:
+  # One cohesive Package C installer gate; only changes to this workflow on
+  # the authorized PUBLIC development branch can trigger the build on push.
+  push:
+    branches:
+      - feature/ptj-c-transfer-integrity-2026-11-23
+    paths:
+      - '.github/workflows/ptj-package-c-demo-installer.yml'
 permissions:
   contents: read
 jobs:

@@ -232,6 +232,10 @@ mod tests{
         assert_eq!(original,100.0);
         let effective=repository::get_trade_detail(&c,"t").unwrap();
         assert_eq!(effective.metrics.initial_risk_dollars,Some(200.0));
+        let journal=repository::list_journal_trades(&c,repository::JournalFilterInput::default()).unwrap();
+        assert_eq!(journal.len(),1);
+        assert_eq!(journal[0].audited_initial_risk_correction_count,1);
+        assert_eq!(journal[0].audited_source_type_correction_count,0);
         assert!((effective.metrics.realized_r.unwrap()-0.48).abs()<1e-9);
         assert_eq!(effective.risk_snapshots[0].risk_dollars,Some(200.0));
         assert!(c.execute("UPDATE initial_risk_correction_events SET replacement_risk_dollars=900",[]).is_err());

@@ -8,3 +8,11 @@ export function findClosedReviewTarget(
 ):TradeMetrics|undefined {
   return trades.find(t=>t.session_id===sessionId && t.trade_id===tradeId && t.status==='CLOSED');
 }
+
+/** Analytics can open OPEN or CLOSED trades, unlike Review Pending. Match
+ * persisted trade ID AND original session ID; never resolve by row index. */
+export function findJournalTradeTarget(
+  sessionId:string, tradeId:string, trades:readonly TradeMetrics[],
+):TradeMetrics|undefined {
+  return trades.find(t=>t.session_id===sessionId && t.trade_id===tradeId);
+}

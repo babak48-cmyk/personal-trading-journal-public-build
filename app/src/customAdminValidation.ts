@@ -31,3 +31,33 @@ export function validateNewCustomFieldDefinition(input:{
  if(!Number.isInteger(input.display_order)||input.display_order<0)
    throw new CustomAdminValidationError('Invalid custom field display order.');
 }
+
+
+/** Capture the actual saved text at editor opening, not a later render.
+ * Refreshing the list must not silently turn a stale draft into a valid edit. */
+export type CustomFieldTextSnapshot = Readonly<{field_id:string;label:string;help_text:string}>;
+export function assertCustomFieldTextUnchanged(
+ baseline:CustomFieldTextSnapshot|undefined,
+ latest:CustomFieldTextSnapshot|undefined,
+):void{
+ if(!baseline||!latest||baseline.field_id!==latest.field_id||
+    baseline.label!==latest.label||baseline.help_text!==latest.help_text)
+  throw new CustomAdminValidationError('Field text changed or no longer exists. Cancel the edit, refresh, and reopen it.');
+}
+export function customFieldTextReadbackMatches(
+ expected:CustomFieldTextSnapshot & {stage:string;field_type:string;required:boolean;active:boolean;display_order:number},
+ actual:typeof expected|undefined,
+):boolean{
+ return !!actual&&actual.field_id===expected.field_id&&actual.label===expected.label&&
+ actual.help_text===expected.help_text&&actual.stage===expected.stage&&
+ actual.field_type===expected.field_type&&actual.required===expected.required&&
+ actual.active===expected.active&&actual.display_order===expected.display_order;
+}
+
+/** Append after all saved siblings, including inactive records and sparse ranks. */
+export function nextCustomDisplayOrder(siblings:readonly {display_order:number}[]):number {
+ const next=siblings.reduce((max,row)=>Math.max(max,row.display_order),-1)+1;
+ if(!Number.isSafeInteger(next))
+   throw new CustomAdminValidationError('Saved display order cannot be extended. Reorder the existing fields or options first.');
+ return next;
+}

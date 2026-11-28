@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {verifiedSourceTypeReadback} from './nonFillCorrectionReadback';
 import {localApi,type HistoricalSourceReadout,type SourceTypeCorrectionEvent,
 type SourceTypeCorrectionRequest,type SourceTypeCorrectionPreview,
 type LevelSourceType} from './services/localApi';
@@ -31,8 +32,9 @@ export function AuditedSourceCorrectionPanel({tradeId,readOnly,onApplied}:{
       reason:reason.trim()};
   };
   async function reload(){
+    if(busy||saveLock.current)return;
     const id=++epoch.current;
-    setBusy(true);setUncertain(false);setPreview(null);setSignature('');
+    setBusy(true);setUncertain(true);setPreview(null);setSignature('');
     try{
       const [all,history,sourceTypes]=await Promise.all([
         localApi.listTradeHistoricalSources(tradeId),
@@ -40,7 +42,7 @@ export function AuditedSourceCorrectionPanel({tradeId,readOnly,onApplied}:{
         localApi.listAllLevelSources()
       ]);
       if(id!==epoch.current)return;
-      setSources(all);setEvents(history);setTypes(sourceTypes);
+      setSources(all);setEvents(history);setTypes(sourceTypes);setUncertain(false);
       setMessage('Historical source and audit history verified from local SQLite.');
     }catch(e){
       if(id===epoch.current){
@@ -75,7 +77,7 @@ export function AuditedSourceCorrectionPanel({tradeId,readOnly,onApplied}:{
       if(result.candidate_source_id!==input.candidate_source_id||
          result.current_effective_type_id!==input.expected_effective_type_id||
          result.expected_revision!==input.expected_revision||
-         result.replacement_type_id!==input.replacement_type_id)
+         result.replacement_type_id!==input.replacement_type_id||result.reason!==input.reason||result.candidate_revision_id!==active?.candidate_revision_id||!result.monetary_result_unchanged)
         throw new Error('Source preview does not match original Zone revision and current audit');
       setPreview(result);setSignature(JSON.stringify(input));
       setMessage('Read the historical type change, affected Decision sample, and reason before confirming.');
@@ -94,10 +96,7 @@ export function AuditedSourceCorrectionPanel({tradeId,readOnly,onApplied}:{
         localApi.listTradeSourceTypeCorrections(tradeId)
       ]);
       if(id!==epoch.current)return;
-      if(!history.some(e=>e.correction_id===receipt.correction_id)||
-         !updated.some(x=>x.candidate_source_id===input.candidate_source_id&&
-           x.effective_source_type_id===input.replacement_type_id&&
-           x.revision===input.expected_revision+1))
+      if(!verifiedSourceTypeReadback(input,receipt,history,updated))
         throw new Error('Correction could not be verified from saved historical source and audit');
       setSources(updated);setEvents(history);setPreview(null);setSignature('');
       setReplacement('');setReason('');

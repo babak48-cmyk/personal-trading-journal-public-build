@@ -23,7 +23,14 @@ describe('Field Manager integration safety', () => {
     expect(new Set(ACTIVE_VISIBILITY_FIELD_IDS).size).toBe(ACTIVE_VISIBILITY_FIELD_IDS.length);
     expect(new Set(RENDERED_FIELD_TEXT_IDS).size).toBe(RENDERED_FIELD_TEXT_IDS.length);
     const protectedSetup=["setup.marketContext","setup.zoneLocation","setup.prerequisites","setup.entryTriggers","setup.supportingEvidence","setup.contraryEvidence","setup.invalidation"];
-    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...protectedSetup]));
+    const presentationOnly=['psychology.emotionAffected','psychology.state','psychology.stage','candidate.trendRelationship','session.date', 'session.instrument', 'session.environment', 'candidate.intent', 'candidate.priceMode', 'trade.entryPrice', 'trade.stopPrice', 'trade.quantity','plan.bias','candidate.price','decision.type','decision.reason','planRevision.bias','planRevision.reason','candidateRevision.reason','liveZone.reason','fill.action','fill.price','fill.quantity','management.newStop','decision.direction','decision.mismatchReason','trade.entryCommission','trade.entryFees','fill.commission','fill.fees','candidate.status','evidence.type','evidence.role','rule.violationReported','rule.violatedIds','attachment.stage','setup.name','setup.evidenceName','setup.evidenceRole'];
+    expect(new Set(RENDERED_FIELD_TEXT_IDS)).toEqual(new Set([...ACTIVE_VISIBILITY_FIELD_IDS,...protectedSetup,...presentationOnly]));
+    for(const id of presentationOnly){
+      expect(inventory.get(id)?.formalFieldId).toBe(id);
+      expect(FIELD_DEFINITION_BY_ID[id]).toBeDefined();
+      expect(ACTIVE_VISIBILITY_FIELD_IDS.some(x=>x===id)).toBe(false);
+      expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+    }
     for(const id of protectedSetup){
       expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(true);
       expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
@@ -312,4 +319,23 @@ describe('Trade Review note field manager integration',()=>{
       expect(FIELD_DEFINITION_BY_ID[id]?.systemLocked).toBe(false);
     }
   });
+});
+
+describe('Protected financial and management input ordering',()=>{
+  it.each([['trade.entryCommission','trade.entryFees'],['fill.commission','fill.fees'],['management.newStop','management.reason']])('reorders %s and %s without changing field identity',(first,second)=>{
+    expect(orderFieldIdsWithinSection([first,second],{[second]:0,[first]:1})).toEqual([second,first]);
+    expect(isFieldPresented(first,true,{[first]:false},{[first]:'DETAILED_ONLY'},{})).toBe(true);
+  });
+});
+
+describe('Revision, psychology and fill ordering',()=>{
+ it.each([
+  ['planRevision.bias','planRevision.reason','planRevision.evidence'],
+  ['psychology.state','psychology.stage','psychology.intensity'],
+  ['fill.action','fill.price','fill.quantity','fill.reason']
+ ])('reorders existing fields without removing any identities',(...ids)=>{
+   const ranks=Object.fromEntries(ids.map((id,index)=>[id,ids.length-index]));
+   expect(orderFieldIdsWithinSection(ids,ranks)).toEqual([...ids].reverse());
+   expect(new Set(orderFieldIdsWithinSection(ids,ranks))).toEqual(new Set(ids));
+ });
 });

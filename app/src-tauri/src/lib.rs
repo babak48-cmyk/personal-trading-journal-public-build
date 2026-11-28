@@ -2,6 +2,7 @@ mod attachments;
 mod backup;
 mod commands;
 mod custom_fields;
+mod custom_analytics;
 mod custom_presentation;
 mod db;
 mod diagnostics;
@@ -10,6 +11,7 @@ mod exports;
 mod fill_corrections;
 mod initial_risk_corrections;
 mod source_type_corrections;
+mod source_price_corrections;
 mod import_readiness;
 mod setup_playbook;
 mod paths;
@@ -27,6 +29,25 @@ struct QuickShortcutReport {
 }
 
 struct QuickShortcutState(std::sync::Mutex<QuickShortcutReport>);
+
+// Keep an OS-owned exclusive lock for the entire app lifetime, scoped to
+// the actual local-data root (so isolated DEMO and live roots remain separate).
+// The lock file is deliberately never deleted; the OS releases the lock on exit.
+struct JournalInstanceLock {
+    _file: std::fs::File,
+}
+impl JournalInstanceLock {
+    fn acquire(root: &std::path::Path) -> Result<Self, crate::error::AppError> {
+        std::fs::create_dir_all(root)?;
+        let file = std::fs::OpenOptions::new().read(true).write(true)
+            .create(true).truncate(false).open(root.join("journal-instance.lock"))?;
+        file.try_lock().map_err(|err| crate::error::AppError::Validation(format!(
+            "Cannot acquire journal data lock; close other instances using this data folder: {err}"
+        )))?;
+        Ok(Self { _file: file })
+    }
+}
+
 
 #[tauri::command]
 fn quick_shortcut_report(
@@ -51,6 +72,10 @@ pub fn run() {
             trigger_count: 0,
         })))
         .setup(|app| {
+            // Acquire before the webview can issue any journal command.
+            let root = app.path().app_local_data_dir()?;
+            let instance_lock = JournalInstanceLock::acquire(&root)?;
+            app.manage(instance_lock);
             use tauri_plugin_global_shortcut::{
                 Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
             };
@@ -124,6 +149,9 @@ pub fn run() {
             commands::list_custom_field_selection_history,
             commands::record_custom_field_typed_value,
             commands::current_custom_field_typed_value,
+            commands::list_custom_field_typed_history,
+            commands::analyze_custom_trade_field,
+            commands::analyze_custom_decision_field,
             commands::runtime_readiness,
             commands::run_beta_self_test,
             commands::get_field_requirement_overrides,
@@ -198,6 +226,9 @@ pub fn run() {
             commands::preview_source_type_correction,
             commands::record_source_type_correction,
             commands::list_trade_source_type_corrections,
+            commands::preview_source_price_correction,
+            commands::record_source_price_correction,
+            commands::list_trade_source_price_corrections,
             commands::record_fill_correction,
             commands::get_trade_for_decision,
             commands::list_unexecuted_trade_decisions,
@@ -225,10 +256,28 @@ pub fn run() {
             commands::delete_attachment,
             commands::export_journal_html,
             commands::export_journal_csv,
+            commands::export_journal_decisions_csv,
             commands::list_weekly_actions,
             commands::save_weekly_action,
             commands::open_export_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running Personal Trading Journal");
+}
+
+#[cfg(test)]
+mod journal_instance_lock_tests {
+    use super::*;
+    #[test]
+    fn same_root_is_exclusive_distinct_root_is_independent_and_exit_releases_lock() {
+        let root=std::env::temp_dir().join(format!("ptj-instance-{}",uuid::Uuid::new_v4()));
+        let first=JournalInstanceLock::acquire(&root.join("live")).unwrap();
+        assert!(JournalInstanceLock::acquire(&root.join("live")).is_err());
+        let demo=JournalInstanceLock::acquire(&root.join("demo")).unwrap();
+        drop(first);
+        let reopened=JournalInstanceLock::acquire(&root.join("live")).unwrap();
+        drop(reopened);
+        drop(demo);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

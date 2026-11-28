@@ -38,6 +38,9 @@ pub struct HistoricalSourceReadout {
     pub effective_label:String,
     pub revision:i64,
     pub corrected:bool,
+    pub original_source_price:Option<f64>,
+    pub effective_source_price:Option<f64>,
+    pub price_correction_revision:i64,
 }
 #[derive(Debug,Clone,Serialize)]
 pub struct SourceTypeCorrectionPreview {
@@ -116,22 +119,25 @@ pub fn sources_at_decision(conn:&Connection,trade_id:&str)
     let Some(rev)=rev else{return Ok(Vec::new());};
     let mut stmt=conn.prepare(
      "SELECT cs.candidate_source_id,cs.candidate_revision_id,
-             cs.source_type_id,lst.label,lst.workspace_id
+             cs.source_type_id,lst.label,lst.workspace_id,cs.source_price
       FROM candidate_sources cs JOIN level_source_types lst ON lst.source_type_id=cs.source_type_id
       WHERE cs.candidate_revision_id=?1 ORDER BY cs.is_primary DESC,cs.rowid")?;
     let rows=stmt.query_map([rev],|r|Ok((
       r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,
-      r.get::<_,String>(3)?,r.get::<_,String>(4)?
+      r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<f64>>(5)?
     )))?.collect::<Result<Vec<_>,_>>()?;
     let mut result=Vec::new();
-    for (id,revision_id,original,original_label,workspace) in rows {
+    for (id,revision_id,original,original_label,workspace,source_price) in rows {
         let (effective,revision,_)=effective_type(conn,&id,&original)?;
         let effective_label=label(conn,&effective,&workspace)?;
+        let (effective_price,price_revision,_)=crate::source_price_corrections::effective_price(conn,&id,source_price)?;
         result.push(HistoricalSourceReadout{
           candidate_source_id:id,candidate_revision_id:revision_id,
           original_source_type_id:original,
           original_label,effective_source_type_id:effective,
           effective_label,revision,corrected:revision>0,
+          original_source_price:source_price,effective_source_price:effective_price,
+          price_correction_revision:price_revision,
         });
     }
     Ok(result)
@@ -282,7 +288,7 @@ mod audited_source_type_tests {
     #[test]
     fn source_correction_changes_only_historical_effective_classification_and_keeps_original(){
         let mut conn=fixture();
-        assert_eq!(db::schema_version(&conn).unwrap(),14);
+        assert_eq!(db::schema_version(&conn).unwrap(),15);
         let first=sources_at_decision(&conn,"trade1").unwrap();
         assert_eq!(first.len(),1);
         assert_eq!(first[0].original_source_type_id,"sourceA");
@@ -314,6 +320,9 @@ mod audited_source_type_tests {
         assert!(affected.level_sources.iter().any(|s|s.contains("Actual Level")));
         assert!(affected.level_sources.iter().any(|s|s.contains("corrected historical entry")));
         assert_eq!(unaffected.level_sources,vec!["Original High"]);
+        assert_eq!(affected.audited_source_type_correction_count,1);
+        assert_eq!(unaffected.audited_source_type_correction_count,0);
+        assert_eq!(affected.audited_source_price_correction_count,0);
         assert_eq!(list_source_corrections_for_trade(&conn,"trade1").unwrap().len(),1);
         assert_eq!(list_source_corrections_for_trade(&conn,"trade2").unwrap().len(),0);
         assert_eq!(verify_all_source_correction_chains(&conn).unwrap(),1);

@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {findClosedReviewTarget} from './reviewBacklogTarget';
+import {findClosedReviewTarget,findJournalTradeTarget} from './reviewBacklogTarget';
 import type {TradeMetrics} from './services/localApi';
 const trade=(trade_id:string,session_id:string,status:string):TradeMetrics=>({
  trade_id,session_id,direction:'LONG',status,total_entry_quantity:1,
@@ -16,5 +16,18 @@ describe('cross-session pending Review target identity',()=>{
  it('does not mix trades across owners even if identifiers or symbols look similar',()=>{
   const saved=[trade('trade-1','session-A','CLOSED'),trade('trade-2','session-B','CLOSED')];
   expect(findClosedReviewTarget('session-A','trade-2',saved)).toBeUndefined();
+ });
+});
+
+describe('Analyze Trade journal target identity',()=>{
+ it('resolves exact OPEN or CLOSED persisted trade without crossing sessions',()=>{
+  const saved=[trade('same','s-one','CLOSED'),trade('same','s-two','OPEN'),trade('other','s-one','OPEN')];
+  expect(findJournalTradeTarget('s-one','same',saved)?.status).toBe('CLOSED');
+  expect(findJournalTradeTarget('s-two','same',saved)?.status).toBe('OPEN');
+  expect(findJournalTradeTarget('s-one','other',saved)?.status).toBe('OPEN');
+  expect(findJournalTradeTarget('s-two','other',saved)).toBeUndefined();
+  expect(findJournalTradeTarget('s-one','absent',saved)).toBeUndefined();
+  // Review backlog is stricter: it must still exclude unclosed trades.
+  expect(findClosedReviewTarget('s-two','same',saved)).toBeUndefined();
  });
 });

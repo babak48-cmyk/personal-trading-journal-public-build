@@ -33,10 +33,11 @@ export function safeVisibleCustomFields(
   quickMode:boolean,
   prefs:CustomFieldPresentationMap,
   presentationReady:boolean,
+  unfinished:(fieldId:string)=>boolean=()=>false,
 ):CustomFieldDefinition[]{
-  return fields.filter(field=>presentationReady
+  return fields.filter(field=>field.active&&(unfinished(field.field_id)||(presentationReady
     ?isCustomFieldPresented(field,quickMode,prefs)
-    :field.active&&field.required);
+    :field.required)));
 }
 
 /** Remove preferences only for definitions already absent from the active database.

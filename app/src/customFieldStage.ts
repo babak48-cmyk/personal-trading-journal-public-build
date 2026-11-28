@@ -69,3 +69,9 @@ export function showSessionCustomFieldsOnPage(
 ):boolean {
   return !quickMode || !hasConfirmedPlan || notebookPage==='PLAN';
 }
+
+/** Match the catalog's shared per-stage order across typed and selection editors. */
+export function orderCustomFieldEntries<T extends {field:Pick<CustomFieldDefinition,'display_order'|'field_id'>}>(entries:readonly T[]):T[] {
+  return [...entries].sort(({field:a},{field:b}) =>
+    a.display_order-b.display_order || (a.field_id<b.field_id ? -1 : a.field_id>b.field_id ? 1 : 0));
+}

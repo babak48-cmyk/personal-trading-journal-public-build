@@ -113,6 +113,27 @@ pub fn current_custom_field_typed_value(app:AppHandle,owner_stage:String,owner_i
     let conn=open_custom_fields_readonly(&app)?;
     crate::custom_fields::read_current_typed_value(&conn,&owner_stage,&owner_id,&field_id)
 }
+#[tauri::command]
+pub fn list_custom_field_typed_history(app:AppHandle,owner_stage:String,owner_id:String,field_id:String)->Result<Vec<crate::custom_fields::HistoricalTypedValue>,AppError>{
+    let conn=open_custom_fields_readonly(&app)?;
+    crate::custom_fields::read_typed_history(&conn,&owner_stage,&owner_id,&field_id)
+}
+#[tauri::command]
+pub fn analyze_custom_trade_field(app:AppHandle,filter:JournalFilterInput,field_id:String)->Result<crate::custom_analytics::CustomTradeAnalysis,AppError>{
+    let mut conn=open_custom_fields_readonly(&app)?;
+    let tx=conn.transaction()?;
+    let result=crate::custom_analytics::analyze(&tx,filter,&field_id)?;
+    tx.commit()?;
+    Ok(result)
+}
+#[tauri::command]
+pub fn analyze_custom_decision_field(app:AppHandle,filter:JournalFilterInput,field_id:String)->Result<crate::custom_analytics::CustomDecisionAnalysis,AppError>{
+    let mut conn=open_custom_fields_readonly(&app)?;
+    let tx=conn.transaction()?;
+    let result=crate::custom_analytics::analyze_decisions(&tx,filter,&field_id)?;
+    tx.commit()?;
+    Ok(result)
+}
 #[derive(Serialize)]
 pub struct DatabaseHealth {
     schema_version: u32,
@@ -932,6 +953,13 @@ pub fn export_journal_csv(app: AppHandle, filter: JournalFilterInput) -> Result<
 }
 
 #[tauri::command]
+pub fn export_journal_decisions_csv(app: AppHandle, filter: JournalFilterInput) -> Result<exports::ExportResult, AppError> {
+    let paths = AppPaths::from_app(&app)?;
+    let conn = db::open_database(&paths.database())?;
+    exports::export_decision_csv(&conn, &paths, filter)
+}
+
+#[tauri::command]
 pub fn open_export_folder(app: AppHandle) -> Result<(), AppError> {
     // Only the application-owned export directory may be opened; no caller-supplied path.
     let paths = AppPaths::from_app(&app)?;
@@ -1043,6 +1071,27 @@ pub fn list_trade_source_type_corrections(app:AppHandle,trade_id:String)
 }
 
 #[tauri::command]
+pub fn preview_source_price_correction(app:AppHandle,input:crate::source_price_corrections::SourcePriceCorrectionRequest)
+ ->Result<crate::source_price_corrections::SourcePriceCorrectionPreview,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let conn=db::open_database(&paths.database())?;
+ crate::source_price_corrections::preview(&conn,&input)
+}
+#[tauri::command]
+pub fn record_source_price_correction(app:AppHandle,input:crate::source_price_corrections::SourcePriceCorrectionRequest)
+ ->Result<crate::source_price_corrections::SourcePriceCorrectionEvent,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let mut conn=db::open_database(&paths.database())?;
+ crate::source_price_corrections::record(&mut conn,input)
+}
+#[tauri::command]
+pub fn list_trade_source_price_corrections(app:AppHandle,trade_id:String)
+ ->Result<Vec<crate::source_price_corrections::SourcePriceCorrectionEvent>,AppError>{
+ let paths=AppPaths::from_app(&app)?;
+ let conn=db::open_database(&paths.database())?;
+ crate::source_price_corrections::list_for_trade(&conn,&trade_id)
+}
+#[tauri::command]
 pub fn preview_initial_risk_correction(app:AppHandle,input:crate::initial_risk_corrections::InitialRiskCorrectionRequest)
  ->Result<crate::initial_risk_corrections::InitialRiskCorrectionPreview,AppError>{
     let paths=AppPaths::from_app(&app)?;
@@ -1085,9 +1134,9 @@ pub fn preview_package_c_demo_import(app:AppHandle,backup_path:String)
 }
 
 #[tauri::command]
-pub fn import_package_b_demo_backup(app:AppHandle,backup_path:String,expected_database_sha256:String)
+pub fn import_package_b_demo_backup(app:AppHandle,backup_path:String,expected_archive_sha256:String)
  ->Result<restore::RestoreResult,AppError>{
     require_isolated_package_c_demo(&app)?;
     let paths=AppPaths::from_app(&app)?;
-    crate::demo_transfer::import_into_empty(&paths,&PathBuf::from(backup_path),&expected_database_sha256)
+    crate::demo_transfer::import_into_empty(&paths,&PathBuf::from(backup_path),&expected_archive_sha256)
 }

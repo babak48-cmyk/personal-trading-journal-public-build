@@ -29,9 +29,12 @@ describe('read-only Decision history / pending execution rows',()=>{
   it('lists a saved TRADE decision as pending, not as an executed fill',()=>{
     const handler=vi.fn();
     const row={...decision,decision_type:'TRADE',intended_direction:'LONG'};
-    const html=renderToStaticMarkup(<PendingTradeDecisionRow decision={row} current={false} onResume={handler}/>);
+    const html=renderToStaticMarkup(<PendingTradeDecisionRow decision={row} zoneLabel="Test Zone" current={false} onResume={handler}/>);
     expect(html).toContain('pendingDecisionRecord');
     expect(html).toContain('Resume original Decision');
+    expect(html).toContain('Test Zone');
+    expect(html).toContain('Awaiting entry');
+    expect(html).toContain('Test missed opportunity');
     expect(html).toContain('Decision ID:');
     expect(html).not.toContain('Fill saved');
     expect(handler).not.toHaveBeenCalled();

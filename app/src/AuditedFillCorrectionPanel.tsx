@@ -1,4 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
+import {auditedFillCorrectionEditable} from './auditedCorrectionReadiness';
+import {verifiedFillCorrectionReadback,verifiedFillCorrectionPreview} from './fillCorrectionReadback';
 import {localApi, type TradeDetail, type FillCorrectionField,
   type FillCorrectionInput, type FillCorrectionPreview,
   type CorrectionHistoryEvent} from './services/localApi';
@@ -25,19 +27,46 @@ export function AuditedFillCorrectionPanel({
   const [busy,setBusy]=useState(false);
   const requestEpoch=useRef(0);
   const saving=useRef(false);
-  const closed=trade.metrics.status==='CLOSED';
-  const editable=closed&&!readOnly;
+  const editable=auditedFillCorrectionEditable(trade.metrics.status,readOnly,history!==null);
   const selected=trade.fills.find(x=>x.execution_id===executionId);
   const current=selected?(selected[field] as number|null|undefined)??null:null;
 
   useEffect(()=>{
     let cancelled=false;
+    const epoch=++requestEpoch.current;
     setHistory(null);
     localApi.listTradeCorrectionHistory(trade.metrics.trade_id)
-      .then(v=>{if(!cancelled)setHistory(v);})
-      .catch(e=>{if(!cancelled)setMessage('Audit history could not be verified: '+String(e));});
+      .then(v=>{if(!cancelled&&epoch===requestEpoch.current)setHistory(v);})
+      .catch(e=>{if(!cancelled&&epoch===requestEpoch.current)setMessage('Audit history could not be verified: '+String(e));});
     return ()=>{cancelled=true;requestEpoch.current++;};
   },[trade.metrics.trade_id]);
+
+  /** Manual recovery after a failed history read or an uncertain write.
+   * Never treat an unreadable ledger as an empty audit chain. */
+  async function reloadAuditHistory(){
+    if(busy||saving.current)return;
+    const epoch=++requestEpoch.current;
+    setHistory(null);setPreview(null);setPreviewKey('');
+    setBusy(true);setMessage('Re-reading the complete immutable Fill audit history…');
+    try{
+      const [verified,fresh]=await Promise.all([
+        localApi.listTradeCorrectionHistory(trade.metrics.trade_id),
+        localApi.getTradeDetail(trade.metrics.trade_id),
+      ]);
+      if(epoch!==requestEpoch.current)return;
+      if(fresh.metrics.trade_id!==trade.metrics.trade_id){
+        throw new Error('Audit reload returned a different Trade identity.');
+      }
+      onApplied(fresh);
+      setHistory(verified);
+      setMessage('Fill audit and effective Trade values independently re-read. Review the refreshed Fill before any new correction.');
+    }catch(e){
+      if(epoch===requestEpoch.current)
+        setMessage('Audit history still unavailable; correction locked: '+String(e));
+    }finally{
+      if(epoch===requestEpoch.current)setBusy(false);
+    }
+  }
 
   function invalidate(){
     requestEpoch.current++;
@@ -65,9 +94,7 @@ export function AuditedFillCorrectionPanel({
     try{
       const result=await localApi.previewFillCorrection(input);
       if(epoch!==requestEpoch.current)return;
-      if(result.trade_id!==trade.metrics.trade_id||
-         result.execution_id!==input.execution_id||
-         result.current_effective!==input.expected_effective){
+      if(!verifiedFillCorrectionPreview(trade.metrics.trade_id,input,result)){
         throw new Error('Preview does not match the selected Trade / Fill.');
       }
       setPreview(result);setPreviewKey(key(input));
@@ -81,10 +108,22 @@ export function AuditedFillCorrectionPanel({
     if(!input||!preview||previewKey!==key(input)||busy||saving.current){
       setMessage('The preview is outdated. Preview the proposed correction again.');return;
     }
-    if(!preview.explicit_confirmation_required){setMessage('Explicit confirmation was not verified.');return;}
+    if(!verifiedFillCorrectionPreview(trade.metrics.trade_id,input,preview)){setMessage('Explicit confirmation was not verified.');return;}
     const epoch=++requestEpoch.current;
     saving.current=true;setBusy(true);
+    // Write outcome may be uncertain if a post-commit read fails. Keep the
+    // editor locked until the complete ledger is independently re-read.
+    setHistory(null);
     try{
+      // Re-check the complete preview immediately before writing. Any intervening
+      // audit or financial change requires a fresh explicit user confirmation.
+      const latest=await localApi.previewFillCorrection(input);
+      if(epoch!==requestEpoch.current)return;
+      if(!verifiedFillCorrectionPreview(trade.metrics.trade_id,input,latest)||JSON.stringify(latest)!==JSON.stringify(preview)){
+        setPreview(null);setPreviewKey('');
+        setMessage('Correction preview changed. Re-read the audit and preview again before saving.');
+        return;
+      }
       const receipt=await localApi.recordFillCorrection(input);
       // A committed response is not enough: verify persisted trade and audit
       // from SQLite before marking success and updating the parent view.
@@ -93,12 +132,11 @@ export function AuditedFillCorrectionPanel({
         localApi.listTradeCorrectionHistory(trade.metrics.trade_id),
       ]);
       if(epoch!==requestEpoch.current)return;
-      if(fresh.metrics.trade_id!==trade.metrics.trade_id||
-         !audit.some(x=>x.correction_id===receipt.correction_id)){
-        throw new Error('Correction response could not be independently read back.');
+      if(!verifiedFillCorrectionReadback(trade.metrics.trade_id,input,receipt,audit,fresh,preview.expected_revision)){
+        throw new Error('Receipt, immutable audit event, and effective Fill disagree; correction remains locked.');
       }
-      setHistory(audit);
       onApplied(fresh);
+      setHistory(audit);
       setPreview(null);setPreviewKey('');setReplacementInput('');
       setReason('');setReplacementUnknown(false);
       setMessage('Saved and verified correction '+receipt.correction_id+'. Original Fill preserved.');
@@ -111,7 +149,8 @@ export function AuditedFillCorrectionPanel({
   return <details className="guidedMore">
     <summary>Correct a recorded Fill / immutable audit history{history?.length?' · '+history.length+' correction(s)':''}</summary>
     <p className="subtle">Historical entry mistake only — not a new market event, stop move or Plan revision. Original Fill and every past correction remain recorded. This section never changes a Fill in place.</p>
-    {history===null&&<p role="status">Loading correction history…</p>}
+    {history===null&&<p role="status">Audit history not verified yet. Historical corrections are disabled until the history can be read successfully.</p>}
+    <button type="button" disabled={busy||saving.current} onClick={()=>void reloadAuditHistory()}>Re-read immutable Fill audit history</button>
     {history!==null&&history.length===0&&<p className="subtle">No historical corrections recorded for this Trade.</p>}
     {history?.map(h=><div className="decisionHistory" key={h.correction_id}>
       <time>{h.recorded_at_utc}</time>
@@ -122,7 +161,7 @@ export function AuditedFillCorrectionPanel({
     {readOnly&&<p className="subtle" role="status">Editing is unavailable while saved Review verification is pending, a Review is completed, or unsaved Review inputs exist. The audit history remains readable.</p>}
     {editable&&<div className="formGrid">
       <label>Saved Fill
-        <select value={executionId} disabled={busy} onChange={e=>{invalidate();setExecutionId(e.target.value);setReplacementInput('');}}>
+        <select value={executionId} disabled={busy} onChange={e=>{invalidate();setExecutionId(e.target.value);setReplacementInput('');setReplacementUnknown(false);}}>
           <option value="">Select original execution…</option>
           {trade.fills.map(f=><option key={f.execution_id} value={f.execution_id}>{f.action} · {f.side} · {f.quantity} @ {f.price} · {f.execution_id.slice(-8)}</option>)}
         </select>

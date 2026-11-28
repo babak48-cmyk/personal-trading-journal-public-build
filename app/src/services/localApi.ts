@@ -4,6 +4,11 @@ export type CustomTypedValue = {event_id:string;value_type:string;text_value:str
 export type CustomTypedInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;text_value:string|null;number_value:number|null;boolean_value:boolean|null;date_value:string|null};
 export type CustomSelection = {event_id:string;options:{option_id:string;label_at_selection:string;ordinal:number}[]};
 export type HistoricalCustomSelection = CustomSelection & {recorded_at:string};
+export type HistoricalCustomTypedValue = CustomTypedValue & {recorded_at:string};
+export type CustomAnalysisAnswer=HistoricalCustomTypedValue & {options:CustomSelection['options']};
+export type CustomAnalysisRow={trade_id:string;owner_id:string|null;status:string;realized_r:number|null;answer:CustomAnalysisAnswer|null};
+export type CustomDecisionAnalysis={field:CustomFieldDefinition;rows:{decision_id:string;owner_id:string|null;decision_type:'NO_TRADE'|'MISSED';occurred_at:string;reason_code:string|null;reason_note:string|null;answer:CustomAnalysisAnswer|null}[]};
+export type CustomTradeAnalysis={field:CustomFieldDefinition;timing:'AT_OR_BEFORE_DECISION'|'LATEST_RECORDED_RETROSPECTIVE';rows:CustomAnalysisRow[]};
 export type CustomSelectionInput = {event_id:string;field_id:string;owner_stage:string;owner_id:string;option_ids:string[]};
 export type CustomFieldCleanupPreflight = {field_id:string;label:string;stage:string;option_count:number;event_count:number;snapshot_count:number;eligible_unused_definition:boolean};
 export type CustomFieldDefinitionInput = {field_id:string;stage:string;field_type:string;label:string;help_text:string;required:boolean;display_order:number};
@@ -21,8 +26,8 @@ export type UpdateInstrumentInput = { instrument_id:string; symbol:string; displ
 export type BackupInfo = { backup_version: number; created_at_utc: string; schema_version: number; database_sha256: string; attachment_count: number };
 export type RestoreResult = { restored_from: string; safety_backup: string; integrity: string; restored_at_utc: string };
 export type DemoTransferPreview = {
-  source_schema_version:number;target_schema_version:number;database_sha256:string;
-  sessions:number;trades:number;zones:number;decisions:number;plan_revisions:number;evidence_events:number;risk_snapshots:number;fills:number;reviews:number;correction_events:number;initial_risk_correction_events:number;source_type_correction_events:number;
+  source_schema_version:number;target_schema_version:number;database_sha256:string;archive_sha256:string;
+  sessions:number;trades:number;zones:number;decisions:number;plan_revisions:number;evidence_events:number;risk_snapshots:number;fills:number;reviews:number;correction_events:number;initial_risk_correction_events:number;source_type_correction_events:number;source_price_correction_events:number;weekly_learning_action_events:number;
   attachments:number;original_backup_untouched:boolean;
 };
 
@@ -67,9 +72,10 @@ export type AddTradeFillInput = {
   commission?:number|null; fees?:number|null; note?:string|null;
 };
 export type MoveStopInput = { trade_id:string; stop_price:number; reason?:string|null; was_rule_compliant?:boolean|null };
-export type CrossSessionPendingReview = {trade_id:string;direction:string;review_status:'NONE'|'DRAFT';session:SessionSummary};
+export type TradeRecordIdentity = {decision_id:string|null;candidate_id:string|null;zone_label:string|null;decision_note:string|null;decision_occurred_at:string|null};
+export type CrossSessionPendingReview = {trade_id:string;direction:string;review_status:'NONE'|'DRAFT';session:SessionSummary;identity?:TradeRecordIdentity};
 export type TradeMetrics = {
-  trade_id:string; session_id:string; candidate_id?:string|null; direction:string; status:string; average_entry?:number|null;
+  trade_id:string; session_id:string; candidate_id?:string|null; identity?:TradeRecordIdentity; direction:string; status:string; average_entry?:number|null;
   total_entry_quantity:number; total_exit_quantity:number; open_quantity:number; latest_stop_price?:number|null; initial_risk_dollars?:number|null;
   gross_realized_pnl?:number|null; net_realized_pnl?:number|null; realized_r?:number|null; fill_count:number;
 };
@@ -86,6 +92,23 @@ export type HistoricalSourceReadout = {
   original_source_type_id:string; original_label:string;
   effective_source_type_id:string; effective_label:string;
   revision:number; corrected:boolean;
+  original_source_price:number|null;effective_source_price:number|null;price_correction_revision:number;
+};
+export type SourcePriceCorrectionRequest = {
+  candidate_source_id:string;expected_effective_price:number|null;
+  expected_revision:number;replacement_price:number;reason:string;
+};
+export type SourcePriceCorrectionEvent = {
+  correction_id:string;candidate_source_id:string;revision:number;
+  original_source_price:number|null;previous_source_price:number|null;
+  replacement_source_price:number;expected_prior_correction_id:string|null;
+  reason:string;recorded_at_utc:string;actor:string;
+};
+export type SourcePriceCorrectionPreview = {
+  candidate_source_id:string;candidate_revision_id:string;original_source_price:number|null;
+  current_effective_price:number|null;replacement_price:number;expected_revision:number;
+  related_decision_count:number;related_trade_count:number;reason:string;
+  monetary_result_unchanged:boolean;zone_geometry_unchanged:boolean;explicit_confirmation_required:boolean;
 };
 export type SourceTypeCorrectionRequest = {
   candidate_source_id:string; expected_effective_type_id:string;
@@ -174,10 +197,10 @@ export type SessionReview = SaveSessionReviewInput & { review_id:string; status:
 
 
 export type JournalFilter = { date_from?:string|null; date_to?:string|null; instrument_symbol?:string|null; direction?:string|null; decision_quality?:string|null; rule_status?:'FOLLOWED'|'VIOLATED'|'UNCHECKED'|null; level_source_type_id?:string|null; evidence_type_id?:string|null; evidence_timing?:'ANY_RECORDED'|'AT_DECISION'|null };
-export type JournalTradeRow = { trade_id:string; session_id:string; session_date:string; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; level_source_snapshot_missing?:boolean; mistakes:string[]; realized_r?:number|null; net_realized_pnl?:number|null; open_quantity:number; audited_correction_count?:number; setup_version_id?:string|null; setup_version_name?:string|null; setup_version_number?:number|null; setup_attribution?:'AT_ENTRY'|'RETROSPECTIVE'|'NOT_RECORDED'; setup_defined_market_context?:string|null; evidence_observed_at_decision?:string[]; evidence_post_decision_count?:number; evidence_unknown_timing_count?:number };
+export type JournalTradeRow = { trade_id:string; session_trade_number?:number|null; session_id:string; session_date:string; decision_occurred_at?:string|null; final_exit_utc?:string|null; session_timezone_id?:string|null; instrument_symbol:string; direction:string; status:string; candidate_label?:string|null; decision_quality?:string|null; rule_status:string; level_sources:string[]; level_source_snapshot_missing?:boolean; mistakes:string[]; mistake_refs?:{mistake_type_id:string;label:string}[]; realized_r?:number|null; gross_realized_pnl?:number|null; net_realized_pnl?:number|null; pnl_currency?:string|null; open_quantity:number; audited_correction_count?:number; audited_initial_risk_correction_count?:number; audited_source_type_correction_count?:number; audited_source_price_correction_count?:number; setup_version_id?:string|null; setup_version_name?:string|null; setup_version_number?:number|null; setup_attribution?:'AT_ENTRY'|'RETROSPECTIVE'|'NOT_RECORDED'; setup_defined_market_context?:string|null; evidence_observed_at_decision?:string[]; evidence_post_decision_count?:number; evidence_unknown_timing_count?:number };
 export type DecisionOnlyAnalyticsRow = {session_date:string;instrument_symbol:string;no_trade_count:number;missed_count:number;reason_missing_count:number};
 export type DecisionReasonAnalyticsRow = {session_date:string;instrument_symbol:string;decision_type:string;reason_code:string;decision_count:number};
-export type AnalyticsSummary = { trade_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
+export type AnalyticsSummary = { trade_count:number; closed_trade_count:number; eligible_net_pnl_count:number; eligible_r_count:number; wins:number; losses:number; breakeven:number; win_rate?:number|null; average_r?:number|null; median_r?:number|null; net_r?:number|null; average_winner_r?:number|null; average_loser_r?:number|null; profit_factor_r?:number|null; expectancy_r?:number|null; win_loss_payoff_r?:number|null; expectancy_pnl?:number|null; pnl_currency?:string|null; pnl_currency_status?:'SINGLE_CURRENCY'|'MIXED_CURRENCIES'|'UNKNOWN_CURRENCY'|'NO_ELIGIBLE'; max_winning_streak?:number|null; max_losing_streak?:number|null; max_realized_r_drawdown?:number|null; net_pnl?:number|null; rule_violation_trades:number; bad_decision_win_count:number; small_sample:boolean };
 export type MistakeSummary = { mistake_type_id:string; label:string; count:number };
 export type WeeklyActionEvent = {
   action_event_id:string;week_start:string;filter_snapshot_json:string;
@@ -236,6 +259,7 @@ export const localApi = {
   recordCustomFieldSelection: (input:CustomSelectionInput) => invoke<void>('record_custom_field_selection',{input}),
   currentCustomFieldSelection: (ownerStage:string,ownerId:string,fieldId:string) => invoke<CustomSelection|null>('current_custom_field_selection',{ownerStage,ownerId,fieldId}),
   listCustomFieldSelectionHistory: (ownerStage:string,ownerId:string,fieldId:string) => invoke<HistoricalCustomSelection[]>('list_custom_field_selection_history',{ownerStage,ownerId,fieldId}),
+  listCustomFieldTypedHistory: (ownerStage:string,ownerId:string,fieldId:string) => invoke<HistoricalCustomTypedValue[]>('list_custom_field_typed_history',{ownerStage,ownerId,fieldId}),
   listCustomFieldDefinitions: () => invoke<CustomFieldDefinition[]>('list_custom_field_definitions'),
   customFieldCleanupPreflight: (fieldId:string) => invoke<CustomFieldCleanupPreflight>('custom_field_cleanup_preflight',{fieldId}),
   cleanupUnusedCustomField: (fieldId:string,confirmation:string) => invoke<string>('cleanup_unused_custom_field',{fieldId,confirmation}),
@@ -264,7 +288,7 @@ export const localApi = {
   validateBackup: (backupPath:string) => invoke<BackupInfo>('validate_backup',{backupPath}),
   isPackageCDemo: () => invoke<boolean>('is_package_c_demo'),
   previewPackageCDemoImport: (backupPath:string) => invoke<DemoTransferPreview>('preview_package_c_demo_import',{backupPath}),
-  importPackageBDemoBackup: (backupPath:string,expectedDatabaseSha256:string) => invoke<RestoreResult>('import_package_b_demo_backup',{backupPath,expectedDatabaseSha256}),
+  importPackageBDemoBackup: (backupPath:string,expectedArchiveSha256:string) => invoke<RestoreResult>('import_package_b_demo_backup',{backupPath,expectedArchiveSha256}),
   restoreBackupToStaging: (backupPath:string) => invoke<string>('restore_backup_to_staging',{backupPath}),
   replaceLiveFromBackup: (backupPath:string) => invoke<RestoreResult>('replace_live_from_backup',{backupPath}),
   createDraftSession: (input:CreateSessionInput) => invoke<SessionSummary>('create_draft_session',{input}),
@@ -314,6 +338,9 @@ export const localApi = {
   previewSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionPreview>('preview_source_type_correction',{input}),
   recordSourceTypeCorrection: (input:SourceTypeCorrectionRequest) => invoke<SourceTypeCorrectionEvent>('record_source_type_correction',{input}),
   listTradeSourceTypeCorrections: (tradeId:string) => invoke<SourceTypeCorrectionEvent[]>('list_trade_source_type_corrections',{tradeId}),
+  previewSourcePriceCorrection: (input:SourcePriceCorrectionRequest) => invoke<SourcePriceCorrectionPreview>('preview_source_price_correction',{input}),
+  recordSourcePriceCorrection: (input:SourcePriceCorrectionRequest) => invoke<SourcePriceCorrectionEvent>('record_source_price_correction',{input}),
+  listTradeSourcePriceCorrections: (tradeId:string) => invoke<SourcePriceCorrectionEvent[]>('list_trade_source_price_corrections',{tradeId}),
   previewInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionPreview>('preview_initial_risk_correction',{input}),
   recordInitialRiskCorrection: (input:InitialRiskCorrectionRequest) => invoke<InitialRiskCorrectionEvent>('record_initial_risk_correction',{input}),
   listInitialRiskCorrections: (tradeId:string) => invoke<InitialRiskCorrectionEvent[]>('list_initial_risk_corrections',{tradeId}),
@@ -332,6 +359,8 @@ export const localApi = {
   saveSessionReview: (input:SaveSessionReviewInput) => invoke<SessionReview>('save_session_review',{input}),
   getSessionReview: (sessionId:string) => invoke<SessionReview|null>('get_session_review',{sessionId}),
   listJournalTrades: (filter:JournalFilter={}) => invoke<JournalTradeRow[]>('list_journal_trades',{filter}),
+  analyzeCustomDecisionField: (filter:JournalFilter,fieldId:string) => invoke<CustomDecisionAnalysis>('analyze_custom_decision_field',{filter,fieldId}),
+  analyzeCustomTradeField: (filter:JournalFilter,fieldId:string) => invoke<CustomTradeAnalysis>('analyze_custom_trade_field',{filter,fieldId}),
 
   listWeeklyActions: (weekStart:string,filterSnapshotJson:string) => invoke<WeeklyActionEvent[]>('list_weekly_actions',{weekStart,filterSnapshotJson}),
   saveWeeklyAction: (input:SaveWeeklyActionInput) => invoke<WeeklyActionEvent>('save_weekly_action',{input}),
@@ -345,6 +374,7 @@ export const localApi = {
   replaceAttachmentFile: (input:ReplaceAttachmentFileInput) => invoke<Attachment>('replace_attachment_file',{input}),
   deleteAttachment: (attachmentId:string) => invoke<void>('delete_attachment',{attachmentId}),
   exportJournalHtml: (filter:JournalFilter={}) => invoke<ExportResult>('export_journal_html',{filter}),
+  exportJournalDecisionsCsv: (filter:JournalFilter={}) => invoke<ExportResult>('export_journal_decisions_csv',{filter}),
   exportJournalCsv: (filter:JournalFilter={}) => invoke<ExportResult>('export_journal_csv',{filter}),
   openExportFolder: () => invoke<void>('open_export_folder'),
 };

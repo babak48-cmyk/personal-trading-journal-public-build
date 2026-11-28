@@ -73,7 +73,10 @@ pub fn readiness(paths: &AppPaths) -> Result<RuntimeReadiness, AppError> {
     let exports_writable = dir_writable(&paths.exports);
     let attachment_file_count = file_count(&paths.attachments);
     let backups = backup_files(&paths.backups);
-    let latest = backups.last().cloned();
+    // A ZIP extension is not evidence of a usable recovery copy.
+    // Check newest-first; retain older valid backups as fallback.
+    let latest = backups.iter().rev()
+        .find(|p| crate::restore::validate_backup(p).is_ok()).cloned();
     let latest_backup_age_hours = latest.as_ref().and_then(|p| age_hours(p));
 
     let mut warnings = Vec::new();
@@ -84,14 +87,17 @@ pub fn readiness(paths: &AppPaths) -> Result<RuntimeReadiness, AppError> {
     if !attachments_writable { warnings.push("Attachments folder is not writable".into()); }
     if !backups_writable { warnings.push("Backup folder is not writable".into()); }
     if !exports_writable { warnings.push("Export folder is not writable".into()); }
-    if backups.is_empty() { warnings.push("No verified local backup exists yet".into()); }
+    if latest.is_none() { warnings.push("No verified local backup exists yet".into()); }
+    if backups.last().is_some() && backups.last() != latest.as_ref() {
+        warnings.push("Newest backup failed validation; older verified backup may be available".into());
+    }
     if let Some(age) = latest_backup_age_hours { if age > 72.0 { warnings.push(format!("Latest backup is {:.0} hours old", age)); } }
 
     let core_ok = integrity == "ok"
         && foreign_key_violations == 0
         && schema_version == db::CURRENT_SCHEMA_VERSION
         && data_writable && attachments_writable && backups_writable && exports_writable;
-    let ready_for_live_data = core_ok && !backups.is_empty();
+    let ready_for_live_data = core_ok && latest.is_some();
 
     Ok(RuntimeReadiness {
         schema_version,
@@ -114,4 +120,29 @@ pub fn readiness(paths: &AppPaths) -> Result<RuntimeReadiness, AppError> {
         warnings,
         ready_for_live_data,
     })
+}
+
+#[cfg(test)]
+mod release_readiness_tests {
+    use super::*;
+    #[test]
+    fn corrupt_zip_does_not_establish_recovery_readiness() {
+        let root=std::env::temp_dir().join(format!("ptj-readiness-{}",uuid::Uuid::new_v4()));
+        let paths=AppPaths{data:root.join("data"),attachments:root.join("attachments"),
+            backups:root.join("backups"),exports:root.join("exports"),logs:root.join("logs"),root};
+        for dir in [&paths.data,&paths.attachments,&paths.backups,&paths.exports,&paths.logs] {
+            fs::create_dir_all(dir).unwrap();
+        }
+        fs::write(paths.backups.join("invalid.zip"), b"not a backup").unwrap();
+        let first=readiness(&paths).unwrap();
+        assert!(!first.ready_for_live_data);
+        assert!(first.latest_backup_path.is_none());
+        assert_eq!(first.backup_count,1);
+        let good=crate::backup::create_backup(&paths).unwrap();
+        let next=readiness(&paths).unwrap();
+        assert!(next.ready_for_live_data);
+        assert_eq!(next.latest_backup_path.as_deref(),good.to_str());
+        assert_eq!(next.backup_count,2);
+        fs::remove_dir_all(&paths.root).unwrap();
+    }
 }

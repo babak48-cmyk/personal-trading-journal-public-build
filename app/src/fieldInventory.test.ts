@@ -1,3 +1,4 @@
+import { MARKET_OUTLOOK_VALUES, marketOutlookLabel } from './fieldDefinitions';
 import { describe, expect, it } from 'vitest';
 import {
   FIELD_CONTROL_INVENTORY,
@@ -321,4 +322,42 @@ describe('Unfinished same-section ordering cohorts for Field Manager',()=>{
     for(const id of assess)expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{[id]:true})).toBe(true);
     expect(isFieldPresented('sessionReview.overall',true,{'sessionReview.overall':false},{'sessionReview.overall':'DETAILED_ONLY'},{'sessionReview.overall':true})).toBe(true);
   });
+});
+
+
+describe('Approved market outlook vocabulary', () => {
+  it('preserves all five stored codes and gives them distinct display labels', () => {
+    expect(MARKET_OUTLOOK_VALUES).toEqual(['LONG','SHORT','NEUTRAL','MIXED','UNKNOWN']);
+    expect(MARKET_OUTLOOK_VALUES.map(marketOutlookLabel)).toEqual(['Bullish','Bearish','Sideways','Mixed','Unclear']);
+    expect(marketOutlookLabel(null)).toBe('Unclear');
+    expect(marketOutlookLabel('unexpected')).toBe('Unclear');
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id==='plan.bias')?.label).toBe('Market Outlook');
+    expect(FIELD_CONTROL_INVENTORY.find(x=>x.id==='candidate.intent')?.label).toBe('Planned trade direction');
+    expect(isFieldPresented('plan.bias',true,{'plan.bias':false},{'plan.bias':'DETAILED_ONLY'},{})).toBe(true);
+  });
+});
+
+
+describe('Actual execution costs and appearance controls are inventoried',()=>{
+ it('protects explicit zero versus unknown execution costs from hide or placement overrides',()=>{
+  for(const id of ['trade.entryCommission','trade.entryFees','fill.commission','fill.fees']){
+   expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toMatchObject({stage:'execution',candidateForCustomization:false});
+   expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+   expect(isEditableRequirementControl(id)).toBe(false);
+  }
+ });
+ it('includes both current appearance selectors without changing journal requirements',()=>{
+  for(const id of ['appearance.accent','appearance.visualMode'])expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toMatchObject({category:'appearance-preference',candidateForCustomization:false});
+ });
+});
+
+
+describe('Protected execution and revision presentation bindings',()=>{
+ it('keeps newly connected label-only controls protected from visibility and required overrides',()=>{
+  for(const id of ["planRevision.bias","planRevision.reason","candidateRevision.reason","liveZone.reason","fill.action","fill.price","fill.quantity","management.newStop","decision.direction","decision.mismatchReason","trade.entryCommission","trade.entryFees","fill.commission","fill.fees"]){
+   expect(FIELD_CONTROL_INVENTORY.find(x=>x.id===id)).toBeDefined();
+   expect(isFieldPresented(id,true,{[id]:false},{[id]:'DETAILED_ONLY'},{})).toBe(true);
+   expect(isEditableRequirementControl(id)).toBe(false);
+  }
+ });
 });
