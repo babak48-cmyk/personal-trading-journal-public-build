@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics} from './weeklyLearning';
+import {journalWeekStart,journalWeeks,weeklyLearningSnapshot,weeklyLearningText,weeklyTradeBreakdown,weeklyLevelSourceBreakdown,weeklyDecisionAwareAction,weeklySetupVersionBreakdown,weeklyDefinedContextBreakdown,weeklyThreePartReview,weeklyObservedEvidenceBreakdown,weeklyTradeReadiness,weeklySessionBreakdown,weeklyWeekdayBreakdown,weeklyDecisionHourBreakdown,localDecisionHour,weeklyMoneyBreakdown,weeklyMoneyText,weeklyTradeNumberBreakdown,weeklyMistakeOutcomes,weeklyMistakeOutcomeText,weeklyBadDecisionWins,weeklyDecisionOutcomeGroups,weeklyDecisionOutcomeText,weeklyMistakeChartMetrics,weeklyTradeNumberChartMetrics,weeklyContextChartMetrics} from './weeklyLearning';
 import type {JournalTradeRow} from './services/localApi';
 const row=(id:string,date:string,patch:Partial<JournalTradeRow>={}):JournalTradeRow=>({
   trade_id:id,session_id:'s-'+id,session_date:date,instrument_symbol:'ES',direction:'LONG',
@@ -489,6 +489,27 @@ describe('interactive mistake and ordinal chart memberships',()=>{
     expect(losses.find(g=>g.label==='Unknown')).toMatchObject({value:null,tradeIds:[]});
     expect(weeklyTradeNumberChartMetrics(rows,'2026-11-09')).toEqual([
       {key:'Trade #3',label:'Trade #3',value:1,sample:'2/3 closed R eligible · 4 Trades',tradeIds:['loss','win']},
+    ]);
+  });
+});
+
+describe('interactive context chart integrity',()=>{
+  it('reuses eligible R denominators, local Decision hours and recorded rule status',()=>{
+    const rows=[
+      row('a','2026-11-09',{instrument_symbol:'ES',realized_r:2,decision_occurred_at:'2026-11-09T00:00:00Z',session_timezone_id:'Australia/Sydney',rule_status:'FOLLOWED'}),
+      row('b','2026-11-09',{instrument_symbol:'GC',realized_r:-1,decision_occurred_at:'2026-11-09T00:00:00Z',session_timezone_id:'UTC',rule_status:'VIOLATED'}),
+      row('c','2026-11-10',{instrument_symbol:'ES',realized_r:5,decision_occurred_at:'2026-11-10T00:00:00',session_timezone_id:'UTC',rule_status:'UNCHECKED'}),
+      row('d','2026-11-10',{instrument_symbol:'ES',realized_r:null,status:'OPEN',rule_status:'UNCHECKED'}),
+      row('outside','2026-11-16',{instrument_symbol:'ES',realized_r:99}),
+    ];
+    expect(weeklyContextChartMetrics(rows,'2026-11-09','instrument').find(g=>g.key==='ES')).toMatchObject({value:3.5,tradeIds:['a','c']});
+    expect(weeklyContextChartMetrics(rows,'2026-11-09','weekday').find(g=>g.key==='Monday')).toMatchObject({value:.5,tradeIds:['a','b']});
+    const hours=weeklyContextChartMetrics(rows,'2026-11-09','hour');
+    expect(hours.find(g=>g.key==='Australia/Sydney · 11:00–11:59')).toMatchObject({value:2,tradeIds:['a']});
+    expect(hours.find(g=>g.key==='UTC · 00:00–00:59')).toMatchObject({value:-1,tradeIds:['b']});
+    expect(hours.find(g=>g.key.startsWith('Unknown'))).toMatchObject({value:null,tradeIds:[]});
+    expect(weeklyContextChartMetrics(rows,'2026-11-09','rules').map(g=>[g.key,g.value,g.tradeIds])).toEqual([
+      ['FOLLOWED',1,['a']],['VIOLATED',1,['b']],['UNCHECKED',2,['c','d']],
     ]);
   });
 });
