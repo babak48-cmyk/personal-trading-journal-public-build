@@ -218,10 +218,11 @@ describe('weekly learning uses only observed local journal trade rows',()=>{
     const results=weeklyObservedEvidenceBreakdown(data,'2026-11-09');
     expect(results).toEqual([
       {label:'ENTRY_CONFIRMATION: DOM',tradeCount:2,closedCount:2,eligibleRCount:1,netR:1,ruleViolationCount:0},
+      {label:'Evidence recorded after Decision (not entry confirmation)',tradeCount:1,closedCount:1,eligibleRCount:1,netR:-1,ruleViolationCount:0},
       {label:'No timestamp-verified evidence at Decision',tradeCount:1,closedCount:1,eligibleRCount:1,netR:-1,ruleViolationCount:0},
       {label:'SETUP_SUPPORT: Delta',tradeCount:1,closedCount:1,eligibleRCount:1,netR:1,ruleViolationCount:0},
     ]);
-    expect(results.reduce((sum,r)=>sum+r.tradeCount,0)).toBe(4);
+    expect(results.reduce((sum,r)=>sum+r.tradeCount,0)).toBe(5);
     expect(weeklyObservedEvidenceBreakdown(data,'2026-10-26')).toEqual([]);
   });
   it('distinguishes absent at-Decision evidence, later evidence, and unknown timing without inventing confirmation',()=>{
