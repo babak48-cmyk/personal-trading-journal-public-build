@@ -1,3 +1,13 @@
+## PTJ-DEMO-IDENTITY-COMPLETION-2026-11-28
+
+PUBLIC PR #17 verified HEAD [77474e181a2640f3c9385d2cc454eed7d5aa069b](https://github.com/babak48-cmyk/personal-trading-journal-public-build/commit/77474e181a2640f3c9385d2cc454eed7d5aa069b), OPEN/DRAFT/UNMERGED; all eight changed source/test files independently read back at that SHA. Prior correction commits 31239c5e89c9bea5db5a32eac408df0e2f50a8c9 and 14ceb234635c0af98dc417383138f4c41f3c363f both CI SUCCESS (46137822737, 46138679398). Current identity commit CI observation: [{"id":46139243540,"status":"queued","conclusion":null}]; no PASS inferred.
+
+DEC-UX-02 remaining implementation: one read-only Rust identity DTO derived from exact persisted Trade-to-Decision and Trade-to-Zone owner links, with session guards. Session trades, pending Review, execution, Review detail and cross-session backlog show readable short refs, Zone catalog label, saved decision note and timestamp when available; missing metadata remains unknown. Backlog search includes Decision ID, Zone and note. Saved Decision history summary shows short ref/note; full immutable IDs remain accessible. Zone catalog label is not claimed as a historical snapshot. Added Rust cross-session mismatch and frontend search/identity regression tests. No schema migration, cost formula change, data rewrite, PRIVATE write or merge. Files: app/src-tauri/src/repository.rs; app/src/App.tsx; app/src/services/localApi.ts; app/src/crossSessionReviewQueue.ts and test; app/src/workflowDestination.ts and test; app/src/QuickDecisionHistory.tsx.
+
+NEXT: confirm CI for identity commit, resolve any failure, reconcile defect-first batch. Continue remaining approved roadmap per latest user instruction without issuing an intermediate DEMO. Windows evidence for visual fixes, actual Trade C costs, inactive Zone/Session negative paths and restart details stays OPEN for next integrated delivery. No acceptance inferred.
+
+---
+
 ## PTJ-DEMO-DEFECT-CORRECTIONS-2026-11-28 — no intermediate installer
 
 Latest explicit user direction supersedes the intermediate Windows DEMO gate below: finish defect corrections and automated verification first, then continue the remaining approved roadmap work without a separate DEMO release or user installation for this correction batch. Retain all outstanding Windows checks for the next integrated delivery; no automatic acceptance. Report only meaningful milestones. PUBLIC PR #17 OPEN/DRAFT/UNMERGED. No PRIVATE modifications or merge.
