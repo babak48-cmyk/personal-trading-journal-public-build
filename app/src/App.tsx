@@ -2554,8 +2554,8 @@ function AnalyticsPanel({filter,appliedFilter,analyticsLoading,analyticsError,pa
         </details>
         <details className="guidedMore"><summary>Recorded mistakes · frequency and associated losses</summary>
           <p className="subtle">Counts use distinct tagged Trades within this week's filters. Negative R sums only known losing closed Trades; this is not the causal cost of a mistake. Tags may overlap; never add groups. Missing R is not zero, and untagged Trades are not necessarily mistake-free.</p>
-          {mistakeOutcomes.length===0?<p>No mistake tags recorded.</p>:mistakeOutcomes.map(g=><div className="weeklyBreakdownRow" key={g.label}>
-            <strong>{g.label}</strong><span>{g.tradeCount}/{g.weekTradeCount} tagged · {g.eligibleRCount}/{g.closedCount} closed R eligible</span>
+          {mistakeOutcomes.length===0?<p>No mistake tags recorded.</p>:mistakeOutcomes.map(g=><div className="weeklyBreakdownRow" key={g.identityKey??g.label}>
+            <strong>{g.label}{mistakeOutcomes.filter(other=>other.label===g.label).length>1?` · ${g.identityKey??"legacy label"}`:""}</strong><span>{g.tradeCount}/{g.weekTradeCount} tagged · {g.eligibleRCount}/{g.closedCount} closed R eligible</span>
             <span>Known losing Trades {g.lossCount} · negative R sum {fmt(g.lossR)} · net R {fmt(g.netR)}</span>
             <div>{g.tradeIds.map(id=>{const trade=rows.find(row=>row.trade_id===id);return <button key={id} onClick={()=>openTrade(id)}>{trade?.session_date} · {trade?.instrument_symbol} · {trade?.session_trade_number==null?'Trade number unknown':'Trade #'+trade.session_trade_number} · {trade?.direction} · {trade?.candidate_label||'No Zone label'}</button>})}</div>
           </div>)}
